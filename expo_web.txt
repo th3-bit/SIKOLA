@@ -1,0 +1,73 @@
+Starting project at C:\Users\HP\OneDrive\Desktop\100%
+Starting Metro Bundler
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.29 - expected version: ~54.0.30
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web .\index.js ▓▓░░░░░░░░░░░░░░ 16.5% ( 49/166)
+Web .\index.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 69.4% ( 356/2075)
+Web .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 95.0% (2097/2152)
+Web Bundled 8857ms index.js (2239 modules)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 117ms index.js (1 module)
+ ERROR  SyntaxError: C:\Users\HP\OneDrive\Desktop\100%\src\navigation\MainTabNavigator.js: Expected corresponding JSX closing tag for <View>. (33:6)
+
+  31 |           {name} Section
+  32 |         </Text>
+> 33 |       </SafeAreaView>
+     |       ^
+  34 |     </SafeAreaView>
+  35 |   </View>
+  36 | );
+    at constructor (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:367:19)
+    at FlowParserMixin.raise (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:6624:19)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4756:16)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4727:32)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4727:32)
+    at FlowParserMixin.jsxParseElement (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4778:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4788:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11145:23)
+    at FlowParserMixin.parseUpdate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11130:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11110:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10963:61)
+    at FlowParserMixin.parseExprOps (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10968:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10945:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10895:21)
+    at C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3527:39
+    at FlowParserMixin.tryParse (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:6932:20)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3527:18)
+    at C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10864:39
+    at FlowParserMixin.allowInAnd (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:12500:12)
+    at FlowParserMixin.parseMaybeAssignAllowIn (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10864:17)
+    at FlowParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:12567:17)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11747:28)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3620:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11395:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4793:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11145:23)
+    at FlowParserMixin.parseUpdate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11130:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11110:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10963:61)
+    at FlowParserMixin.parseExprOps (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10968:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10945:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10895:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3578:18)
+    at FlowParserMixin.parseFunctionBody (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:12167:24)
+    at C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:2919:63
+    at FlowParserMixin.forwardNoArrowParamsConversionAt (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3095:16)
+    at FlowParserMixin.parseFunctionBody (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:2919:12)
+    at FlowParserMixin.parseArrowExpression (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:12149:10)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11759:12)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3620:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11395:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:4793:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11145:23)
+    at FlowParserMixin.parseUpdate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11130:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:11110:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10963:61)
+    at FlowParserMixin.parseExprOps (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10968:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10945:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:10895:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\HP\OneDrive\Desktop\100%\node_modules\@babel\parser\lib\index.js:3578:18)

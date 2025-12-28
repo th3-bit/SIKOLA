@@ -1,0 +1,22 @@
+Starting project at C:\Users\HP\OneDrive\Desktop\100%
+› Port 8082 is being used by another process
+Input is required, but 'npx expo' is in non-interactive mode.
+Required input:
+> Use port 8083 instead?
+› Skipping dev server
+Starting project at C:\Users\HP\OneDrive\Desktop\100%
+Starting Metro Bundler
+Tunnel connected.
+Tunnel ready.
+Waiting on http://localhost:8082
+Logs for your project will appear below.
+Tunnel connection has been closed. This is often related to intermittent connection issues between the dev server and ngrok. Restart the dev server to try connecting to ngrok again.
+Check the Ngrok status page for outages: https://status.ngrok.com/
+Tunnel connected.
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.js ▓░░░░░░░░░░░░░░░  9.0% (3/9)
+Android .\index.js ▓▓░░░░░░░░░░░░░░ 16.0% ( 176/2045)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 87.1% (2032/2185)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 95.2% (2512/2606)
+Android Bundled 16706ms index.js (2719 modules)
+ LOG  Sign Up Pressed

@@ -1,0 +1,9 @@
+Starting project at C:\Users\HP\OneDrive\Desktop\100%
+Starting Metro Bundler
+Tunnel connected.
+Tunnel ready.
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.29 - expected version: ~54.0.30
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8087
+Logs for your project will appear below.

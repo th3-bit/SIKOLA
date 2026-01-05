@@ -3,9 +3,7 @@ import { GlassCard } from "./ui/GlassCard";
 import { GlassInput } from "./ui/GlassInput";
 import { GlassTextarea } from "./ui/GlassTextarea";
 import { GlassButton } from "./ui/GlassButton";
-import { GlassTabs } from "./ui/GlassTabs";
-import { ContentItem } from "./ContentItem";
-import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, X, ArrowRight, Save, Video, Loader2 } from "lucide-react";
+import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
@@ -24,254 +22,247 @@ interface ExampleData {
 
 interface ContentEntry {
   id: string;
-  title: string;
-  content: string;
-  type: "lesson" | "example" | "question";
+  type: "intro" | "content" | "video" | "example" | "quiz";
+  title?: string;
+  content?: string;
+  videoUrl?: string;
   questionData?: QuestionData;
   exampleData?: ExampleData;
-  videoLink?: string;
 }
 
 interface ContentBuilderProps {
   subject: { id: string; name?: string };
   topic: { id: string; title?: string };
   searchQuery?: string;
+  initialData?: any;
+  onComplete?: () => void;
 }
 
-export const ContentBuilder = ({ subject, topic, searchQuery = "" }: ContentBuilderProps) => {
-  const [activeTab, setActiveTab] = useState("lessons");
-  const [entries, setEntries] = useState<ContentEntry[]>([]);
+export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, onComplete }: ContentBuilderProps) => {
   const [loading, setLoading] = useState(false);
   
-  // Wizard flow state: "lesson" | "example" | "question" | "complete"
-  const [wizardStep, setWizardStep] = useState<"lesson" | "example" | "question" | "complete">("lesson");
-  const [currentLessonTitle, setCurrentLessonTitle] = useState("");
+  // Wizard flow state
+  // 1. info: Title, Intro ("What you will learn"), Core Content
+  // 2. video: YouTube Link
+  // 3. examples: Add examples
+  // 4. questions: Add questions
+  const [wizardStep, setWizardStep] = useState<"info" | "video" | "examples" | "questions" | "complete">("info");
+
+  // Step 1: Info
+  const [title, setTitle] = useState(initialData?.title || "");
+  // Try to parse initial content if exists
+  const parsedContent = initialData?.content ? (typeof initialData.content === 'string' ? JSON.parse(initialData.content) : initialData.content) : [];
   
-  // Input states
-  const [newTitle, setNewTitle] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newVideoLink, setNewVideoLink] = useState("");
+  // Extract initial values from parsed content
+  const initIntro = parsedContent.find((s: any) => s.type === 'intro');
+  const initCore = parsedContent.find((s: any) => s.type === 'content' && s.title === 'Core Concept');
+  const initVideo = parsedContent.find((s: any) => s.type === 'video');
+  const initExamples = parsedContent.filter((s: any) => s.type === 'content' && s.title !== 'Core Concept' && !s.title.startsWith('Coming Soon')); // Rough heuristic
+  const initQuestions = parsedContent.filter((s: any) => s.type === 'quiz');
+
+  const [intro, setIntro] = useState(initIntro?.content || "");
+  const [coreContent, setCoreContent] = useState(initCore?.content || "");
+
+  // Step 2: Video
+  const [videoLink, setVideoLink] = useState(initialData?.video_url || initVideo?.videoUrl || "");
+
+  // Step 3: Examples
+  const [examples, setExamples] = useState<ContentEntry[]>(() => {
+    if (!initExamples) return [];
+    return initExamples.map((ex: any, idx: number) => ({
+      id: `ex-${idx}`,
+      type: "example",
+      title: ex.title,
+      exampleData: {
+        title: ex.title,
+        problem: ex.content.split('\n\nSolution:\n')[0] || "",
+        solution: ex.content.split('\n\nSolution:\n')[1]?.split('\n\nKey Takeaway: ')[0] || "",
+        keyTakeaway: ex.content.split('\n\nKey Takeaway: ')[1] || ""
+      }
+    }));
+  });
   
-  // Example-specific state
-  const [exampleProblem, setExampleProblem] = useState("");
-  const [exampleSolution, setExampleSolution] = useState("");
-  const [exampleTakeaway, setExampleTakeaway] = useState("");
+  const [exTitle, setExTitle] = useState("");
+  const [exProblem, setExProblem] = useState("");
+  const [exSolution, setExSolution] = useState("");
+  const [exTakeaway, setExTakeaway] = useState("");
 
-  // Question-specific state
-  const [questionText, setQuestionText] = useState("");
-  const [answers, setAnswers] = useState(["", "", "", ""]);
-  const [correctAnswerIndex, setCorrectAnswerIndex] = useState<number | null>(null);
+  // Step 4: Questions
+  const [questions, setQuestions] = useState<ContentEntry[]>(() => {
+    if (!initQuestions) return [];
+    return initQuestions.map((q: any, idx: number) => ({
+      id: `q-${idx}`,
+      type: "quiz",
+      questionData: {
+        question: q.question,
+        answers: q.options || [],
+        correctAnswerIndex: q.correctAnswer
+      }
+    }));
+  });
+  
+  const [qText, setQText] = useState("");
+  const [qAnswers, setQAnswers] = useState(["", "", "", ""]);
+  const [qCorrectIndex, setQCorrectIndex] = useState<number | null>(null);
 
-  // Edit mode state
-  const [editingEntry, setEditingEntry] = useState<ContentEntry | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [editVideoLink, setEditVideoLink] = useState("");
-  const [editQuestionText, setEditQuestionText] = useState("");
-  const [editAnswers, setEditAnswers] = useState(["", "", "", ""]);
-  const [editCorrectAnswerIndex, setEditCorrectAnswerIndex] = useState<number | null>(null);
-
-  const tabs = [
-    { id: "lessons", label: "Lessons", icon: <BookOpen className="w-4 h-4" /> },
-    { id: "examples", label: "Examples", icon: <Lightbulb className="w-4 h-4" /> },
-    { id: "questions", label: "Questions", icon: <HelpCircle className="w-4 h-4" /> },
-  ];
-
-  const getTypeFromTab = (): "lesson" | "example" | "question" => {
-    switch (activeTab) {
-      case "lessons": return "lesson";
-      case "examples": return "example";
-      case "questions": return "question";
-      default: return "lesson";
-    }
-  };
-
-  const handleAnswerChange = (index: number, value: string) => {
-    const newAnswers = [...answers];
-    newAnswers[index] = value;
-    setAnswers(newAnswers);
-  };
-
-  const handleAddEntry = () => {
-    if (wizardStep === "question") {
-      if (!questionText.trim()) { toast.error("Please enter a question"); return; }
-      if (answers.some(a => !a.trim())) { toast.error("Please fill in all 4 answers"); return; }
-      if (correctAnswerIndex === null) { toast.error("Please select the correct answer"); return; }
-
-      const newEntry: ContentEntry = {
-        id: Date.now().toString(),
-        title: questionText,
-        content: answers.join(" | "),
-        type: "question",
-        questionData: {
-          question: questionText,
-          answers: answers,
-          correctAnswerIndex: correctAnswerIndex,
-        },
-      };
-
-      setEntries([...entries, newEntry]);
-      setQuestionText("");
-      setAnswers(["", "", "", ""]);
-      setCorrectAnswerIndex(null);
-      toast.success("Question added successfully!");
-    } else if (wizardStep === "lesson") {
-      if (!newTitle.trim() || !newContent.trim()) { toast.error("Please fill in both title and content"); return; }
-
-      const newEntry: ContentEntry = {
-        id: Date.now().toString(),
-        title: newTitle,
-        content: newContent,
-        type: "lesson",
-        videoLink: newVideoLink.trim() || undefined,
-      };
-
-      setEntries([...entries, newEntry]);
-      setCurrentLessonTitle(newTitle);
-      setNewTitle("");
-      setNewContent("");
-      setNewVideoLink("");
-      setWizardStep("example");
-      setActiveTab("examples");
-      toast.success("Lesson info added! Now add some examples.");
-    } else if (wizardStep === "example") {
-      if (!newTitle.trim() || !exampleProblem.trim() || !exampleSolution.trim()) {
-        toast.error("Please fill in title, problem and solution");
+  // ... (keep handleNextStep, handleAddExample, handleAddQuestion same) ...
+  const handleNextStep = () => {
+    if (wizardStep === "info") {
+      if (!title.trim() || !intro.trim() || !coreContent.trim()) {
+        toast.error("Please fill in all fields");
         return;
       }
-
-      const newEntry: ContentEntry = {
-        id: Date.now().toString(),
-        title: newTitle,
-        content: exampleProblem,
-        type: "example",
-        exampleData: {
-          title: newTitle,
-          problem: exampleProblem,
-          solution: exampleSolution,
-          keyTakeaway: exampleTakeaway,
-        }
-      };
-
-      setEntries([...entries, newEntry]);
-      setNewTitle("");
-      setExampleProblem("");
-      setExampleSolution("");
-      setExampleTakeaway("");
-      toast.success("Example added!");
+      setWizardStep("video");
+    } else if (wizardStep === "video") {
+      setWizardStep("examples");
+    } else if (wizardStep === "examples") {
+      setWizardStep("questions");
     }
   };
 
-  const handleProceedToQuestions = () => {
-    setWizardStep("question");
-    setActiveTab("questions");
-    toast.success("Now add questions for your lesson.");
+  const handleAddExample = () => {
+    if (!exTitle.trim() || !exProblem.trim() || !exSolution.trim()) {
+      toast.error("Please fill in title, problem and solution");
+      return;
+    }
+    const newExample: ContentEntry = {
+      id: Date.now().toString(),
+      type: "example",
+      title: exTitle,
+      content: exProblem, 
+      exampleData: {
+        title: exTitle,
+        problem: exProblem,
+        solution: exSolution,
+        keyTakeaway: exTakeaway
+      }
+    };
+    setExamples([...examples, newExample]);
+    setExTitle("");
+    setExProblem("");
+    setExSolution("");
+    setExTakeaway("");
+    toast.success("Example added!");
+  };
+
+  const handleAddQuestion = () => {
+    if (!qText.trim()) { toast.error("Enter question text"); return; }
+    if (qAnswers.some(a => !a.trim())) { toast.error("Fill all 4 answers"); return; }
+    if (qCorrectIndex === null) { toast.error("Select correct answer"); return; }
+
+    const newQuestion: ContentEntry = {
+      id: Date.now().toString(),
+      type: "quiz",
+      title: "Quick Quiz",
+      content: "Test your knowledge",
+      questionData: {
+        question: qText,
+        answers: qAnswers,
+        correctAnswerIndex: qCorrectIndex
+      }
+    };
+    setQuestions([...questions, newQuestion]);
+    setQText("");
+    setQAnswers(["", "", "", ""]);
+    setQCorrectIndex(null);
+    toast.success("Question added!");
   };
 
   const handleSaveLesson = async () => {
     setLoading(true);
     try {
-      // 1. Find the lesson entry
-      const lessonEntry = entries.find(e => e.type === "lesson");
-      if (!lessonEntry) {
-        toast.error("No lesson info found");
-        return;
+      // Construct the slide deck array for the mobile app
+      const slides = [];
+
+      // 1. Intro Slide
+      slides.push({
+        type: "intro",
+        title: title,
+        content: intro
+      });
+
+      // 2. Core Content Slide
+      slides.push({
+        type: "content",
+        title: "Core Concept",
+        content: coreContent
+      });
+
+      // 3. Video Slide (if exists)
+      if (videoLink.trim()) {
+        slides.push({
+          type: "video",
+          title: "Video Guide",
+          videoUrl: videoLink,
+          content: "Watch this video to understand better."
+        });
       }
 
-      // 2. Insert Lesson into DB
-      const { data: lessonData, error: lessonError } = await supabase
-        .from('lessons')
-        .insert([{
-          topic_id: topic.id,
-          title: lessonEntry.title,
-          content: lessonEntry.content,
-          video_url: lessonEntry.videoLink,
-        }])
-        .select()
-        .single();
+      // 4. Examples
+      examples.forEach(ex => {
+        slides.push({
+          type: "content", 
+          title: ex.title,
+          content: `${ex.exampleData?.problem}\n\nSolution:\n${ex.exampleData?.solution}\n\nKey Takeaway: ${ex.exampleData?.keyTakeaway}`
+        });
+      });
 
-      if (lessonError) throw lessonError;
+      // 5. Questions
+      questions.forEach(q => {
+        slides.push({
+          type: "quiz",
+          question: q.questionData?.question,
+          options: q.questionData?.answers,
+          correctAnswer: q.questionData?.correctAnswerIndex
+        });
+      });
 
-      // 3. Insert Examples
-      const exampleEntries = entries.filter(e => e.type === "example");
-      if (exampleEntries.length > 0) {
-        const { error: exampleError } = await supabase
-          .from('lesson_examples')
-          .insert(exampleEntries.map(e => ({
-            lesson_id: lessonData.id,
-            title: e.exampleData?.title,
-            problem: e.exampleData?.problem,
-            solution: e.exampleData?.solution,
-            key_takeaway: e.exampleData?.keyTakeaway,
-          })));
-        if (exampleError) throw exampleError;
+      const lessonData = {
+        topic_id: topic.id,
+        title: title,
+        content: JSON.stringify(slides),
+        video_url: videoLink
+      };
+
+      let error;
+      if (initialData?.id) {
+         // Update
+         const result = await supabase
+           .from('lessons')
+           .update(lessonData)
+           .eq('id', initialData.id);
+         error = result.error;
+      } else {
+         // Insert
+         const result = await supabase
+           .from('lessons')
+           .insert([lessonData]);
+         error = result.error;
       }
 
-      // 4. Insert Questions
-      const questionEntries = entries.filter(e => e.type === "question");
-      if (questionEntries.length > 0) {
-        const { error: quizError } = await supabase
-          .from('quizzes')
-          .insert(questionEntries.map(e => ({
-            lesson_id: lessonData.id,
-            question: e.questionData?.question,
-            options: e.questionData?.answers,
-            correct_answer: e.questionData?.correctAnswerIndex,
-          })));
-        if (quizError) throw quizError;
-      }
+      if (error) throw error;
 
       setWizardStep("complete");
-      toast.success("Lesson saved successfully to database!");
+      toast.success(initialData?.id ? "Lesson updated successfully!" : "Lesson saved successfully!");
     } catch (error: any) {
-      toast.error(`Error saving lesson: ${error.message}`);
+      toast.error(`Error saving: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStartNewLesson = () => {
-    setEntries([]);
-    setWizardStep("lesson");
-    setActiveTab("lessons");
-    setCurrentLessonTitle("");
-    setNewTitle("");
-    setNewContent("");
-    setNewVideoLink("");
-    setExampleProblem("");
-    setExampleSolution("");
-    setExampleTakeaway("");
-    setQuestionText("");
-    setAnswers(["", "", "", ""]);
-    setCorrectAnswerIndex(null);
-  };
-
-  const handleDeleteEntry = (id: string) => {
-    setEntries(entries.filter((entry) => entry.id !== id));
-    toast.success("Entry removed from list");
-  };
-
-  const filteredEntries = entries.filter((entry) => {
-    const matchesType = entry.type === getTypeFromTab();
-    if (!searchQuery.trim()) return matchesType;
-    
-    const query = searchQuery.toLowerCase();
-    return matchesType && (
-      entry.title.toLowerCase().includes(query) ||
-      entry.content.toLowerCase().includes(query)
-    );
-  });
-
-  const placeholders = {
-    lessons: {
-      title: "e.g., Introduction to Variables",
-      content: "Explain the concept, key points, and learning objectives...",
-    },
-    examples: {
-      title: "e.g., Variable Declaration",
-      problem: "Describe a scenario or problem to solve...",
-      solution: "Provide the solution steps or code...",
-    },
+  const handleStartNew = () => {
+    if (onComplete) {
+       onComplete();
+       return;
+    }
+    setTitle("");
+    setIntro("");
+    setCoreContent("");
+    setVideoLink("");
+    setExamples([]);
+    setQuestions([]);
+    setWizardStep("info");
   };
 
   return (
@@ -280,149 +271,112 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "" }: ContentBuil
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-primary" />
-            Content Builder
+            {initialData ? 'Edit Content' : 'Content Builder'}
           </h2>
           <p className="text-muted-foreground mt-1">
-            Build content for <span className="font-medium text-foreground">{topic.title}</span>
+            {initialData ? 'Editing content for ' : 'Build content for '} 
+            <span className="font-medium text-foreground">{topic.title}</span>
           </p>
         </div>
-        <GlassTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
-      {/* Wizard Progress Indicator */}
+      {/* Progress Steps */}
       {wizardStep !== "complete" && (
-        <div className="glass-panel p-4 rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-primary">
-              {wizardStep === "lesson" && "Step 1: Lesson Overview"}
-              {wizardStep === "example" && "Step 2: Add Examples"}
-              {wizardStep === "question" && "Step 3: Add Quiz Questions"}
-            </span>
-            {currentLessonTitle && (
-              <span className="text-sm text-muted-foreground">
-                Current Lesson: <span className="text-foreground font-medium">{currentLessonTitle}</span>
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={`h-2 flex-1 rounded-full ${wizardStep === "lesson" || wizardStep === "example" || wizardStep === "question" ? "bg-primary" : "bg-muted"}`} />
-            <div className={`h-2 flex-1 rounded-full ${wizardStep === "example" || wizardStep === "question" ? "bg-primary" : "bg-muted"}`} />
-            <div className={`h-2 flex-1 rounded-full ${wizardStep === "question" ? "bg-primary" : "bg-muted"}`} />
-          </div>
+        <div className="glass-panel p-4 rounded-xl flex items-center justify-between text-sm">
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'info' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>1. Lesson Info</div>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'video' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>2. Video</div>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'examples' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>3. Examples</div>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'questions' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>4. Questions</div>
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-8">
-        <GlassCard className="h-fit" hover={false}>
-          <div className="space-y-5">
-            {wizardStep === "complete" ? (
+      <GlassCard className="max-w-3xl mx-auto" hover={false}>
+        <div className="space-y-6">
+          
+          {wizardStep === "info" && (
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary"/> Step 1: Lesson Overview</h3>
+              <GlassInput label="Lesson Title" placeholder="e.g. Introduction to Algebra" value={title} onChange={e => setTitle(e.target.value)} />
+              <GlassTextarea label="What you will learn (Goal/Intro)" placeholder="Briefly explain the goal of this lesson..." value={intro} onChange={e => setIntro(e.target.value)} />
+              <GlassTextarea label="Core Content (Explanation)" placeholder="Detailed explanation of the concept..." className="min-h-[150px]" value={coreContent} onChange={e => setCoreContent(e.target.value)} />
+              <GlassButton variant="primary" onClick={handleNextStep} className="w-full">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
+            </>
+          )}
+
+          {wizardStep === "video" && (
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2"><Video className="w-5 h-5 text-primary"/> Step 2: Media</h3>
+              <GlassInput label="YouTube Video Link" placeholder="https://youtube.com/watch?v=..." value={videoLink} onChange={e => setVideoLink(e.target.value)} />
+              <div className="flex gap-3">
+                 <GlassButton variant="ghost" onClick={() => setWizardStep("info")} className="flex-1">Back</GlassButton>
+                 <GlassButton variant="primary" onClick={handleNextStep} className="flex-1">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
+              </div>
+            </>
+          )}
+
+          {wizardStep === "examples" && (
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2"><Lightbulb className="w-5 h-5 text-primary"/> Step 3: Examples ({examples.length} added)</h3>
+              <div className="p-4 bg-muted/10 rounded-xl space-y-3 mb-4">
+                 <GlassInput label="Example Title" placeholder="e.g. Solving for X" value={exTitle} onChange={e => setExTitle(e.target.value)} />
+                 <GlassTextarea label="Problem" placeholder="The problem statement..." value={exProblem} onChange={e => setExProblem(e.target.value)} />
+                 <GlassTextarea label="Solution" placeholder="Step-by-step solution..." value={exSolution} onChange={e => setExSolution(e.target.value)} />
+                 <GlassInput label="Key Takeaway" placeholder="What should the student remember?" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
+                 <GlassButton variant="secondary" onClick={handleAddExample} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Example</GlassButton>
+              </div>
+              <div className="flex gap-3">
+                 <GlassButton variant="ghost" onClick={() => setWizardStep("video")} className="flex-1">Back</GlassButton>
+                 <GlassButton variant="primary" onClick={handleNextStep} className="flex-1">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
+              </div>
+            </>
+          )}
+
+          {wizardStep === "questions" && (
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2"><HelpCircle className="w-5 h-5 text-primary"/> Step 4: Quiz Questions ({questions.length} added)</h3>
+              <div className="p-4 bg-muted/10 rounded-xl space-y-3 mb-4">
+                 <GlassTextarea label="Question" placeholder="Enter the question..." value={qText} onChange={e => setQText(e.target.value)} />
+                 <div className="grid grid-cols-2 gap-2">
+                    {qAnswers.map((ans, idx) => (
+                      <div key={idx} className="flex gap-2">
+                         <button onClick={() => setQCorrectIndex(idx)} className={`w-8 h-8 rounded-lg border ${qCorrectIndex === idx ? 'bg-green-500 border-green-500 text-white' : 'border-border'}`}>{String.fromCharCode(65+idx)}</button>
+                         <input className="flex-1 bg-transparent border border-border rounded-lg px-2 text-sm" placeholder={`Option ${String.fromCharCode(65+idx)}`} value={ans} onChange={e => {
+                           const newAns = [...qAnswers]; newAns[idx] = e.target.value; setQAnswers(newAns);
+                         }} />
+                      </div>
+                    ))}
+                 </div>
+                 <GlassButton variant="secondary" onClick={handleAddQuestion} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Question</GlassButton>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                 <GlassButton variant="ghost" onClick={() => setWizardStep("examples")} className="flex-1">Back</GlassButton>
+                 <GlassButton variant="accent" onClick={handleSaveLesson} disabled={loading} className="flex-[2]">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>}
+                    {initialData ? 'Update Lesson' : 'Complete & Save Lesson'}
+                 </GlassButton>
+              </div>
+            </>
+          )}
+
+          {wizardStep === "complete" && (
               <div className="text-center py-8">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
                   <Check className="w-8 h-8 text-green-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">Lesson Successfully Added!</h3>
-                <p className="text-muted-foreground mb-6">You can now start building another lesson for this topic.</p>
-                <GlassButton variant="primary" onClick={handleStartNewLesson} className="w-full">
-                  <Plus className="w-4 h-4 mr-2" /> Start New Lesson
+                <h3 className="text-lg font-semibold text-foreground mb-2">{initialData ? 'Lesson Updated Successfully!' : 'Lesson Saved Successfully!'}</h3>
+                <p className="text-muted-foreground mb-6">Your content is now live on the mobile app.</p>
+                <GlassButton variant="primary" onClick={handleStartNew} className="w-full">
+                  <Plus className="w-4 h-4 mr-2" /> {initialData ? 'Return to Dashboard' : 'Build Another Lesson'}
                 </GlassButton>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 text-lg font-semibold">
-                  <Plus className="w-5 h-5 text-primary" />
-                  {wizardStep === "lesson" ? "Lesson Core Info" : wizardStep === "example" ? "Example Breakdown" : "Quiz Question"}
-                </div>
-                
-                {wizardStep === "lesson" && (
-                  <>
-                    <GlassInput label="Title" placeholder={placeholders.lessons.title} value={newTitle} onChange={e => setNewTitle(e.target.value)} />
-                    <GlassTextarea label="Core Content" placeholder={placeholders.lessons.content} value={newContent} onChange={e => setNewContent(e.target.value)} />
-                    <div className="relative">
-                      <GlassInput label="Video URL (Optional)" placeholder="https://youtube.com/..." value={newVideoLink} onChange={e => setNewVideoLink(e.target.value)} />
-                      <Video className="absolute right-3 top-9 w-5 h-5 text-muted-foreground pointer-events-none" />
-                    </div>
-                  </>
-                )}
-
-                {wizardStep === "example" && (
-                  <>
-                    <GlassInput label="Example Title" placeholder={placeholders.examples.title} value={newTitle} onChange={e => setNewTitle(e.target.value)} />
-                    <GlassTextarea label="Problem Description" placeholder={placeholders.examples.problem} value={exampleProblem} onChange={e => setExampleProblem(e.target.value)} />
-                    <GlassTextarea label="Solution/Steps" placeholder={placeholders.examples.solution} value={exampleSolution} onChange={e => setExampleSolution(e.target.value)} />
-                    <GlassInput label="Key Takeaway" placeholder="One clear piece of advice..." value={exampleTakeaway} onChange={e => setExampleTakeaway(e.target.value)} />
-                  </>
-                )}
-
-                {wizardStep === "question" && (
-                  <div className="space-y-4">
-                    <GlassTextarea label="Question" placeholder="Enter your question here..." value={questionText} onChange={e => setQuestionText(e.target.value)} />
-                    <div className="space-y-3">
-                      <label className="block text-sm font-medium">Answer Options (Click to mark correct)</label>
-                      {answers.map((answer, index) => (
-                        <div key={index} className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setCorrectAnswerIndex(index)}
-                            className={`w-10 h-10 rounded-xl font-bold flex items-center justify-center transition-all ${correctAnswerIndex === index ? "bg-green-500 text-white" : "glass-panel text-muted-foreground"}`}
-                          >
-                            {correctAnswerIndex === index ? <Check className="w-5 h-5" /> : String.fromCharCode(65 + index)}
-                          </button>
-                          <GlassInput placeholder={`Option ${String.fromCharCode(65 + index)}...`} value={answer} onChange={e => handleAnswerChange(index, e.target.value)} className="flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-3 pt-2">
-                  <GlassButton variant="primary" onClick={handleAddEntry} className="w-full">
-                    <Plus className="w-4 h-4 mr-2" /> 
-                    {wizardStep === "lesson" ? "Set Lesson Header" : wizardStep === "example" ? "Add Example" : "Add Question"}
-                  </GlassButton>
-                  
-                  {wizardStep === "example" && entries.some(e => e.type === "example") && (
-                    <GlassButton variant="accent" onClick={handleProceedToQuestions} className="w-full">
-                      Proceed to Questions <ArrowRight className="w-4 h-4 ml-2" />
-                    </GlassButton>
-                  )}
-                  
-                  {wizardStep === "question" && entries.some(e => e.type === "question") && (
-                    <GlassButton variant="accent" onClick={handleSaveLesson} className="w-full" disabled={loading}>
-                      {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                      Finalize & Save Lesson
-                    </GlassButton>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </GlassCard>
-
-        {/* List of elements added so far */}
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">{tabs.find(t => t.id === activeTab)?.label} ({filteredEntries.length})</h3>
-          {filteredEntries.length === 0 ? (
-            <div className="glass-panel p-12 text-center text-muted-foreground rounded-2xl">
-              <p>No {activeTab} added in this step yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredEntries.map((entry, index) => (
-                <ContentItem
-                  key={entry.id}
-                  title={entry.title}
-                  content={entry.content}
-                  index={index}
-                  type={entry.type}
-                  onDelete={() => handleDeleteEntry(entry.id)}
-                  onEdit={() => {}}
-                  questionData={entry.questionData}
-                />
-              ))}
-            </div>
           )}
+
         </div>
-      </div>
+      </GlassCard>
     </div>
   );
 };

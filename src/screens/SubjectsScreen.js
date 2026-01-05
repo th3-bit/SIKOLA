@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,9 @@ import {
   TouchableOpacity, 
   Dimensions, 
   TextInput,
-  Image
+  Image,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,86 +24,138 @@ import {
   Code, 
   Globe, 
   ChevronRight,
-  Star
+  Star,
+  BookOpen,
+  Briefcase,
+  Users,
+  Scale
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import GlassHeader from '../components/GlassHeader';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
-const subjects = [
-  { 
-    id: 1, 
-    name: 'Mathematics', 
-    icon: Calculator, 
-    color: '#FACC15', 
-    category: 'Academic',
-    topics: [
-      { id: 101, title: 'Linear Algebra', count: '12 Lessons', progress: 45 },
-      { id: 102, title: 'Calculus Essentials', count: '18 Lessons', progress: 10 },
-      { id: 103, title: 'Advanced Geometry', count: '15 Lessons', progress: 0 },
-      { id: 104, title: 'Statistics 101', count: '10 Lessons', progress: 80 },
-    ]
-  },
-  { 
-    id: 2, 
-    name: 'Science', 
-    icon: Beaker, 
-    color: '#EC4899', 
-    category: 'Science',
-    topics: [
-      { id: 201, title: 'Organic Chemistry', count: '22 Lessons', progress: 15 },
-      { id: 202, title: 'Quantum Physics', count: '30 Lessons', progress: 5 },
-      { id: 203, title: 'Cell Biology', count: '25 Lessons', progress: 60 },
-    ]
-  },
-  { 
-    id: 3, 
-    name: 'Economics', 
-    icon: TrendingUp, 
-    color: '#8B5CF6', 
-    category: 'Academic',
-    topics: [
-      { id: 301, title: 'Microeconomics', count: '15 Lessons', progress: 90 },
-      { id: 302, title: 'Macroeconomics', count: '14 Lessons', progress: 20 },
-      { id: 303, title: 'Financial Markets', count: '20 Lessons', progress: 0 },
-    ]
-  },
-  { 
-    id: 4, 
-    name: 'Coding', 
-    icon: Code, 
-    color: '#10B981', 
-    category: 'Technology',
-    topics: [
-      { id: 401, title: 'React Native', count: '40 Lessons', progress: 30 },
-      { id: 402, title: 'Python for Data Science', count: '35 Lessons', progress: 0 },
-      { id: 403, title: 'Algorithm Mastery', count: '28 Lessons', progress: 10 },
-    ]
-  },
-  { 
-    id: 5, 
-    name: 'Arts', 
-    icon: Palette, 
-    color: '#F97316', 
-    category: 'Creative',
-    topics: [
-      { id: 501, title: 'Digital Illustration', count: '12 Lessons', progress: 50 },
-      { id: 502, title: 'Color Theory', count: '10 Lessons', progress: 100 },
-      { id: 503, title: 'UI/UX Design', count: '24 Lessons', progress: 5 },
-    ]
-  },
-];
+// Icon mapping for different subjects
+const subjectIcons = {
+  'Mathematics': Calculator,
+  'English': BookOpen,
+  'Biology': Beaker,
+  'Chemistry': Beaker,
+  'Physics': Beaker,
+  'Geography': Globe,
+  'History': BookOpen,
+  'Economics': TrendingUp,
+  'Entrepreneurship / Business Studies': Briefcase,
+  'ICT / Computer Studies': Code,
+  'Civic Education': Scale,
+};
 
-export default function SubjectsScreen({ navigation }) {
+// Color mapping for different subjects
+const subjectColors = {
+  'Mathematics': '#FACC15',
+  'English': '#3B82F6',
+  'Biology': '#10B981',
+  'Chemistry': '#EC4899',
+  'Physics': '#8B5CF6',
+  'Geography': '#14B8A6',
+  'History': '#F97316',
+  'Economics': '#6366F1',
+  'Entrepreneurship / Business Studies': '#EF4444',
+  'ICT / Computer Studies': '#22C55E',
+  'Civic Education': '#A855F7',
+};
+
+export default function SubjectsScreen({ navigation, route }) {
   const { theme, isDark } = useTheme();
-  const [selectedSubject, setSelectedSubject] = useState(subjects[0]);
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    fetchSubjects().then(() => setRefreshing(false));
+  }, []);
+
+  useEffect(() => {
+    fetchSubjects();
+  }, []);
+
+  const fetchSubjects = async () => {
+    try {
+      setLoading(true);
+      // Fetch subjects and their topics in a single query
+      const { data: subjectsData, error: subjectsError } = await supabase
+        .from('subjects')
+        .select(`
+          *,
+          topics (
+            id,
+            title,
+            subject_id
+          )
+        `)
+        .order('name');
+
+      if (subjectsError) throw subjectsError;
+
+      const subjectsMap = new Map();
+      
+      subjectsData.forEach(subject => {
+        const normalizedName = subject.name.charAt(0).toUpperCase() + subject.name.slice(1).toLowerCase();
+        const icon = subjectIcons[normalizedName] || BookOpen;
+        const color = subjectColors[normalizedName] || '#8B5CF6';
+        
+        const formattedTopic = (subject.topics || []).map(topic => ({
+          id: topic.id,
+          title: topic.title,
+          count: '0 Lessons',
+          progress: 0
+        })).sort((a, b) => a.title.localeCompare(b.title));
+
+        if (subjectsMap.has(normalizedName)) {
+           // Merge topics into existing subject
+           const existing = subjectsMap.get(normalizedName);
+           existing.topics = [...existing.topics, ...formattedTopic];
+        } else {
+           subjectsMap.set(normalizedName, {
+             id: subject.id, // Keep the first ID found
+             name: normalizedName,
+             icon,
+             color,
+             category: 'Academic',
+             topics: formattedTopic
+           });
+        }
+      });
+
+      const formattedSubjects = Array.from(subjectsMap.values());
+
+      setSubjects(formattedSubjects);
+      if (formattedSubjects.length > 0) {
+        setSelectedSubject(formattedSubjects[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { selectingForSubscription, plan } = route.params || {};
 
   const TopicCard = ({ topic, color }) => (
     <TouchableOpacity 
       activeOpacity={0.8}
-      onPress={() => navigation.navigate('LessonDetail', { lesson: topic, subject: selectedSubject })}
+      onPress={() => {
+        if (selectingForSubscription) {
+          navigation.navigate('Payment', { plan, topic });
+        } else {
+          navigation.navigate('LessonDetail', { lesson: topic, subject: selectedSubject });
+        }
+      }}
       style={[styles.topicCardWrapper, { shadowColor: color }]}
     >
       <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.topicCard, { borderColor: theme.colors.glassBorder }]}>
@@ -137,79 +191,129 @@ export default function SubjectsScreen({ navigation }) {
       <SafeAreaView style={styles.safeArea}>
         <GlassHeader />
         
-        <ScrollView 
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          <View style={styles.headerTitleSection}>
-            <Text style={[styles.mainTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-              Subjects
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-              Choose a subject to see topics
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.textPrimary} />
+            <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+              Loading subjects...
             </Text>
           </View>
+        ) : subjects.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+              No subjects available yet. Teachers can add subjects from the Content Moderator.
+            </Text>
+          </View>
+        ) : (
 
-          {/* Subject Selection (Horizontal Scroll like the image) */}
           <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.subjectsContainer}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textPrimary} />
+            }
           >
-            {subjects.map((sub) => (
-              <TouchableOpacity
-                key={sub.id}
-                onPress={() => setSelectedSubject(sub)}
-                style={[
-                  styles.subjectChip,
-                  selectedSubject.id === sub.id && { 
-                    backgroundColor: sub.color,
-                    borderColor: sub.color,
-                    elevation: 10,
-                    shadowColor: sub.color,
-                    shadowOpacity: 0.5,
-                    shadowRadius: 10,
-                  },
-                  { borderColor: theme.colors.glassBorder }
-                ]}
-              >
-                <sub.icon 
-                  size={18} 
-                  color={selectedSubject.id === sub.id ? '#FFF' : sub.color} 
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={[
-                  styles.subjectChipText,
-                  { color: selectedSubject.id === sub.id ? '#FFF' : theme.colors.textSecondary,
-                    fontFamily: theme.typography.fontFamily }
-                ]}>
-                  {sub.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Selected Subject Header */}
-          <View style={styles.topicHeaderSection}>
-            <Text style={[styles.topicHeaderTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-              {selectedSubject.name} Topics
-            </Text>
-            <View style={[styles.badge, { backgroundColor: `${selectedSubject.color}20` }]}>
-              <Text style={[styles.badgeText, { color: selectedSubject.color }]}>
-                {selectedSubject.topics.length} Available
-              </Text>
+            <View style={styles.headerTitleSection}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View>
+                  <Text style={[styles.mainTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                    {selectingForSubscription ? 'Select a Topic' : 'Subjects'}
+                  </Text>
+                  <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                    {selectingForSubscription 
+                      ? 'Choose the topic you want to unlock' 
+                      : 'Choose a subject to see topics'}
+                  </Text>
+                </View>
+                {selectingForSubscription && (
+                  <TouchableOpacity 
+                    onPress={() => navigation.setParams({ selectingForSubscription: null, plan: null })}
+                    style={{ padding: 8, backgroundColor: 'rgba(255,0,0,0.1)', borderRadius: 20 }}
+                  >
+                    <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
 
-          {/* Topics Grid */}
-          <View style={styles.topicsGrid}>
-            {selectedSubject.topics.map((topic) => (
-              <TopicCard key={topic.id} topic={topic} color={selectedSubject.color} />
-            ))}
-          </View>
+            {/* Subject Selection (Horizontal Scroll like the image) */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              contentContainerStyle={styles.subjectsContainer}
+            >
+              {subjects
+                .filter(sub => 
+                  sub.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  (sub.category && sub.category.toLowerCase().includes(searchQuery.toLowerCase()))
+                )
+                .map((sub) => (
+                <TouchableOpacity
+                  key={sub.id}
+                  onPress={() => setSelectedSubject(sub)}
+                  style={[
+                    styles.subjectChip,
+                    selectedSubject?.id === sub.id && { 
+                      backgroundColor: sub.color,
+                      borderColor: sub.color,
+                      elevation: 10,
+                      shadowColor: sub.color,
+                      shadowOpacity: 0.5,
+                      shadowRadius: 10,
+                    },
+                    { borderColor: theme.colors.glassBorder }
+                  ]}
+                >
+                  <sub.icon 
+                    size={18} 
+                    color={selectedSubject?.id === sub.id ? '#FFF' : sub.color} 
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={[
+                    styles.subjectChipText,
+                    { color: selectedSubject?.id === sub.id ? '#FFF' : theme.colors.textSecondary,
+                      fontFamily: theme.typography.fontFamily }
+                  ]}>
+                    {sub.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-          <View style={{ height: 120 }} />
-        </ScrollView>
+            {selectedSubject && (
+              <>
+                {/* Selected Subject Header */}
+                <View style={styles.topicHeaderSection}>
+                  <Text style={[styles.topicHeaderTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                    {selectedSubject.name} Topics
+                  </Text>
+                  <View style={[styles.badge, { backgroundColor: `${selectedSubject.color}20` }]}>
+                    <Text style={[styles.badgeText, { color: selectedSubject.color }]}>
+                      {selectedSubject.topics.length} Available
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Topics Grid */}
+                <View style={styles.topicsGrid}>
+                  {selectedSubject.topics.length > 0 ? (
+                    selectedSubject.topics.map((topic) => (
+                      <TopicCard key={topic.id} topic={topic} color={selectedSubject.color} />
+                    ))
+                  ) : (
+                    <View style={styles.emptyTopicsContainer}>
+                      <Text style={[styles.emptyTopicsText, { color: theme.colors.textSecondary }]}>
+                        No topics available for {selectedSubject.name} yet.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
+
+            <View style={{ height: 120 }} />
+          </ScrollView>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -337,5 +441,36 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     width: 35,
     textAlign: 'right',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  emptyTopicsContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyTopicsText: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

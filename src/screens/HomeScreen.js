@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calculator, Beaker, TrendingUp, Palette, Music, Code, Globe, Dumbbell } from 'lucide-react-native';
+import { Calculator, Beaker, TrendingUp, Palette, Music, Code, Globe, Dumbbell, Crown, ChevronRight } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
 import GlassHeader from '../components/GlassHeader';
 import DailyProgressCard from '../components/DailyProgressCard';
 import LessonCard from '../components/LessonCard';
@@ -19,6 +20,8 @@ export default function HomeScreen({ navigation }) {
     { id: 1, title: 'Introduction to Algebra', category: 'Mathematics', progress: 65, duration: 25, color: '#FACC15' },
     { id: 2, title: 'Chemical Reactions', category: 'Science', progress: 40, duration: 30, color: '#EC4899' },
     { id: 3, title: 'Economics Fundamentals', category: 'Economics', progress: 80, duration: 20, color: '#8B5CF6' },
+    { id: 10, title: 'Javascript Basics', category: 'Coding', progress: 25, duration: 45, color: '#10B981' },
+    { id: 11, title: 'Renaissance Art', category: 'Arts', progress: 10, duration: 35, color: '#F97316' },
   ];
 
   const categories = [
@@ -35,6 +38,9 @@ export default function HomeScreen({ navigation }) {
     { id: 5, title: 'Physical Fitness', category: 'Health', progress: 30, duration: 20, color: '#EF4444' },
     { id: 6, title: 'Ancient Civilizations', category: 'History', progress: 75, duration: 25, color: '#3B82F6' },
     { id: 7, title: 'Digital Art Basics', category: 'Arts', progress: 50, duration: 30, color: '#F97316' },
+    { id: 8, title: 'Macroeconomics', category: 'Economics', progress: 90, duration: 40, color: '#8B5CF6' },
+    { id: 9, title: 'Organic Chemistry', category: 'Science', progress: 15, duration: 55, color: '#EC4899' },
+    { id: 15, title: 'Geometry Proofs', category: 'Mathematics', progress: 60, duration: 30, color: '#FACC15' },
   ];
 
   return (
@@ -53,7 +59,45 @@ export default function HomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           {/* Daily Progress */}
-          <DailyProgressCard />
+          <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('LearningProgress')}>
+            <DailyProgressCard />
+          </TouchableOpacity>
+
+          {/* Subscription Banner */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Subscription')}
+            style={styles.subscriptionBannerWrapper}
+          >
+            <BlurView
+              intensity={isDark ? 30 : 40}
+              tint={isDark ? 'dark' : 'light'}
+              style={[styles.subscriptionBanner, { borderColor: '#FACC15' }]}
+            >
+              <LinearGradient
+                colors={['rgba(250, 204, 21, 0.2)', 'rgba(250, 204, 21, 0.05)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.subscriptionContent}>
+                <View style={styles.subscriptionLeft}>
+                  <View style={styles.crownContainer}>
+                    <Crown size={28} color="#FACC15" fill="#FACC15" />
+                  </View>
+                  <View style={styles.subscriptionText}>
+                    <Text style={[styles.subscriptionTitle, { color: theme.colors.textPrimary }]}>
+                      Unlock Premium Access
+                    </Text>
+                    <Text style={[styles.subscriptionSubtitle, { color: theme.colors.textSecondary }]}>
+                      View all subscription plans
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={24} color="#FACC15" />
+              </View>
+            </BlurView>
+          </TouchableOpacity>
 
           {/* Continue Learning */}
           <View style={styles.section}>
@@ -70,7 +114,7 @@ export default function HomeScreen({ navigation }) {
                   key={lesson.id} 
                   lesson={lesson} 
                   shadowColor={lesson.color}
-                  onPress={() => {}}
+                  onPress={() => navigation.navigate('LessonDetail', { lesson })}
                 />
               ))}
             </ScrollView>
@@ -107,7 +151,7 @@ export default function HomeScreen({ navigation }) {
                   key={lesson.id} 
                   lesson={lesson} 
                   shadowColor={lesson.color}
-                  onPress={() => {}}
+                  onPress={() => navigation.navigate('LessonDetail', { lesson })}
                 />
               ))}
             </ScrollView>
@@ -167,5 +211,50 @@ const styles = StyleSheet.create({
   recentItem: {
     width: '48%',
     marginBottom: 16,
+  },
+  subscriptionBannerWrapper: {
+    marginBottom: 24,
+    shadowColor: '#FACC15',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  subscriptionBanner: {
+    borderRadius: 24,
+    borderWidth: 2,
+    padding: 20,
+    overflow: 'hidden',
+  },
+  subscriptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  subscriptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+  },
+  crownContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(250, 204, 21, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subscriptionText: {
+    flex: 1,
+  },
+  subscriptionTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  subscriptionSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
   },
 });

@@ -14,8 +14,14 @@ import LessonOverviewScreen from './src/screens/LessonOverviewScreen';
 import ExamplesScreen from './src/screens/ExamplesScreen';
 import QuizScreen from './src/screens/QuizScreen';
 import LearningContentScreen from './src/screens/LearningContentScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import PaymentScreen from './src/screens/PaymentScreen';
+import PersonalInfoScreen from './src/screens/PersonalInfoScreen';
+import LearningProgressScreen from './src/screens/LearningProgressScreen';
+import CourseCompletionScreen from './src/screens/CourseCompletionScreen';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ProgressProvider } from './src/context/ProgressContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -39,6 +45,11 @@ function AppNavigator() {
         <Stack.Screen name="Examples" component={ExamplesScreen} />
         <Stack.Screen name="Quiz" component={QuizScreen} />
         <Stack.Screen name="LearningContent" component={LearningContentScreen} />
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+        <Stack.Screen name="Payment" component={PaymentScreen} />
+        <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
+        <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
+        <Stack.Screen name="CourseCompletion" component={CourseCompletionScreen} />
       </Stack.Navigator>
     </>
   );
@@ -48,9 +59,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
+        <ProgressProvider>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </ProgressProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

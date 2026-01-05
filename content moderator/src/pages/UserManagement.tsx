@@ -4,7 +4,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
-import { Plus, Edit2, Trash2, User, Mail, Key, Shield, Check, Search, ArrowLeft, Users, UserCheck, UserX, AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, User, Mail, Key, Shield, Check, Search, ArrowLeft, Users, UserCheck, UserX, AlertTriangle, Eye, EyeOff, Loader2, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -20,13 +20,31 @@ import {
 
 type SubscriptionType = "free_trial" | "per_course" | "daily" | "weekly" | "monthly";
 
+interface Subscription {
+  id: string;
+  plan_id: string;
+  started_at: string;
+  expires_at: string;
+  is_active: boolean;
+  payment_reference: string | null;
+  plan: {
+    name: string;
+    price: number;
+    plan_type: string;
+  };
+}
+
 interface UserProfile {
   id: string;
   full_name: string;
   email: string;
+  phone?: string | null;
+  email_confirmed?: boolean;
+  last_sign_in?: string | null;
   subscription_type: SubscriptionType;
   status: "active" | "inactive";
   created_at: string;
+  subscriptions?: Subscription[];
 }
 
 const subscriptionLabels: Record<SubscriptionType, string> = {
@@ -73,17 +91,52 @@ const UserManagement = () => {
 
   const fetchProfiles = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      toast.error("Failed to fetch profiles");
-    } else {
-      setProfiles(data || []);
+    try {
+      // Fetch profiles with subscription data
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          subscriptions:user_subscriptions(
+            id,
+            plan_id,
+            started_at,
+            expires_at,
+            is_active,
+            payment_reference,
+            plan:subscription_plans(
+              name,
+              price,
+              plan_type
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (profilesError) throw profilesError;
+
+      // Fetch auth users to get email addresses
+      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
+      
+      // Merge profile data with auth data
+      const enrichedProfiles = (profilesData || []).map(profile => {
+        const authUser = authUsers?.find(u => u.id === profile.id);
+        return {
+          ...profile,
+          email: authUser?.email || profile.email || 'No email',
+          phone: authUser?.phone || null,
+          email_confirmed: authUser?.email_confirmed_at ? true : false,
+          last_sign_in: authUser?.last_sign_in_at || null,
+        };
+      });
+
+      setProfiles(enrichedProfiles);
+    } catch (error: any) {
+      console.error('Error fetching profiles:', error);
+      toast.error(error.message || "Failed to fetch user data");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const filteredUsers = profiles.filter((user) => {
@@ -165,8 +218,8 @@ const UserManagement = () => {
                   <ArrowLeft className="w-4 h-4" />
                 </GlassButton>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                    {loading ? <Loader2 className="w-5 h-5 text-primary-foreground animate-spin" /> : <Users className="w-5 h-5 text-primary-foreground" />}
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg">
+                    <img src="/logo.jpg" alt="Teachers Content Generator" className="w-full h-full object-cover" />
                   </div>
                   <div>
                     <h1 className="text-lg font-bold text-foreground">
@@ -274,6 +327,11 @@ const UserManagement = () => {
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.status === "active" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-gray-500/20 text-gray-400 border border-gray-500/30"}`}>
                                 {user.status}
                               </span>
+                              {user.email_confirmed && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  ✓ Verified
+                                </span>
+                              )}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
@@ -281,11 +339,40 @@ const UserManagement = () => {
                                 <Mail className="w-3.5 h-3.5" />
                                 <span>{user.email}</span>
                               </div>
+                              {user.phone && (
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <Shield className="w-3.5 h-3.5" />
+                                  <span>{user.phone}</span>
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Shield className="w-3.5 h-3.5" />
                                 <span>Joined: {new Date(user.created_at).toLocaleDateString()}</span>
                               </div>
+                              {user.last_sign_in && (
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>Last login: {new Date(user.last_sign_in).toLocaleDateString()}</span>
+                                </div>
+                              )}
                             </div>
+
+                            {/* Active Subscriptions */}
+                            {user.subscriptions && user.subscriptions.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                <p className="text-xs font-semibold text-muted-foreground">Active Subscriptions:</p>
+                                {user.subscriptions
+                                  .filter(sub => sub.is_active && new Date(sub.expires_at) > new Date())
+                                  .map(sub => (
+                                    <div key={sub.id} className="flex items-center justify-between text-xs bg-primary/20 px-2 py-1 rounded">
+                                      <span className="font-medium">{sub.plan.name}</span>
+                                      <span className="text-muted-foreground">
+                                        Expires: {new Date(sub.expires_at).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
                           </div>
                         </div>
 

@@ -6,7 +6,8 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Dimensions, 
-  Animated 
+  Animated,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,13 +24,20 @@ import {
   Info
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
+import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LessonDetailScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { lesson, subject } = route.params;
+  const { isTopicCompleted, isTopicLocked, getTopicScore } = useProgress();
+  const { lesson: topic, subject } = route.params; // Rename 'lesson' param to 'topic' for clarity
+  const primaryColor = topic.color || subject?.color || theme.colors.secondary;
   const [fadeAnim] = useState(new Animated.Value(0));
+  
+  const [lessons, setLessons] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -37,19 +45,39 @@ export default function LessonDetailScreen({ route, navigation }) {
       duration: 800,
       useNativeDriver: true,
     }).start();
+    
+    fetchLessons();
   }, []);
 
+  const fetchLessons = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('topic_id', topic.id)
+        .order('id', { ascending: true }); // Assume 'id' order or add a separate 'order' column later
+
+      if (error) throw error;
+      setLessons(data || []);
+    } catch (err) {
+      console.error('Error fetching lessons:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Static meta for now, ideally this comes from the Topic table too
   const lessonContent = {
-    description: `Master the fundamentals of ${lesson.name || 'this subject'} with this comprehensive lesson. Learn key concepts, practice with examples, and test your knowledge.`,
-    topics: [
-      { id: 1, title: 'Introduction & Basics', duration: '5m', isCompleted: true },
-      { id: 2, title: 'Core Mechanics', duration: '12m', isCompleted: false },
-      { id: 3, title: 'Real-world Application', duration: '15m', isCompleted: false },
-      { id: 4, title: 'Advanced Strategies', duration: '10m', isCompleted: false },
-    ],
+    description: `Master the fundamentals of ${topic.title || 'this subject'}. Learn key concepts, practice with examples, and test your knowledge.`,
     difficulty: 'Intermediate',
     xpReward: 150,
   };
+
+  // Calculate dynamic progress
+  const completedCount = lessons.filter(l => isTopicCompleted(topic.id, l.id)).length;
+  const totalCount = lessons.length;
+  const currentProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -59,7 +87,7 @@ export default function LessonDetailScreen({ route, navigation }) {
       />
       
       {/* Liquid Glows */}
-      <View style={[styles.glow, { top: -100, left: -50, backgroundColor: lesson.color, opacity: 0.15 }]} />
+      <View style={[styles.glow, { top: -100, left: -50, backgroundColor: primaryColor, opacity: 0.15 }]} />
       <View style={[styles.glow, { bottom: 100, right: -100, width: 300, height: 300, backgroundColor: theme.colors.secondary, opacity: 0.1 }]} />
 
       <SafeAreaView style={styles.safeArea}>
@@ -80,19 +108,19 @@ export default function LessonDetailScreen({ route, navigation }) {
         >
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
             {/* Hero Section */}
-            <View style={[styles.heroSection, { shadowColor: lesson.color }]}>
+            <View style={[styles.heroSection, { shadowColor: primaryColor }]}>
                <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.heroCard, { borderColor: theme.colors.glassBorder }]}>
-                  <View style={[styles.typeBadge, { backgroundColor: `${lesson.color}20` }]}>
-                    <Text style={[styles.typeText, { color: lesson.color }]}>MASTERCLASS</Text>
+                  <View style={[styles.typeBadge, { backgroundColor: `${primaryColor}20` }]}>
+                    <Text style={[styles.typeText, { color: primaryColor }]}>TOPIC</Text>
                   </View>
                   <Text style={[styles.lessonTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                    {lesson.title}
+                    {topic.title}
                   </Text>
                   
                   <View style={styles.metaRow}>
                     <View style={styles.metaItem}>
                       <Clock size={16} color={theme.colors.textSecondary} />
-                      <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>42 min</Text>
+                      <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>~ min</Text>
                     </View>
                     <View style={styles.metaItem}>
                       <Award size={16} color={theme.colors.textSecondary} />
@@ -107,10 +135,10 @@ export default function LessonDetailScreen({ route, navigation }) {
                   <View style={styles.progressContainer}>
                      <View style={styles.progressHeader}>
                         <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>Your Progress</Text>
-                        <Text style={[styles.progressValue, { color: theme.colors.textPrimary }]}>{lesson.progress || 0}%</Text>
+                        <Text style={[styles.progressValue, { color: theme.colors.textPrimary }]}>{currentProgress}%</Text>
                      </View>
                      <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
-                        <View style={[styles.progressBarFill, { width: `${lesson.progress || 0}%`, backgroundColor: lesson.color }]} />
+                        <View style={[styles.progressBarFill, { width: `${currentProgress}%`, backgroundColor: primaryColor }]} />
                      </View>
                   </View>
                </BlurView>
@@ -119,7 +147,7 @@ export default function LessonDetailScreen({ route, navigation }) {
             {/* About Section */}
             <View style={styles.sectionHeader}>
                <Info size={18} color={theme.colors.secondary} />
-               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>About Lesson</Text>
+               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>About Topic</Text>
             </View>
             
             <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={[styles.descriptionCard, { borderColor: theme.colors.glassBorder }]}>
@@ -132,57 +160,89 @@ export default function LessonDetailScreen({ route, navigation }) {
             <View style={styles.sectionHeader}>
                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Curriculum</Text>
                <View style={[styles.countBadge, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{lessonContent.topics.length} steps</Text>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{lessons.length} lessons</Text>
                </View>
             </View>
 
-            <View style={styles.topicsList}>
-               {lessonContent.topics.map((topic, index) => (
-                 <TouchableOpacity key={topic.id} activeOpacity={0.7}>
-                    <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicCard, { borderColor: theme.colors.glassBorder }]}>
-                       <View style={[styles.topicNumber, { backgroundColor: topic.isCompleted ? '#10B981' : `${lesson.color}20` }]}>
-                          {topic.isCompleted ? (
-                            <CheckCircle size={14} color="#FFF" />
-                          ) : (
-                            <Text style={[styles.topicNumberText, { color: lesson.color }]}>{index + 1}</Text>
-                          )}
-                       </View>
-                       <View style={styles.topicInfo}>
-                          <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{topic.title}</Text>
-                          <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>{topic.duration}</Text>
-                       </View>
-                       {topic.isCompleted ? (
-                         <Text style={styles.completedTag}>Done</Text>
-                       ) : (
-                         <ChevronRight size={18} color={theme.colors.textSecondary} />
-                       )}
-                    </BlurView>
-                 </TouchableOpacity>
-               ))}
-            </View>
+            {loading ? (
+              <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 20 }} />
+            ) : lessons.length === 0 ? (
+               <View style={{ padding: 20, alignItems: 'center' }}>
+                 <Text style={{ color: theme.colors.textSecondary }}>No lessons added yet.</Text>
+               </View>
+            ) : (
+              <View style={styles.topicsList}>
+                 {lessons.map((lessonItem, index) => {
+                   // Ensure backward compatibility or dynamic defaults
+                   const isCompleted = isTopicCompleted(topic.id, lessonItem.id);
+                   const isLocked = index > 0 && !isTopicCompleted(topic.id, lessons[index-1].id); // Simple sequential lock
+                   
+                   return (
+                     <TouchableOpacity 
+                       key={lessonItem.id} 
+                       activeOpacity={isLocked ? 1 : 0.7}
+                       disabled={isLocked}
+                       onPress={() => navigation.navigate('LearningContent', { lesson: lessonItem, subject, topic })}
+                     >
+                        <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicCard, { borderColor: theme.colors.glassBorder, opacity: isLocked ? 0.6 : 1 }]}>
+                           <View style={[styles.topicNumber, { backgroundColor: isCompleted ? '#10B981' : (isLocked ? theme.colors.glassBorder : `${primaryColor}20`) }]}>
+                              {isCompleted ? (
+                                <CheckCircle size={14} color="#FFF" />
+                              ) : isLocked ? (
+                                <Lock size={14} color={theme.colors.textSecondary} />
+                              ) : (
+                                <Text style={[styles.topicNumberText, { color: primaryColor }]}>{index + 1}</Text>
+                              )}
+                           </View>
+                           <View style={styles.topicInfo}>
+                              <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{lessonItem.title}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                 <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>Lesson {index + 1}</Text>
+                                 {isLocked && <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontStyle: 'italic' }}>Locked</Text>}
+                              </View>
+                           </View>
+                           {isCompleted ? (
+                             <View style={{ alignItems: 'flex-end' }}>
+                                <CheckCircle size={18} color="#10B981" />
+                             </View>
+                           ) : (
+                             <ChevronRight size={18} color={isLocked ? theme.colors.textSecondary : theme.colors.textPrimary} opacity={isLocked ? 0.5 : 1} />
+                           )}
+                        </BlurView>
+                     </TouchableOpacity>
+                   );
+                 })}
+              </View>
+            )}
           </Animated.View>
 
           <View style={{ height: 120 }} />
         </ScrollView>
 
         {/* Floating Action Button */}
-        <View style={styles.footer}>
-           <TouchableOpacity 
-             activeOpacity={0.9}
-             style={[styles.startButton, { shadowColor: lesson.color }]}
-             onPress={() => navigation.navigate('LessonOverview', { lesson, subject })}
-           >
-              <LinearGradient
-                colors={[lesson.color, theme.colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.startGradient}
-              >
-                 <Play size={20} color="#FFF" fill="#FFF" />
-                 <Text style={styles.startText}>START JOURNEY</Text>
-              </LinearGradient>
-           </TouchableOpacity>
-        </View>
+        {lessons.length > 0 && (
+          <View style={styles.footer}>
+             <TouchableOpacity 
+               activeOpacity={0.9}
+               style={[styles.startButton, { shadowColor: primaryColor }]}
+               onPress={() => {
+                 // Start first uncompleted lesson
+                 const firstUnfinished = lessons.find(l => !isTopicCompleted(topic.id, l.id)) || lessons[0];
+                 navigation.navigate('LearningContent', { lesson: firstUnfinished, subject, topic });
+               }}
+             >
+                <LinearGradient
+                  colors={[primaryColor, theme.colors.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.startGradient}
+                >
+                   <Play size={20} color="#FFF" fill="#FFF" />
+                   <Text style={styles.startText}>CONTINUE LEARNING</Text>
+                </LinearGradient>
+             </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );

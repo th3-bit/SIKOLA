@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Animated, Easing, Image, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GraduationCap, Facebook, Apple, Chrome, ArrowRight } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -11,6 +12,7 @@ export default function LoginScreen({ navigation }) {
   const { theme, isDark } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Focus States
   const [isEmailFocused, setIsEmailFocused] = useState(false);
@@ -36,6 +38,32 @@ export default function LoginScreen({ navigation }) {
     ]).start();
   }, []);
 
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        navigation.replace('MainApp');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Login Failed', error.message || 'Please check your credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <LinearGradient
@@ -45,7 +73,7 @@ export default function LoginScreen({ navigation }) {
       
       <SafeAreaView style={styles.topSection}>
         <View style={styles.brandContainer}>
-          <GraduationCap size={60} color={theme.colors.secondary} style={styles.logo} />
+          <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={[styles.welcomeText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola+</Text>
           <Text style={[styles.subWelcomeText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Welcome Student</Text>
           <Text style={[styles.sloganText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Unlock your potential today</Text>
@@ -67,9 +95,9 @@ export default function LoginScreen({ navigation }) {
           style={{ flex: 1 }}
         >
           <ScrollView 
-             contentContainerStyle={styles.scrollContent} 
-             showsVerticalScrollIndicator={false}
-             keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             
             <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Login</Text>
@@ -127,9 +155,10 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={[styles.buttonContainer, { shadowColor: theme.colors.secondary }]} 
-                activeOpacity={0.8}
-                onPress={() => navigation.replace('MainApp')}
+                style={[styles.buttonContainer, loading && { opacity: 0.6 }, { shadowColor: theme.colors.secondary }]} 
+                activeOpacity={loading ? 1 : 0.8}
+                onPress={handleLogin}
+                disabled={loading}
               >
                 <LinearGradient
                   colors={isDark ? [theme.colors.secondary, '#CFCB11'] : [theme.colors.secondary, '#1D4ED8']}
@@ -137,8 +166,14 @@ export default function LoginScreen({ navigation }) {
                   end={{ x: 1, y: 1 }}
                   style={styles.loginButton}
                 >
-                  <Text style={[styles.loginButtonText, { color: theme.colors.textContrast, fontFamily: theme.typography.fontFamily }]}>Log In</Text>
-                  <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                  {loading ? (
+                    <ActivityIndicator color={theme.colors.textContrast} />
+                  ) : (
+                    <>
+                      <Text style={[styles.loginButtonText, { color: theme.colors.textContrast, fontFamily: theme.typography.fontFamily }]}>Log In</Text>
+                      <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -196,7 +231,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
+    width: 120,
+    height: 120,
     marginBottom: 10,
+    borderRadius: 24, // Rounded edges
   },
   welcomeText: {
     fontSize: 36, 

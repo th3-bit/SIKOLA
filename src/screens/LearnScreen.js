@@ -24,14 +24,40 @@ import GlassHeader from '../components/GlassHeader';
 
 const { width } = Dimensions.get('window');
 
-const continueLearning = {
-  id: 1,
-  title: 'Quantum Physics Basics',
-  subject: 'Science',
-  progress: 65,
-  color: '#EC4899',
-  timeLeft: '12 min left',
-};
+const continueLearning = [
+  {
+    id: 1,
+    title: 'Quantum Physics Basics',
+    subject: 'Science',
+    progress: 65,
+    color: '#EC4899',
+    timeLeft: '12 min left',
+  },
+  {
+    id: 2,
+    title: 'Advanced Calculus',
+    subject: 'Mathematics',
+    progress: 30,
+    color: '#FACC15',
+    timeLeft: '45 min left',
+  },
+  {
+    id: 3,
+    title: 'Microeconomics',
+    subject: 'Economics',
+    progress: 15,
+    color: '#8B5CF6',
+    timeLeft: '1 hr left',
+  },
+  {
+    id: 4,
+    title: 'Design Thinking',
+    subject: 'Arts',
+    progress: 100,
+    color: '#10B981',
+    timeLeft: 'Completed',
+  }
+];
 
 const learningPath = [
   { id: 1, title: 'Introduction to Logic', status: 'completed', duration: '15m' },
@@ -150,34 +176,53 @@ export default function LearnScreen({ navigation }) {
             <TouchableOpacity><Text style={{ color: theme.colors.secondary, fontWeight: 'bold' }}>See Favorites</Text></TouchableOpacity>
           </View>
 
-          <TouchableOpacity activeOpacity={0.9} style={[styles.continueCardWrapper, { shadowColor: continueLearning.color }]}>
-            <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.continueCard, { borderColor: theme.colors.glassBorder }]}>
-              <LinearGradient
-                colors={[`${continueLearning.color}40`, 'transparent']}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.continueCardLeft}>
-                <View style={[styles.subBadge, { backgroundColor: `${continueLearning.color}20` }]}>
-                  <Text style={[styles.subBadgeText, { color: continueLearning.color }]}>{continueLearning.subject}</Text>
-                </View>
-                <Text style={[styles.continueTitle, { color: theme.colors.textPrimary }]}>{continueLearning.title}</Text>
-                <View style={styles.timeLeftRow}>
-                   <Clock size={14} color={theme.colors.textSecondary} />
-                   <Text style={[styles.timeLeftText, { color: theme.colors.textSecondary }]}>{continueLearning.timeLeft}</Text>
-                </View>
-              </View>
-              
-              <View style={styles.continueCardRight}>
-                <View style={styles.playIconContainer}>
-                  <Play size={24} color="#FFF" fill="#FFF" />
-                </View>
-              </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.continueList}
+          >
+            {continueLearning.map((item) => (
+              <TouchableOpacity 
+                key={item.id}
+                activeOpacity={0.9} 
+                style={[styles.continueCardWrapper, { shadowColor: item.color, marginRight: 20 }]}
+                onPress={() => {
+                  if (item.progress === 100) {
+                    navigation.navigate('CourseCompletion', { course: item });
+                  } else {
+                    navigation.navigate('LessonDetail', { lesson: item, subject: item.subject });
+                  }
+                }}
+              >
+                <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.continueCard, { borderColor: theme.colors.glassBorder }]}>
+                  <LinearGradient
+                    colors={[`${item.color}40`, 'transparent']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.continueCardLeft}>
+                    <View style={[styles.subBadge, { backgroundColor: `${item.color}20` }]}>
+                      <Text style={[styles.subBadgeText, { color: item.color }]}>{item.subject}</Text>
+                    </View>
+                    <Text style={[styles.continueTitle, { color: theme.colors.textPrimary }]} numberOfLines={2}>{item.title}</Text>
+                    <View style={styles.timeLeftRow}>
+                      <Clock size={14} color={theme.colors.textSecondary} />
+                      <Text style={[styles.timeLeftText, { color: theme.colors.textSecondary }]}>{item.timeLeft}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.continueCardRight}>
+                    <View style={styles.playIconContainer}>
+                      <Play size={24} color="#FFF" fill="#FFF" />
+                    </View>
+                  </View>
 
-              <View style={styles.cardProgressLine}>
-                <View style={[styles.cardProgressFill, { width: `${continueLearning.progress}%`, backgroundColor: continueLearning.color }]} />
-              </View>
-            </BlurView>
-          </TouchableOpacity>
+                  <View style={styles.cardProgressLine}>
+                    <View style={[styles.cardProgressFill, { width: `${item.progress}%`, backgroundColor: item.color }]} />
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
           {/* Learning Path */}
           <View style={styles.sectionHeader}>
@@ -285,6 +330,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  continueList: {
+    paddingRight: 20,
+  },
   continueCardWrapper: {
     marginBottom: 30,
     borderRadius: 24,
@@ -293,6 +341,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 15,
     elevation: 8,
+    width: width * 0.8, // Make cards slightly narrower to show scrollability
   },
   continueCard: {
     flexDirection: 'row',

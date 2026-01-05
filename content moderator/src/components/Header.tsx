@@ -1,5 +1,5 @@
 import { GlassButton } from "./ui/GlassButton";
-import { Layers, ArrowLeft, Save, Sun, Moon, Search, Users } from "lucide-react";
+import { Layers, ArrowLeft, Save, Sun, Moon, Search, Users, BookOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -11,9 +11,10 @@ interface HeaderProps {
   onBack?: () => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  previewTitle?: string;
 }
 
-export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChange }: HeaderProps) => {
+export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChange, previewTitle }: HeaderProps) => {
   const { theme, setTheme } = useTheme();
   const [showSearch, setShowSearch] = useState(false);
   const navigate = useNavigate();
@@ -38,8 +39,8 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
               </GlassButton>
             )}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                <Layers className="w-5 h-5 text-primary-foreground" />
+              <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg">
+                <img src="/logo.jpg" alt="Teachers Content Generator" className="w-full h-full object-cover" />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-foreground">
@@ -80,6 +81,11 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
                 <Search className="w-5 h-5" />
               </GlassButton>
             )}
+            
+            {/* Content Explorer Link */}
+            <GlassButton variant="ghost" size="sm" onClick={() => navigate("/content")} title="Content Explorer">
+              <BookOpen className="w-5 h-5" />
+            </GlassButton>
 
             {/* User Management Link */}
             <GlassButton variant="ghost" size="sm" onClick={() => navigate("/users")}>

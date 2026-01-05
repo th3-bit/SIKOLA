@@ -1,187 +1,207 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions, 
-  Modal,
-  Animated,
-  Easing,
-  ActivityIndicator
-} from 'react-native';
+
+import { WebView } from 'react-native-webview';
+
+import React, { useState, useEffect, useRef, createElement } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, Animated, Easing, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { 
-  ArrowLeft, 
-  ChevronRight, 
-  CheckCircle, 
-  X, 
-  Lightbulb,
-  Zap,
-  Trophy,
-  Star,
-  Calculator,
-  FileText
-} from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, CheckCircle, X, Trophy, Star, Zap, FileText, Calculator, Lightbulb } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import CalculatorModal from '../components/CalculatorModal';
 import NotesModal from '../components/NotesModal';
 
 const { width } = Dimensions.get('window');
 
 export default function LearningContentScreen({ route, navigation }) {
+  const { lesson, topic, subject } = route.params;
   const { theme, isDark } = useTheme();
-  const { lesson, subject } = route.params;
+  const { updateProgress } = useProgress();
+  const primaryColor = subject?.color || theme.colors.primary;
+
+  // content parsing
+  const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
-  const [showExamples, setShowExamples] = useState(false);
   const [showXPModal, setShowXPModal] = useState(false);
+  const [xpScale] = useState(new Animated.Value(0));
+  const [retryModalVisible, setRetryModalVisible] = useState(false);
+  const [testScore, setTestScore] = useState(0);
+  const [testPercentage, setTestPercentage] = useState(0);
+  const [validationModalVisible, setValidationModalVisible] = useState(false);
+  
+  // Tools state
   const [showCalculator, setShowCalculator] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
+  const [showExamples, setShowExamples] = useState(false);
+  
+  // Video state
   const [isVideoLoading, setIsVideoLoading] = useState(true);
-
-  // Animation Refs
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const xpScale = useRef(new Animated.Value(0)).current;
   const videoRef = useRef(null);
 
-  useEffect(() => {
-    animateSlide();
-  }, [currentSlide]);
-
-  const animateSlide = () => {
-    slideAnim.setValue(0);
-    Animated.spring(slideAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 7
-    }).start();
-  };
-
-  const triggerXPModal = () => {
-    setShowXPModal(true);
-    Animated.sequence([
-      Animated.delay(300),
-      Animated.spring(xpScale, {
-        toValue: 1,
-        tension: 40,
-        friction: 5,
-        useNativeDriver: true
-      })
-    ]).start();
-  };
-
-  // Mock learning content
-  const slides = [
-    {
-      type: 'intro',
-      title: 'Welcome to ' + lesson.title,
-      content: `Let's begin your journey into ${lesson.category || 'this subject'}. This lesson will cover the fundamental concepts you need to master.`,
-    },
-    {
-      type: 'video',
-      title: 'Visual Overview',
-      videoUrl: 'https://d23dyxeqlo5psv.cloudfront.net/big_buck_bunny.mp4',
-      content: 'Watch this short video to understand the real-world application of this concept.',
-    },
-    {
-      type: 'content',
-      title: 'Core Concept #1',
-      content: `Understanding the basics is crucial. Here we'll explore the foundational principles that everything else builds upon.\n\nKey Points:\n• First fundamental principle\n• How it applies in practice\n• Common misconceptions to avoid`,
-    },
-    {
-      type: 'quiz',
-      question: 'What is the main principle we just learned?',
-      options: [
-        'The foundational concept',
-        'An advanced technique',
-        'A common mistake',
-        'A practice exercise'
-      ],
-      correctAnswer: 0,
-    },
-    {
-      type: 'summary',
-      title: 'Lesson Complete!',
-      content: `Great work! You've completed this lesson. Keep up the excellent progress!`,
-      notes: "This lesson covered the foundational elements of " + (lesson.title || "the subject") + ". To reinforce your learning, remember to review the equations weekly.",
-      pdfUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-    },
-  ];
+  const slideAnim = useRef(new Animated.Value(1)).current;
+  const scrollViewRef = useRef(null);
 
   const currentSlideData = slides[currentSlide];
   const isLastSlide = currentSlide === slides.length - 1;
   const progress = ((currentSlide + 1) / slides.length) * 100;
 
+  useEffect(() => {
+    // Reset video loading state when slide changes
+    if (currentSlideData.type === 'video') {
+      setIsVideoLoading(true);
+    }
+    
+    // Animate slide transition
+    slideAnim.setValue(0);
+    Animated.timing(slideAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.back(1.5))
+    }).start();
+  }, [currentSlide]);
+
+  const handleAnswerSelect = (index) => {
+    setSelectedAnswers({
+      ...selectedAnswers,
+      [currentSlide]: index
+    });
+  };
+
   const handleNext = () => {
-    if (currentSlide < slides.length - 1) {
-      setCurrentSlide(currentSlide + 1);
+    if (currentSlideData.type === 'quiz' && selectedAnswers[currentSlide] === undefined) {
+      setValidationModalVisible(true);
+      return;
+    }
+
+    if (isLastSlide) {
+      finishLesson();
     } else {
-      triggerXPModal();
+      setCurrentSlide(prev => prev + 1);
     }
   };
 
   const handlePrevious = () => {
     if (currentSlide > 0) {
-      setCurrentSlide(currentSlide - 1);
+      setCurrentSlide(prev => prev - 1);
     }
   };
 
-  const handleAnswerSelect = (optionIndex) => {
-    setSelectedAnswers({ ...selectedAnswers, [currentSlide]: optionIndex });
+  const finishLesson = () => {
+    // Calculate score
+    let correct = 0;
+    let totalQuiz = 0;
+    
+    slides.forEach((slide, index) => {
+      if (slide.type === 'quiz') {
+        totalQuiz++;
+        if (selectedAnswers[index] === slide.correctAnswer) {
+          correct++;
+        }
+      }
+    });
+
+    const percentage = totalQuiz > 0 ? Math.round((correct / totalQuiz) * 100) : 100;
+    setTestScore(correct);
+    setTestPercentage(percentage);
+
+    if (percentage >= 70) {
+      setShowXPModal(true);
+      updateProgress(topic.id, percentage);
+      
+      Animated.spring(xpScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 40,
+        useNativeDriver: true
+      }).start();
+    } else {
+      setRetryModalVisible(true);
+    }
   };
 
-  const renderSlideContent = () => {
+  const handleRetry = () => {
+    setRetryModalVisible(false);
+    setCurrentSlide(0);
+    setSelectedAnswers({});
+  };
+
+  const renderVideo = () => {
+    const isYouTube = currentSlideData.videoUrl?.includes('youtube.com') || currentSlideData.videoUrl?.includes('youtu.be');
+    
+    // Helper to extract YouTube ID
+    const getYoutubeId = (url) => {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const match = url?.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+    };
+
+    const videoSource = isYouTube 
+      ? { uri: `https://www.youtube.com/embed/${getYoutubeId(currentSlideData.videoUrl)}?playsinline=1` }
+      : { uri: currentSlideData.videoUrl };
+
+    const renderWebYoutube = () => {
+        return createElement('iframe', {
+          width: "100%",
+          height: "100%",
+          src: `https://www.youtube.com/embed/${getYoutubeId(currentSlideData.videoUrl)}`,
+          frameBorder: "0",
+          allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+          allowFullScreen: "true",
+          style: { border: 0, height: '100%', width: '100%' }
+        });
+    };
+
     return (
-      <Animated.View style={{ 
-        opacity: slideAnim,
-        transform: [
-          { translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) },
-          { scale: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }
-        ]
-      }}>
-        {currentSlideData.type === 'video' ? renderVideo() : 
-         currentSlideData.type === 'quiz' ? renderQuiz() : renderTextContent()}
-      </Animated.View>
+      <View style={styles.videoSlide}>
+        <Text style={[styles.slideTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+          {currentSlideData.title}
+        </Text>
+        
+        <View style={[styles.videoWrapper, { shadowColor: primaryColor }]}>
+          <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.videoContainer, { borderColor: theme.colors.glassBorder }]}>
+            {isYouTube ? (
+               Platform.OS === 'web' ? renderWebYoutube() : (
+                  <WebView
+                    style={styles.video}
+                    source={videoSource}
+                    allowsFullscreenVideo
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                  />
+               )
+            ) : (
+              <>
+                {isVideoLoading && (
+                  <View style={styles.videoLoading}>
+                    <ActivityIndicator size="large" color={primaryColor} />
+                  </View>
+                )}
+                <Video
+                  ref={videoRef}
+                  style={styles.video}
+                  source={videoSource}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping={false}
+                  onLoadStart={() => setIsVideoLoading(true)}
+                  onLoad={() => setIsVideoLoading(false)}
+                />
+              </>
+            )}
+          </BlurView>
+        </View>
+        
+        <Text style={[styles.slideContent, { color: theme.colors.textSecondary, marginTop: 20 }]}>
+          {currentSlideData.content}
+        </Text>
+      </View>
     );
   };
-
-  const renderVideo = () => (
-    <View style={styles.videoSlide}>
-      <Text style={[styles.slideTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-        {currentSlideData.title}
-      </Text>
-      
-      <View style={[styles.videoWrapper, { shadowColor: lesson.color }]}>
-        <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.videoContainer, { borderColor: theme.colors.glassBorder }]}>
-          {isVideoLoading && (
-            <View style={styles.videoLoading}>
-              <ActivityIndicator size="large" color={lesson.color} />
-            </View>
-          )}
-          <Video
-            ref={videoRef}
-            style={styles.video}
-            source={{ uri: currentSlideData.videoUrl }}
-            useNativeControls
-            resizeMode={ResizeMode.CONTAIN}
-            isLooping={false}
-            onLoadStart={() => setIsVideoLoading(true)}
-            onLoad={() => setIsVideoLoading(false)}
-          />
-        </BlurView>
-      </View>
-      
-      <Text style={[styles.slideContent, { color: theme.colors.textSecondary, marginTop: 20 }]}>
-        {currentSlideData.content}
-      </Text>
-    </View>
-  );
 
   const renderTextContent = () => (
     <View style={styles.contentSlide}>
@@ -235,6 +255,21 @@ export default function LearningContentScreen({ route, navigation }) {
     );
   };
 
+  const renderSlideContent = () => {
+    return (
+      <Animated.View style={{ 
+        opacity: slideAnim,
+        transform: [
+          { translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) },
+          { scale: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }
+        ]
+      }}>
+        {currentSlideData.type === 'video' ? renderVideo() : 
+         currentSlideData.type === 'quiz' ? renderQuiz() : renderTextContent()}
+      </Animated.View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <LinearGradient
@@ -254,7 +289,7 @@ export default function LearningContentScreen({ route, navigation }) {
 
           <View style={styles.progressContainer}>
             <View style={[styles.progressBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
-              <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: lesson.color }]} />
+              <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: primaryColor }]} />
             </View>
             <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
               {currentSlide + 1} / {slides.length}
@@ -277,10 +312,10 @@ export default function LearningContentScreen({ route, navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity 
-              style={[styles.toolButton, { backgroundColor: `${lesson.color}20`, borderColor: lesson.color }]}
+              style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}
               onPress={() => setShowExamples(true)}
             >
-              <Lightbulb color={lesson.color} size={18} />
+              <Lightbulb color={primaryColor} size={18} />
             </TouchableOpacity>
           </View>
         </View>
@@ -291,7 +326,7 @@ export default function LearningContentScreen({ route, navigation }) {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.contentCardWrapper, { shadowColor: lesson.color }]}>
+          <View style={[styles.contentCardWrapper, { shadowColor: primaryColor }]}>
             <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.contentCard, { borderColor: theme.colors.glassBorder }]}>
               {renderSlideContent()}
             </BlurView>
@@ -310,9 +345,8 @@ export default function LearningContentScreen({ route, navigation }) {
           )}
 
           <TouchableOpacity 
-            style={[styles.navButton, styles.nextButton, { backgroundColor: lesson.color, marginLeft: currentSlide > 0 ? 12 : 0 }]}
+            style={[styles.navButton, styles.nextButton, { backgroundColor: primaryColor, marginLeft: currentSlide > 0 ? 12 : 0 }]}
             onPress={handleNext}
-            disabled={currentSlideData.type === 'quiz' && selectedAnswers[currentSlide] === undefined}
             activeOpacity={0.8}
           >
             <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>
@@ -336,6 +370,13 @@ export default function LearningContentScreen({ route, navigation }) {
                  <Text style={styles.xpTitle}>Mastery Achieved!</Text>
                  <Text style={styles.xpSubtitle}>You've completed {lesson.title}</Text>
                  
+                 <Text style={{ fontSize: 36, fontWeight: '900', color: '#FFF', marginVertical: 10 }}>
+                   {testPercentage}%
+                 </Text>
+                 <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', marginBottom: 20, fontWeight: '600' }}>
+                   SCORE
+                 </Text>
+
                  <View style={styles.xpBonus}>
                     <Zap size={24} color="#FACC15" fill="#FACC15" />
                     <Text style={styles.xpAmount}>+150 XP</Text>
@@ -352,10 +393,63 @@ export default function LearningContentScreen({ route, navigation }) {
                      navigation.goBack();
                    }}
                  >
-                    <Text style={styles.collectText}>COLLECT REWARDS</Text>
+                    <Text style={styles.collectText}>CONTINUE JOURNEY</Text>
                  </TouchableOpacity>
               </LinearGradient>
            </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Retry Modal */}
+      <Modal visible={retryModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+           <View style={[styles.xpCard, { backgroundColor: theme.colors.primary }]}>
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                 <View style={{ marginBottom: 20, width: 80, height: 80, borderRadius: 40, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' }}>
+                    <X size={40} color="#FFF" />
+                 </View>
+                 <Text style={[styles.xpTitle, { color: theme.colors.textPrimary }]}>Keep Trying!</Text>
+                 <Text style={[styles.xpSubtitle, { color: theme.colors.textSecondary }]}>
+                   You scored {testScore} marks.
+                 </Text>
+                 <Text style={{ textAlign: 'center', color: '#EF4444', fontSize: 16, fontWeight: 'bold', marginBottom: 30 }}>
+                   Notification: You haven't met the passing score. Please retake this {topic?.isExam ? 'Final Exam' : 'lesson'} to improve your understanding.
+                 </Text>
+                 
+                 <TouchableOpacity 
+                   style={[styles.collectButton, { backgroundColor: '#EF4444' }]}
+                   onPress={handleRetry}
+                 >
+                    <Text style={[styles.collectText, { color: '#FFF' }]}>RETRY {topic?.isExam ? 'EXAM' : 'LESSON'}</Text>
+                 </TouchableOpacity>
+              </View>
+           </View>
+        </View>
+      </Modal>
+
+      {/* Validation Modal */}
+      <Modal visible={validationModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+           <View style={[styles.xpCard, { backgroundColor: theme.colors.primary, transform: [{scale: 0.9}] }]}>
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                 <View style={{ marginBottom: 20, width: 80, height: 80, borderRadius: 40, backgroundColor: '#FACC15', justifyContent: 'center', alignItems: 'center' }}>
+                    <Lightbulb size={40} color="#FFF" />
+                 </View>
+                 <Text style={[styles.xpTitle, { color: theme.colors.textPrimary, fontSize: 24 }]}>Selection Required</Text>
+                 <Text style={[styles.xpSubtitle, { color: theme.colors.textSecondary, marginBottom: 30 }]}>
+                   Please select an answer to proceed with the lesson.
+                 </Text>
+                 
+                 <TouchableOpacity 
+                   style={[styles.collectButton, { backgroundColor: '#FACC15' }]}
+                   onPress={() => setValidationModalVisible(false)}
+                 >
+                    <Text style={[styles.collectText, { color: '#FFF' }]}>OKAY, GOT IT</Text>
+                 </TouchableOpacity>
+              </View>
+           </View>
         </View>
       </Modal>
 

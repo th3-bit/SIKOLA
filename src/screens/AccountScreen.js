@@ -177,6 +177,36 @@ export default function AccountScreen({ navigation }) {
             <TouchableOpacity style={[styles.editProfileBtn, { backgroundColor: isDark ? 'rgba(240, 236, 29, 0.1)' : 'rgba(37, 99, 235, 0.1)', borderColor: isDark ? 'rgba(240, 236, 29, 0.2)' : 'rgba(37, 99, 235, 0.2)' }]}>
                <Text style={[styles.editProfileText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Edit Profile</Text>
             </TouchableOpacity>
+            
+            {/* Subscription Status */}
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Subscription')}
+              style={[styles.subscriptionCard, { backgroundColor: isDark ? 'rgba(250, 204, 21, 0.15)' : 'rgba(250, 204, 21, 0.2)', borderColor: '#FACC15' }]}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['rgba(250, 204, 21, 0.1)', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.subscriptionContent}>
+                <View style={styles.subscriptionLeft}>
+                  <View style={[styles.crownIcon, { backgroundColor: 'rgba(250, 204, 21, 0.3)' }]}>
+                    <Award color="#FACC15" size={22} />
+                  </View>
+                  <View>
+                    <Text style={[styles.subscriptionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                      Free Trial Active
+                    </Text>
+                    <Text style={[styles.subscriptionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                      2 days remaining • Tap to upgrade
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight color="#FACC15" size={22} />
+              </View>
+            </TouchableOpacity>
           </View>
 
            {/* Stats Row */}
@@ -196,7 +226,7 @@ export default function AccountScreen({ navigation }) {
           <View style={styles.menuSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Account Settings</Text>
             <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.menuContainer, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
-              <MenuOption icon={User} label="Personal Information" onPress={() => {}} />
+              <MenuOption icon={User} label="Personal Information" onPress={() => navigation.navigate('PersonalInfo')} />
               <MenuOption icon={Bell} label="Notifications" onPress={() => {}} />
               <MenuOption icon={ShieldCheck} label="Security & Privacy" onPress={() => {}} isLast={true} />
             </BlurView>
@@ -477,6 +507,39 @@ const styles = StyleSheet.create({
   menuLabel: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  subscriptionCard: {
+    width: '100%',
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 2,
+    overflow: 'hidden',
+  },
+  subscriptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  subscriptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  crownIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subscriptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  subscriptionSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
   versionText: {
     textAlign: 'center',

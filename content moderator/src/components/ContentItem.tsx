@@ -108,23 +108,31 @@ export const ContentItem = ({ title, content, index, onDelete, onEdit, type, que
                     </div>
                   </>
                 ) : type === "example" && exampleData ? (
-                  <div className="space-y-3">
-                    <h4 className="font-bold text-foreground text-lg">{title}</h4>
+                  <div className="space-y-4">
+                    <h4 className="font-extrabold text-foreground text-xl tracking-tight leading-tight break-words">{title}</h4>
                     
-                    <div className="p-3 rounded-xl bg-background/30 border border-border/10">
-                      <p className="text-[10px] font-bold text-muted-foreground/50 uppercase mb-1">The Problem</p>
-                      <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">{exampleData.problem}</p>
+                    <div className="relative group/problem">
+                      <div className="absolute -left-3 top-0 bottom-0 w-1 bg-primary/30 rounded-full group-hover/problem:bg-primary transition-colors" />
+                      <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1.5 ml-2">Problem Statement</p>
+                      <div className="glass-panel p-4 rounded-2xl bg-white/5 border-white/5 shadow-inner">
+                        <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">{exampleData.problem}</p>
+                      </div>
                     </div>
 
-                    <div className="p-3 rounded-xl bg-primary/5 border border-primary/10">
-                      <p className="text-[10px] font-bold text-primary/60 uppercase mb-1">The Solution</p>
-                      <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{exampleData.solution}</p>
+                    <div className="relative group/solution">
+                      <div className="absolute -left-3 top-0 bottom-0 w-1 bg-accent/30 rounded-full group-hover/solution:bg-accent transition-colors" />
+                      <p className="text-[10px] font-black text-accent/60 uppercase tracking-widest mb-1.5 ml-2">Step-by-Step Solution</p>
+                      <div className="glass-panel p-4 rounded-2xl bg-accent/5 border-accent/10">
+                        <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere">{exampleData.solution}</p>
+                      </div>
                     </div>
 
                     {exampleData.keyTakeaway && (
-                      <div className="flex items-start gap-2 pt-1 text-accent">
-                        <Lightbulb className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs italic leading-snug">{exampleData.keyTakeaway}</p>
+                      <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/10">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0 animate-pulse">
+                          <Lightbulb className="w-4 h-4 text-amber-400" />
+                        </div>
+                        <p className="text-xs font-medium text-amber-200/80 italic leading-snug break-words">{exampleData.keyTakeaway}</p>
                       </div>
                     )}
                   </div>
@@ -152,6 +160,13 @@ export const ContentItem = ({ title, content, index, onDelete, onEdit, type, que
               </div>
             </div>
             <div className="flex flex-col gap-1">
+              <button
+                onClick={onEdit}
+                className="p-2 rounded-xl text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all active:scale-90"
+                title="Edit item"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
               <button
                 onClick={onDelete}
                 className="p-2 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all active:scale-90"

@@ -21,6 +21,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
+import StreakCard from '../components/StreakCard';
 import Svg, { Circle } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');

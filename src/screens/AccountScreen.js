@@ -27,12 +27,14 @@ import {
   Layout
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import ThemeSwitch from '../components/ThemeSwitch';
 
 const { width } = Dimensions.get('window');
 
 export default function AccountScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { userStats, weeklyActivity, sessions, isLoading } = useProgress();
   
   const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
     <View style={[styles.statCardWrapper, { shadowColor: shadowColor }]}>
@@ -57,15 +59,13 @@ export default function AccountScreen({ navigation }) {
   );
 
   const StreakCard = () => {
-    const days = [
-      { label: 'Mon', active: true },
-      { label: 'Tue', active: true },
-      { label: 'Wed', active: true },
-      { label: 'Thu', active: true },
-      { label: 'Fri', active: true },
-      { label: 'Sat', active: false },
-      { label: 'Sun', active: false },
-    ];
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = dayLabels.map((label, index) => ({
+      label,
+      active: weeklyActivity[index] || false
+    }));
+    
+    const streak = userStats?.current_streak || 0;
 
     return (
       <TouchableOpacity activeOpacity={0.9} style={styles.streakCardWrapper}>
@@ -82,8 +82,8 @@ export default function AccountScreen({ navigation }) {
                 <Flame color="#FF453A" size={32} fill="#FF453A" />
               </View>
               <View style={styles.streakTextContainer}>
-                <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>5 Day Streak!</Text>
-                <Text style={[styles.streakSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Keep studying to reach 7 days!</Text>
+                <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{streak} Day Streak!</Text>
+                <Text style={[styles.streakSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{streak < 7 ? `Keep studying to reach 7 days!` : 'You are on fire! Keep it up!'}</Text>
               </View>
             </View>
             <View style={styles.streakBadge}>
@@ -211,9 +211,9 @@ export default function AccountScreen({ navigation }) {
 
            {/* Stats Row */}
            <View style={styles.statsRow}>
-             <StatCard icon={BookOpen} label="Lessons" value="12" color="#22C55E" />
-             <StatCard icon={Award} label="Points" value="450" color="#FACC15" />
-             <StatCard icon={Clock} label="Hours" value="24" color="#3B82F6" />
+             <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
+             <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
+             <StatCard icon={Clock} label="Hours" value={Math.floor((sessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
            </View>
 
            {/* Streak Section */}

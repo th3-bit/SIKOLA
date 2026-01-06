@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   ScrollView, 
   TouchableOpacity, 
-  Dimensions 
+  Dimensions,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,73 +16,111 @@ import {
   Clock, 
   CheckCircle, 
   TrendingUp, 
-  Calendar,
-  BarChart,
   BookOpen
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
+import { supabase } from '../lib/supabase';
+import Svg, { Circle } from 'react-native-svg';
 
 const { width } = Dimensions.get('window');
 
-// Mock Data
-const progressData = {
-  daily: {
-    totalTime: '45 min',
-    lessonsCompleted: 2,
-    streak: 5,
-    subtitle: 'Great start today!',
-    courses: [
-      { id: 1, name: 'Mathematics', progress: 15, time: '20 min', color: '#FACC15' },
-      { id: 2, name: 'Physics', progress: 10, time: '15 min', color: '#8B5CF6' },
-      { id: 3, name: 'Economics', progress: 5, time: '10 min', color: '#EF4444' },
-    ],
-    activities: [
-      { id: 1, title: 'Finished "Algebra Basics"', time: '10:30 AM', type: 'lesson' },
-      { id: 2, title: 'Scored 80% in Physics Quiz', time: '09:15 AM', type: 'quiz' },
-    ]
-  },
-  weekly: {
-    totalTime: '5.2 hrs',
-    lessonsCompleted: 14,
-    streak: 5,
-    subtitle: 'You are crushing it this week!',
-    courses: [
-      { id: 1, name: 'Mathematics', progress: 45, time: '2.5 hrs', color: '#FACC15' },
-      { id: 2, name: 'Physics', progress: 30, time: '1.5 hrs', color: '#8B5CF6' },
-      { id: 3, name: 'Economics', progress: 20, time: '1.2 hrs', color: '#EF4444' },
-      { id: 4, name: 'Chemistry', progress: 10, time: '45 min', color: '#EC4899' },
-    ],
-    activities: [
-      { id: 1, title: 'Finished "Calculus I"', time: 'Yesterday', type: 'lesson' },
-      { id: 2, title: 'Started "Market Structures"', time: 'Tue', type: 'lesson' },
-      { id: 3, title: 'Weekly Challenge Badge', time: 'Mon', type: 'achievement' },
-    ]
-  },
-  monthly: {
-    totalTime: '24 hrs',
-    lessonsCompleted: 48,
-    streak: 12,
-    subtitle: 'Consistency is key!',
-    courses: [
-      { id: 1, name: 'Mathematics', progress: 75, time: '10 hrs', color: '#FACC15' },
-      { id: 2, name: 'Physics', progress: 60, time: '6 hrs', color: '#8B5CF6' },
-      { id: 3, name: 'Economics', progress: 40, time: '5 hrs', color: '#EF4444' },
-      { id: 4, name: 'Chemistry', progress: 30, time: '3 hrs', color: '#EC4899' },
-      { id: 5, name: 'Geography', progress: 15, time: '1 hr', color: '#10B981' },
-    ],
-    activities: [
-      { id: 1, title: 'Course Completed: "Basic Math"', time: 'Dec 15', type: 'achievement' },
-      { id: 2, title: 'Top 10% in Quiz Leaderboard', time: 'Dec 10', type: 'achievement' },
-      { id: 3, title: 'Joined "Science Club"', time: 'Dec 05', type: 'group' },
-    ]
-  }
-};
-
 export default function LearningProgressScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { userStats, sessions: allSessions, isLoading: contextLoading } = useProgress();
   const [timeRange, setTimeRange] = useState('weekly'); // daily, weekly, monthly
+  const [loading, setLoading] = useState(true);
+  const [rangeSessions, setRangeSessions] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
 
-  const currentData = progressData[timeRange];
+  useEffect(() => {
+    fetchAnalytics();
+  }, [timeRange, allSessions]);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 1. Filter sessions for the time range
+      let dateFilter = new Date();
+      if (timeRange === 'daily') dateFilter.setHours(0, 0, 0, 0);
+      else if (timeRange === 'weekly') dateFilter.setDate(dateFilter.getDate() - 7);
+      else if (timeRange === 'monthly') dateFilter.setMonth(dateFilter.getMonth() - 1);
+
+      const filteredSessions = allSessions.filter(s => new Date(s.started_at) >= dateFilter);
+      setRangeSessions(filteredSessions);
+
+      // 2. Fetch Subjects and Progress for Donut Chart
+      const { data: subjects } = await supabase.from('subjects').select('*');
+      if (subjects) {
+        const total = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+        
+        if (total === 0) {
+          setCategories([]);
+        } else {
+          const breakdown = subjects.map(s => {
+            const subjectTime = filteredSessions
+              .filter(ses => ses.subject_id === s.id)
+              .reduce((acc, curr) => acc + curr.duration_minutes, 0);
+            
+            return {
+              id: s.id,
+              name: s.name,
+              color: s.color || '#8B5CF6',
+              minutes: subjectTime,
+              percentage: Math.round((subjectTime / total) * 100)
+            };
+          })
+          .filter(c => c.minutes > 0)
+          .sort((a, b) => b.minutes - a.minutes);
+
+          setCategories(breakdown);
+        }
+      }
+
+      // 3. Recent Activity (Global, not just range)
+      const { data: activity } = await supabase
+        .from('user_progress')
+        .select('topic_id, completed_at, score')
+        .eq('user_id', user.id)
+        .order('completed_at', { ascending: false })
+        .limit(5);
+
+      if (activity) {
+        const topicIds = activity.map(a => a.topic_id);
+        const { data: topics } = await supabase
+          .from('topics')
+          .select('id, title')
+          .in('id', topicIds);
+
+        const mappedActivity = activity.map(a => {
+          const topic = topics?.find(t => t.id === a.topic_id);
+          return {
+            id: a.topic_id,
+            title: `Completed "${topic?.title || 'Lesson'}"`,
+            time: new Date(a.completed_at).toLocaleDateString(),
+            score: a.score
+          };
+        });
+        setRecentActivity(mappedActivity);
+      }
+
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalMinutes = rangeSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+  
+  // Donut Chart Params
+  const radius = 70;
+  const strokeWidth = 20;
+  const circumference = 2 * Math.PI * radius;
 
   const StatCard = ({ icon: Icon, label, value, color }) => (
     <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.statCard, { borderColor: theme.colors.glassBorder }]}>
@@ -125,7 +164,7 @@ export default function LearningProgressScreen({ navigation }) {
                  onPress={() => setTimeRange(bg)}
                  style={[
                    styles.tab, 
-                   timeRange === bg && { backgroundColor: theme.colors.secondary, shadowColor: theme.colors.secondary }
+                   timeRange === bg && { backgroundColor: theme.colors.secondary }
                  ]}
                >
                  <Text style={[
@@ -138,55 +177,90 @@ export default function LearningProgressScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Subtitle */}
-          <Text style={[styles.motivationalText, { color: theme.colors.textSecondary }]}>
-            {currentData.subtitle}
-          </Text>
-
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <StatCard icon={Clock} label="Time Spent" value={currentData.totalTime} color="#3B82F6" />
-            <StatCard icon={CheckCircle} label="Completed" value={`${currentData.lessonsCompleted} Lessons`} color="#10B981" />
-            <StatCard icon={TrendingUp} label="Streak" value={`${currentData.streak} Days`} color="#FACC15" />
-          </View>
-
-          {/* Per Course Progress */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Course Progress</Text>
-            {currentData.courses.map((course) => (
-               <View key={course.id} style={styles.courseRow}>
-                 <View style={styles.courseHeader}>
-                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                     <View style={[styles.courseDot, { backgroundColor: course.color }]} />
-                     <Text style={[styles.courseName, { color: theme.colors.textPrimary }]}>{course.name}</Text>
-                   </View>
-                   <Text style={[styles.courseTime, { color: theme.colors.textSecondary }]}>{course.time}</Text>
-                 </View>
-                 
-                 <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-                   <View style={[styles.progressBarFill, { width: `${course.progress}%`, backgroundColor: course.color }]} />
-                 </View>
-               </View>
-            ))}
-          </View>
-
-          {/* Activity Timeline */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Recent Activity</Text>
-            <View style={[styles.timelineContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)', borderColor: theme.colors.glassBorder }]}>
-              {currentData.activities.map((activity, index) => (
-                <View key={activity.id} style={[styles.activityRow, index !== currentData.activities.length - 1 && styles.activityBorder]}>
-                  <View style={[styles.activityIcon, { backgroundColor: theme.colors.glass }]}>
-                    <BookOpen size={16} color={theme.colors.secondary} />
+          {loading || contextLoading ? (
+            <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 50 }} />
+          ) : (
+            <>
+              {/* Donut Chart Card */}
+              <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.donutCard, { borderColor: theme.colors.glassBorder }]}>
+                <View style={styles.donutRow}>
+                  <View style={styles.chartSection}>
+                    <Svg width={160} height={160}>
+                      {totalMinutes === 0 ? (
+                        <Circle cx="80" cy="80" r={radius} stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth={strokeWidth} fill="none" />
+                      ) : (
+                        categories.map((cat, i) => {
+                          const prevPerc = categories.slice(0, i).reduce((sum, c) => sum + c.percentage, 0);
+                          return (
+                            <Circle
+                              key={cat.id}
+                              cx="80"
+                              cy="80"
+                              r={radius}
+                              stroke={cat.color}
+                              strokeWidth={strokeWidth}
+                              fill="none"
+                              strokeDasharray={`${(cat.percentage / 100) * circumference} ${circumference}`}
+                              strokeDashoffset={-((prevPerc / 100) * circumference)}
+                              strokeLinecap="round"
+                            />
+                          );
+                        })
+                      )}
+                    </Svg>
+                    <View style={styles.centerContent}>
+                      <Text style={[styles.centerLabel, { color: theme.colors.textSecondary }]}>Total</Text>
+                      <Text style={[styles.centerValue, { color: theme.colors.textPrimary }]}>{totalMinutes}<Text style={{ fontSize: 16 }}>min</Text></Text>
+                    </View>
                   </View>
-                  <View style={styles.activityInfo}>
-                    <Text style={[styles.activityTitle, { color: theme.colors.textPrimary }]}>{activity.title}</Text>
-                    <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>{activity.time}</Text>
+
+                  <View style={styles.legendGrid}>
+                    {categories.slice(0, 4).map(cat => (
+                      <View key={cat.id} style={styles.legendItem}>
+                        <View style={[styles.legendBar, { backgroundColor: cat.color }]} />
+                        <View>
+                          <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary }]}>{cat.name}</Text>
+                          <Text style={[styles.legendValue, { color: theme.colors.textPrimary }]}>{cat.percentage}%</Text>
+                        </View>
+                      </View>
+                    ))}
+                    {categories.length === 0 && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>No data for this period</Text>}
                   </View>
                 </View>
-              ))}
-            </View>
-          </View>
+              </BlurView>
+
+              {/* Stats Grid */}
+              <StreakCard />
+              
+              <View style={styles.statsGrid}>
+                <StatCard icon={CheckCircle} label="XP" value={userStats?.total_xp || 0} color="#10B981" />
+              </View>
+
+              {/* Activity Timeline */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Recent Activity</Text>
+                <View style={[styles.timelineContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)', borderColor: theme.colors.glassBorder }]}>
+                  {recentActivity.map((activity, index) => (
+                    <View key={index} style={[styles.activityRow, index !== recentActivity.length - 1 && styles.activityBorder]}>
+                      <View style={[styles.activityIcon, { backgroundColor: theme.colors.glass }]}>
+                        <BookOpen size={16} color={theme.colors.secondary} />
+                      </View>
+                      <View style={styles.activityInfo}>
+                        <Text style={[styles.activityTitle, { color: theme.colors.textPrimary }]}>{activity.title}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>{activity.time}</Text>
+                          <Text style={[styles.activityTime, { color: theme.colors.secondary, fontWeight: 'bold' }]}>{activity.score}%</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                  {recentActivity.length === 0 && (
+                    <Text style={{ color: theme.colors.textSecondary, textAlign: 'center' }}>No recent activity found</Text>
+                  )}
+                </View>
+              </View>
+            </>
+          )}
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -196,15 +270,9 @@ export default function LearningProgressScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  safeArea: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  background: { ...StyleSheet.absoluteFillObject },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,14 +287,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
+  headerTitle: { fontSize: 20, fontWeight: '700' },
+  content: { paddingHorizontal: 20, paddingTop: 10 },
   tabsContainer: {
     flexDirection: 'row',
     padding: 4,
@@ -239,29 +301,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
   },
-  tabText: {
-    fontWeight: '600',
-    fontSize: 14,
+  tabText: { fontWeight: '600', fontSize: 14 },
+  donutCard: {
+    borderRadius: 28,
+    padding: 24,
+    borderWidth: 1,
+    marginBottom: 24,
+    overflow: 'hidden',
   },
-  motivationalText: {
-    fontSize: 15,
-    marginBottom: 20,
-    fontWeight: '500',
-  },
-  statsGrid: {
+  donutRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 30,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 20,
   },
+  chartSection: {
+    width: 160,
+    height: 160,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  centerContent: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  centerLabel: { fontSize: 12, fontWeight: '600' },
+  centerValue: { fontSize: 28, fontWeight: '800' },
+  legendGrid: {
+    flex: 1,
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  legendBar: {
+    width: 3,
+    height: 24,
+    borderRadius: 2,
+  },
+  legendName: { fontSize: 12, fontWeight: '500' },
+  legendValue: { fontSize: 14, fontWeight: '700' },
+  statsGrid: { flexDirection: 'row', gap: 12, marginBottom: 30 },
   statCard: {
     flex: 1,
-    minWidth: '45%',
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
-    flexDirection: 'row', // or column based on preference
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
@@ -272,62 +362,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  statLabel: {
-    fontSize: 12,
-  },
-  section: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  courseRow: {
-    marginBottom: 16,
-  },
-  courseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  courseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  courseName: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  courseTime: {
-    fontSize: 13,
-  },
-  progressBarBg: {
-    height: 8,
-    borderRadius: 4,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  timelineContainer: {
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-  },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 15,
-  },
+  statValue: { fontSize: 18, fontWeight: '800' },
+  statLabel: { fontSize: 12 },
+  section: { marginBottom: 30 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
+  timelineContainer: { borderRadius: 20, padding: 20, borderWidth: 1 },
+  activityRow: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   activityBorder: {
     paddingBottom: 15,
     marginBottom: 15,
@@ -341,15 +381,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  activityInfo: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  activityTime: {
-    fontSize: 12,
-  },
+  activityInfo: { flex: 1 },
+  activityTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  activityTime: { fontSize: 12 },
 });

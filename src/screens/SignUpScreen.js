@@ -82,36 +82,46 @@ export default function SignUpScreen({ navigation }) {
 
       if (authData.user) {
         // 2. Create the profile in the public.profiles table
+        // This ensures the Full Name and Phone Number are saved into personal information
         const { error: profileError } = await supabase
           .from('profiles')
-          .insert([
+          .upsert([
             {
               id: authData.user.id,
               full_name: name,
               email: email,
               phone: phone,
               status: 'active',
-              subscription_type: 'limited'
+              subscription_type: 'limited',
+              updated_at: new Date().toISOString(),
             }
           ]);
 
         if (profileError) {
           console.warn('Profile creation error (might be RLS):', profileError);
-          // We don't throw here yet because the user is still created in Auth
         }
 
         if (authData.session) {
-          Alert.alert(
-            'Account Created',
-            'Welcome to Sikola+! Your account has been created successfully.',
-            [{ text: 'Great!', onPress: () => navigation.replace('MainApp') }]
-          );
+          const successMsg = 'Welcome to Sikola+! Your account has been created and your profile information has been saved.';
+          if (Platform.OS === 'web') {
+            alert(successMsg);
+            navigation.replace('MainApp');
+          } else {
+            Alert.alert('Account Created', successMsg, [{ text: 'Great!', onPress: () => navigation.replace('MainApp') }]);
+          }
         } else {
-          Alert.alert(
-            'Confirm Your Email',
-            'Please check your inbox and click the verification link were sent to your email to activate your account.',
-            [{ text: 'Got it', onPress: () => navigation.navigate('Login') }]
-          );
+          // Standard flow: email confirmation required
+          const confirmMsg = 'We\'ve sent a verification code to ' + email + '. Please enter it to activate your account.';
+          if (Platform.OS === 'web') {
+            alert(confirmMsg);
+            navigation.navigate('VerifyEmail', { email: email });
+          } else {
+            Alert.alert(
+              'Confirm Your Email',
+              confirmMsg,
+              [{ text: 'Enter Code', onPress: () => navigation.navigate('VerifyEmail', { email: email }) }]
+            );
+          }
         }
       }
     } catch (error) {
@@ -333,6 +343,13 @@ export default function SignUpScreen({ navigation }) {
                   </Text>
               </TouchableOpacity>
 
+              <View style={styles.verificationNotice}>
+                <Mail color={theme.colors.secondary} size={14} />
+                <Text style={[styles.verificationNoticeText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                  Verification email will be sent after registration
+                </Text>
+              </View>
+
               <TouchableOpacity 
                 style={[styles.buttonContainer, (!agreeTerms || loading) && { opacity: 0.6 }, { shadowColor: theme.colors.secondary }]} 
                 activeOpacity={agreeTerms && !loading ? 0.8 : 1}
@@ -497,5 +514,16 @@ const styles = StyleSheet.create({
   loginLink: {
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  verificationNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    gap: 6,
+  },
+  verificationNoticeText: {
+    fontSize: 12,
+    opacity: 0.8,
   },
 });

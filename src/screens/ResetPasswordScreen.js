@@ -4,14 +4,75 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Lock, ChevronLeft, ArrowRight, CheckCircle, Eye, EyeOff } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../lib/supabase';
+import { Alert, ActivityIndicator } from 'react-native';
 
 export default function ResetPasswordScreen({ navigation }) {
   const { theme, isDark } = useTheme();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!password || !confirmPassword) {
+      if (Platform.OS === 'web') alert('Please fill in all fields');
+      else Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      if (Platform.OS === 'web') alert('Passwords do not match');
+      else Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      const minMsg = 'Password must be at least 6 characters long';
+      if (Platform.OS === 'web') alert(minMsg);
+      else Alert.alert('Error', minMsg);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (error) throw error;
+
+      const successMsg = 'Your password has been reset successfully!';
+      if (Platform.OS === 'web') {
+        alert(successMsg);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      } else {
+        Alert.alert(
+          'Success',
+          successMsg,
+          [{ 
+            text: 'Login', 
+            onPress: () => navigation.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            })
+          }]
+        );
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      const errMsg = error.message || 'Failed to reset password';
+      if (Platform.OS === 'web') alert(errMsg);
+      else Alert.alert('Error', errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -93,15 +154,10 @@ export default function ResetPasswordScreen({ navigation }) {
               </View>
 
               <TouchableOpacity 
-                style={[styles.buttonContainer, { shadowColor: theme.colors.secondary }]} 
+                style={[styles.buttonContainer, loading && { opacity: 0.7 }, { shadowColor: theme.colors.secondary }]} 
                 activeOpacity={0.8}
-                onPress={() => {
-                   alert("Password reset successfully!");
-                   navigation.reset({
-                      index: 0,
-                      routes: [{ name: 'Login' }],
-                   });
-                 }}
+                onPress={handleResetPassword}
+                disabled={loading}
               >
                  <LinearGradient
                   colors={isDark ? [theme.colors.secondary, '#CFCB11'] : [theme.colors.secondary, '#1D4ED8']}
@@ -109,8 +165,14 @@ export default function ResetPasswordScreen({ navigation }) {
                   end={{ x: 1, y: 1 }}
                   style={styles.submitButton}
                 >
-                  <Text style={[styles.submitButtonText, { color: theme.colors.textContrast }]}>Reset Password</Text>
-                  <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                  {loading ? (
+                    <ActivityIndicator color={theme.colors.textContrast} />
+                  ) : (
+                    <>
+                      <Text style={[styles.submitButtonText, { color: theme.colors.textContrast }]}>Reset Password</Text>
+                      <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 

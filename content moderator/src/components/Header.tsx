@@ -77,7 +77,7 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
                 </GlassButton>
               </div>
             ) : (
-              <GlassButton variant="ghost" size="sm" onClick={() => setShowSearch(true)}>
+              <GlassButton variant="ghost" size="sm" onClick={() => setShowSearch(true)} title="Search content">
                 <Search className="w-5 h-5" />
               </GlassButton>
             )}
@@ -88,11 +88,11 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
             </GlassButton>
 
             {/* User Management Link */}
-            <GlassButton variant="ghost" size="sm" onClick={() => navigate("/users")}>
+            <GlassButton variant="ghost" size="sm" onClick={() => navigate("/users")} title="User Management">
               <Users className="w-5 h-5" />
             </GlassButton>
             
-            <GlassButton variant="ghost" size="sm" onClick={toggleTheme}>
+            <GlassButton variant="ghost" size="sm" onClick={toggleTheme} title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}>
               {theme === "dark" ? (
                 <Sun className="w-5 h-5" />
               ) : (

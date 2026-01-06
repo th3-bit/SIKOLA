@@ -6,6 +6,7 @@ import { Calculator, Beaker, TrendingUp, Palette, Music, Code, Globe, Dumbbell, 
 import { BlurView } from 'expo-blur';
 import GlassHeader from '../components/GlassHeader';
 import DailyProgressCard from '../components/DailyProgressCard';
+import StreakCard from '../components/StreakCard';
 import LessonCard from '../components/LessonCard';
 import CategoryCard from '../components/CategoryCard';
 import { useTheme } from '../context/ThemeContext';

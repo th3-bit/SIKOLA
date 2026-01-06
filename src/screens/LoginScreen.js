@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     height: '40%', 
   },
   topSection: {
-    height: '35%', 
+    height: '32%', 
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   bottomSection: {
     flex: 1,
     paddingHorizontal: 30,
-    paddingTop: 30, 
+    paddingTop: 20, 
   },
   scrollContent: {
     paddingBottom: 20,
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 24, 
     fontWeight: 'bold',
-    marginBottom: 20, 
+    marginBottom: 15, 
   },
   form: {
     width: '100%',

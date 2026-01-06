@@ -1,15 +1,52 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, ChevronLeft, ArrowRight, KeyRound } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
 export default function ForgotPasswordScreen({ navigation }) {
   const { theme, isDark } = useTheme();
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+      if (error) throw error;
+
+      setOtpSent(true);
+      
+      const message = 'A 6-digit verification code has been sent to your email (' + email + ').';
+      
+      if (Platform.OS === 'web') {
+        alert(message);
+        navigation.navigate('VerifyEmail', { email: email, type: 'recovery' });
+      } else {
+        Alert.alert(
+          'OTP Sent',
+          message,
+          [{ text: 'Enter Code', onPress: () => navigation.navigate('VerifyEmail', { email: email, type: 'recovery' }) }]
+        );
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      Alert.alert('Error', error.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -62,11 +99,10 @@ export default function ForgotPasswordScreen({ navigation }) {
               </View>
 
               <TouchableOpacity 
-                style={[styles.buttonContainer, { shadowColor: theme.colors.secondary }]} 
+                style={[styles.buttonContainer, loading && { opacity: 0.7 }, { shadowColor: theme.colors.secondary }]} 
                 activeOpacity={0.8}
-                onPress={() => {
-                    navigation.navigate('VerifyEmail');
-                }}
+                onPress={handleResetPassword}
+                disabled={loading}
               >
                  <LinearGradient
                   colors={isDark ? [theme.colors.secondary, '#CFCB11'] : [theme.colors.secondary, '#1D4ED8']}
@@ -74,8 +110,16 @@ export default function ForgotPasswordScreen({ navigation }) {
                   end={{ x: 1, y: 1 }}
                   style={styles.submitButton}
                 >
-                  <Text style={[styles.submitButtonText, { color: theme.colors.textContrast }]}>Send Reset Link</Text>
-                  <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                  {loading ? (
+                    <ActivityIndicator color={theme.colors.textContrast} />
+                  ) : (
+                    <>
+                      <Text style={[styles.submitButtonText, { color: theme.colors.textContrast }]}>
+                        {otpSent ? 'Resend OTP' : 'Send OTP'}
+                      </Text>
+                      <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 

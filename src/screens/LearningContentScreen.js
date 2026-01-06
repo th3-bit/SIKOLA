@@ -18,7 +18,7 @@ const { width } = Dimensions.get('window');
 export default function LearningContentScreen({ route, navigation }) {
   const { lesson, topic, subject } = route.params;
   const { theme, isDark } = useTheme();
-  const { updateProgress } = useProgress();
+  const { completeTopic } = useProgress();
   const primaryColor = subject?.color || theme.colors.primary;
 
   // content parsing
@@ -37,6 +37,7 @@ export default function LearningContentScreen({ route, navigation }) {
   const [showCalculator, setShowCalculator] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
+  const [startTime] = useState(Date.now());
   
   // Video state
   const [isVideoLoading, setIsVideoLoading] = useState(true);
@@ -111,7 +112,11 @@ export default function LearningContentScreen({ route, navigation }) {
 
     if (percentage >= 70) {
       setShowXPModal(true);
-      updateProgress(topic.id, percentage);
+      completeTopic(subject.id, topic.id, percentage);
+      
+      // Log learning session
+      const durationMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
+      logSession(subject.id, durationMinutes);
       
       Animated.spring(xpScale, {
         toValue: 1,
@@ -121,6 +126,22 @@ export default function LearningContentScreen({ route, navigation }) {
       }).start();
     } else {
       setRetryModalVisible(true);
+    }
+  };
+
+  const logSession = async (subjectId, duration) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase.from('learning_sessions').insert([{
+        user_id: user.id,
+        subject_id: subjectId,
+        duration_minutes: duration,
+        started_at: new Date(startTime).toISOString()
+      }]);
+    } catch (error) {
+      console.error('Error logging session:', error);
     }
   };
 

@@ -96,9 +96,6 @@ export default function OnboardingScreen({ navigation }) {
         <View style={styles.bottomContent} pointerEvents="box-none">
           {/* Text Content - Animated per slide? For now just static per slide from state */}
           <View style={styles.textContainer}>
-             <Text style={[styles.title, { fontFamily: theme.typography.fontFamily }]}>
-               {onboardingData[activeSlide].title}
-             </Text>
              <Text style={[styles.description, { fontFamily: theme.typography.fontFamily }]}>
                {onboardingData[activeSlide].description}
              </Text>

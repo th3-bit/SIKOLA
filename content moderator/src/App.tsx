@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import UserManagement from "./pages/UserManagement";
 import ContentManagement from "./pages/ContentManagement";
 import NotFound from "./pages/NotFound";
+import PracticeModes from "./pages/PracticeModes";
+import AiSettings from "./pages/AiSettings";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +24,8 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/users" element={<UserManagement />} />
             <Route path="/content" element={<ContentManagement />} />
+            <Route path="/practice-modes" element={<PracticeModes />} />
+            <Route path="/settings/ai" element={<AiSettings />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

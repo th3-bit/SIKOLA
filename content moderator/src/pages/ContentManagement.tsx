@@ -13,7 +13,8 @@ import {
   Loader2, 
   ChevronRight,
   Search,
-  Plus
+  Plus,
+  Wand2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -127,6 +128,19 @@ export const ContentManagement = () => {
                     <p className="text-xs text-muted-foreground">Browse and manage your educational hierarchy</p>
                   </div>
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <GlassButton variant="ghost" size="sm" onClick={() => navigate("/settings/ai")} title="AI Connection">
+                  <Wand2 className="w-5 h-5" />
+                </GlassButton>
+                <GlassButton onClick={() => navigate("/practice-modes")}>
+                  <div className="flex items-center gap-2">
+                     <div className="w-5 h-5 rounded-full bg-yellow-400/20 flex items-center justify-center">
+                       <span className="text-yellow-400 text-xs font-bold">★</span>
+                     </div>
+                     Practice Modes
+                  </div>
+                </GlassButton>
               </div>
             </div>
           </div>

@@ -3,9 +3,10 @@ import { GlassCard } from "./ui/GlassCard";
 import { GlassInput } from "./ui/GlassInput";
 import { GlassTextarea } from "./ui/GlassTextarea";
 import { GlassButton } from "./ui/GlassButton";
-import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2 } from "lucide-react";
+import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { generateLessonContent, getOpenAIConfig } from "@/lib/openai";
 
 interface QuestionData {
   question: string;
@@ -40,6 +41,7 @@ interface ContentBuilderProps {
 
 export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, onComplete }: ContentBuilderProps) => {
   const [loading, setLoading] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
   
   // Wizard flow state
   // 1. info: Title, Intro ("What you will learn"), Core Content
@@ -104,6 +106,51 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
   const [qText, setQText] = useState("");
   const [qAnswers, setQAnswers] = useState(["", "", "", ""]);
   const [qCorrectIndex, setQCorrectIndex] = useState<number | null>(null);
+
+  const handleAiGenerate = async () => {
+    const config = getOpenAIConfig();
+    if (!config || !config.apiKey) {
+      toast.error("AI not configured. Please set your API key in AI Settings (Wand icon in header).");
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const data = await generateLessonContent(topic.title || "Subject Lesson", config);
+      
+      if (data.title) setTitle(data.title);
+      if (data.intro) setIntro(data.intro);
+      if (data.coreContent) setCoreContent(data.coreContent);
+      
+      if (data.examples && Array.isArray(data.examples)) {
+        const mappedExamples = data.examples.map((ex: any, idx: number) => ({
+          id: `ai-ex-${Date.now()}-${idx}`,
+          type: "example",
+          title: ex.title,
+          content: ex.problem,
+          exampleData: ex
+        }));
+        setExamples(mappedExamples);
+      }
+
+      if (data.questions && Array.isArray(data.questions)) {
+        const mappedQuestions = data.questions.map((q: any, idx: number) => ({
+          id: `ai-q-${Date.now()}-${idx}`,
+          type: "quiz",
+          title: "Quick Quiz",
+          content: "Test your knowledge",
+          questionData: q
+        }));
+        setQuestions(mappedQuestions);
+      }
+
+      toast.success("AI Content Generated Successfully!");
+    } catch (error: any) {
+      toast.error(`AI Error: ${error.message}`);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
 
   // ... (keep handleNextStep, handleAddExample, handleAddQuestion same) ...
   const handleNextStep = () => {
@@ -174,40 +221,49 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       // Construct the slide deck array for the mobile app
       const slides = [];
 
-      // 1. Intro Slide
+      // 1. Overview Section (3 Slides)
+      // Slide 1: Big Title
       slides.push({
         type: "intro",
         title: title,
+        content: "Tap next to start this lesson!"
+      });
+
+      // Slide 2: What you will learn
+      slides.push({
+        type: "content",
+        title: "Lesson Goal",
         content: intro
       });
 
-      // 2. Core Content Slide
+      // Slide 3: Core Concept
       slides.push({
         type: "content",
-        title: "Core Concept",
+        title: "Explanation",
         content: coreContent
       });
 
-      // 3. Video Slide (if exists)
+      // 2. Video Slide (if exists)
       if (videoLink.trim()) {
         slides.push({
           type: "video",
-          title: "Video Guide",
+          title: "Video Tutorial",
           videoUrl: videoLink,
-          content: "Watch this video to understand better."
+          content: "Watch this walkthrough for a deeper understanding."
         });
       }
 
-      // 4. Examples
+      // 3. Examples Section
       examples.forEach(ex => {
         slides.push({
           type: "content", 
+          isExample: true,
           title: ex.title,
-          content: `${ex.exampleData?.problem}\n\nSolution:\n${ex.exampleData?.solution}\n\nKey Takeaway: ${ex.exampleData?.keyTakeaway}`
+          content: `${ex.exampleData?.problem}\n\nSolution:\n${ex.exampleData?.solution}\n\nKey Takeaway: ${ex.exampleData?.keyTakeaway}\n\n💡 Access more examples via the bulb icon.`
         });
       });
 
-      // 5. Questions
+      // 4. Questions (Quiz at the end)
       questions.forEach(q => {
         slides.push({
           type: "quiz",
@@ -278,6 +334,22 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
             <span className="font-medium text-foreground">{topic.title}</span>
           </p>
         </div>
+        <GlassButton 
+          variant="accent" 
+          onClick={handleAiGenerate} 
+          disabled={aiGenerating}
+          className="group relative overflow-hidden"
+        >
+          {aiGenerating ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <Wand2 className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+          )}
+          {aiGenerating ? 'Generating...' : 'Generate with AI Magic'}
+          {aiGenerating && (
+            <div className="absolute inset-0 bg-primary/20 animate-pulse" />
+          )}
+        </GlassButton>
       </div>
 
       {/* Progress Steps */}
@@ -325,7 +397,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
                  <GlassTextarea label="Problem" placeholder="The problem statement..." value={exProblem} onChange={e => setExProblem(e.target.value)} />
                  <GlassTextarea label="Solution" placeholder="Step-by-step solution..." value={exSolution} onChange={e => setExSolution(e.target.value)} />
                  <GlassInput label="Key Takeaway" placeholder="What should the student remember?" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
-                 <GlassButton variant="secondary" onClick={handleAddExample} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Example</GlassButton>
+                 <GlassButton variant="accent" onClick={handleAddExample} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Example</GlassButton>
               </div>
               <div className="flex gap-3">
                  <GlassButton variant="ghost" onClick={() => setWizardStep("video")} className="flex-1">Back</GlassButton>
@@ -339,17 +411,40 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
               <h3 className="text-lg font-semibold flex items-center gap-2"><HelpCircle className="w-5 h-5 text-primary"/> Step 4: Quiz Questions ({questions.length} added)</h3>
               <div className="p-4 bg-muted/10 rounded-xl space-y-3 mb-4">
                  <GlassTextarea label="Question" placeholder="Enter the question..." value={qText} onChange={e => setQText(e.target.value)} />
-                 <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-3">
                     {qAnswers.map((ans, idx) => (
-                      <div key={idx} className="flex gap-2">
-                         <button onClick={() => setQCorrectIndex(idx)} className={`w-8 h-8 rounded-lg border ${qCorrectIndex === idx ? 'bg-green-500 border-green-500 text-white' : 'border-border'}`}>{String.fromCharCode(65+idx)}</button>
-                         <input className="flex-1 bg-transparent border border-border rounded-lg px-2 text-sm" placeholder={`Option ${String.fromCharCode(65+idx)}`} value={ans} onChange={e => {
-                           const newAns = [...qAnswers]; newAns[idx] = e.target.value; setQAnswers(newAns);
-                         }} />
+                      <div key={idx} className="flex items-center gap-3 group">
+                         <button 
+                           onClick={() => setQCorrectIndex(idx)} 
+                           className={`w-10 h-10 rounded-xl border-2 flex-shrink-0 flex items-center justify-center font-bold transition-all ${
+                             qCorrectIndex === idx 
+                               ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20 scale-105' 
+                               : 'border-border hover:border-primary/50 text-muted-foreground'
+                           }`}
+                         >
+                           {String.fromCharCode(65+idx)}
+                         </button>
+                         <div className="flex-1 relative">
+                           <input 
+                             className="w-full bg-background/50 backdrop-blur-sm border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" 
+                             placeholder={`Option ${String.fromCharCode(65+idx)}`} 
+                             value={ans} 
+                             onChange={e => {
+                               const newAns = [...qAnswers]; 
+                               newAns[idx] = e.target.value; 
+                               setQAnswers(newAns);
+                             }} 
+                           />
+                           {qCorrectIndex === idx && (
+                             <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                               <Check className="w-4 h-4 text-primary" />
+                             </div>
+                           )}
+                         </div>
                       </div>
                     ))}
-                 </div>
-                 <GlassButton variant="secondary" onClick={handleAddQuestion} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Question</GlassButton>
+                  </div>
+                 <GlassButton variant="accent" onClick={handleAddQuestion} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Question</GlassButton>
               </div>
               
               <div className="flex gap-3 pt-4">

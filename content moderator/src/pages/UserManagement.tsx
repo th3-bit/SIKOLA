@@ -4,7 +4,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
-import { Plus, Edit2, Trash2, User, Mail, Key, Shield, Check, Search, ArrowLeft, Users, UserCheck, UserX, AlertTriangle, Eye, EyeOff, Loader2, Clock } from "lucide-react";
+import { Plus, Edit2, Trash2, User, Mail, Key, Shield, Check, Search, ArrowLeft, Users, UserCheck, UserX, AlertTriangle, Eye, EyeOff, Loader2, Clock, Wand2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import {
@@ -83,6 +83,9 @@ const UserManagement = () => {
   const [editFormData, setEditFormData] = useState({
     full_name: "",
     subscription_type: "free_trial" as SubscriptionType,
+    password: "",
+    expires_at: "",
+    subscription_id: null as string | null
   });
 
   useEffect(() => {
@@ -92,7 +95,11 @@ const UserManagement = () => {
   const fetchProfiles = async () => {
     setLoading(true);
     try {
-      // Fetch profiles with subscription data
+      // 1. Fetch ALL auth users (Source of Truth)
+      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) throw authError;
+
+      // 2. Fetch profiles with subscription data
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
@@ -110,27 +117,44 @@ const UserManagement = () => {
               plan_type
             )
           )
-        `)
-        .order('created_at', { ascending: false });
+        `);
       
       if (profilesError) throw profilesError;
 
-      // Fetch auth users to get email addresses
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-      
-      // Merge profile data with auth data
-      const enrichedProfiles = (profilesData || []).map(profile => {
-        const authUser = authUsers?.find(u => u.id === profile.id);
-        return {
-          ...profile,
-          email: authUser?.email || profile.email || 'No email',
-          phone: authUser?.phone || null,
-          email_confirmed: authUser?.email_confirmed_at ? true : false,
-          last_sign_in: authUser?.last_sign_in_at || null,
-        };
+      // 3. Merge: Drive from Auth Users to ensure everyone is seen
+      const allUsers = (authUsers || []).map(authUser => {
+        const profile = profilesData?.find(p => p.id === authUser.id);
+        
+        // If profile exists, merge; otherwise create placeholder
+        if (profile) {
+          return {
+            ...profile,
+            email: authUser.email,
+            phone: authUser.phone || profile.phone,
+            email_confirmed: authUser.email_confirmed_at ? true : false,
+            last_sign_in: authUser.last_sign_in_at,
+          };
+        } else {
+          // Ghost user (has account but no profile DB row)
+          return {
+            id: authUser.id,
+            full_name: "No Profile Set",
+            email: authUser.email || "No Email",
+            phone: authUser.phone,
+            email_confirmed: authUser.email_confirmed_at ? true : false,
+            last_sign_in: authUser.last_sign_in_at,
+            subscription_type: "free_trial",
+            status: "inactive",
+            created_at: authUser.created_at,
+            subscriptions: []
+          } as UserProfile;
+        }
       });
 
-      setProfiles(enrichedProfiles);
+      // Sort by recently created
+      allUsers.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setProfiles(allUsers);
     } catch (error: any) {
       console.error('Error fetching profiles:', error);
       toast.error(error.message || "Failed to fetch user data");
@@ -179,29 +203,76 @@ const UserManagement = () => {
 
   const handleStartEdit = (user: UserProfile) => {
     setEditingUserId(user.id);
+    
+    // Find active subscription to get expiry date
+    const activeSub = user.subscriptions?.find(sub => sub.is_active && new Date(sub.expires_at) > new Date());
+    
+    // Format date for input type="date" (YYYY-MM-DD)
+    const formattedDate = activeSub 
+      ? new Date(activeSub.expires_at).toISOString().split('T')[0] 
+      : "";
+
     setEditFormData({
       full_name: user.full_name,
       subscription_type: user.subscription_type,
+      password: "",
+      expires_at: formattedDate,
+      subscription_id: activeSub?.id || null
     });
   };
 
   const handleSaveEdit = async (id: string) => {
     if (!editFormData.full_name) return;
     
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: editFormData.full_name,
-        subscription_type: editFormData.subscription_type,
-      })
-      .eq('id', id);
-    
-    if (error) {
-      toast.error("Failed to save changes");
-    } else {
-      setProfiles(profiles.map(p => p.id === id ? { ...p, ...editFormData } : p));
-      toast.success("Profile updated");
+    try {
+      // 1. Update Profile (Name, Subscription Type Label)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: editFormData.full_name,
+          subscription_type: editFormData.subscription_type,
+        })
+        .eq('id', id);
+      
+      if (profileError) throw profileError;
+
+      // 2. Update Subscription Expiry (if active sub exists and date changed)
+      if (editFormData.subscription_id && editFormData.expires_at) {
+        const { error: subError } = await supabase
+          .from('user_subscriptions')
+          .update({
+            expires_at: new Date(editFormData.expires_at).toISOString()
+          })
+          .eq('id', editFormData.subscription_id);
+          
+        if (subError) throw subError;
+      }
+
+      // 3. Update Password (if provided)
+      let passwordMessage = "";
+      if (editFormData.password) {
+        if (editFormData.password.length < 6) {
+          toast.error("Password must be at least 6 characters");
+          return;
+        }
+        
+        const { error: passError } = await supabase.auth.admin.updateUserById(
+          id,
+          { password: editFormData.password }
+        );
+        
+        if (passError) throw passError;
+        passwordMessage = " & Password updated";
+      }
+      
+      // Refresh local state
+      toast.success(`Profile updated${passwordMessage}`);
       setEditingUserId(null);
+      fetchProfiles(); // Reload to see changes
+      
+    } catch (error: any) {
+      console.error("Update failed:", error);
+      toast.error(error.message || "Failed to update user");
     }
   };
 
@@ -229,8 +300,13 @@ const UserManagement = () => {
                   </div>
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                {profiles.length} total students
+              <div className="flex items-center gap-2">
+                <GlassButton variant="ghost" size="sm" onClick={() => navigate("/settings/ai")} title="AI Connection">
+                  <Wand2 className="w-5 h-5" />
+                </GlassButton>
+                <div className="text-sm text-muted-foreground">
+                  {profiles.length} total students
+                </div>
               </div>
             </div>
           </div>
@@ -296,6 +372,28 @@ const UserManagement = () => {
                               <option key={key} value={key}>{label}</option>
                             ))}
                           </select>
+                          
+                          <div className="relative">
+                            <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                              type="text" 
+                              placeholder="Set New Password"
+                              value={editFormData.password}
+                              onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                              className="glass-input pl-10 w-full"
+                            />
+                          </div>
+
+                          <div className="relative">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                              type="date"
+                              value={editFormData.expires_at}
+                              onChange={(e) => setEditFormData({ ...editFormData, expires_at: e.target.value })}
+                              className="glass-input pl-10 w-full"
+                              title="Subscription Expiry"
+                            />
+                          </div>
                         </div>
                         <div className="flex justify-end gap-2">
                           <GlassButton variant="ghost" size="sm" onClick={() => setEditingUserId(null)}>

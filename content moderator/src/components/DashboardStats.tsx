@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { GlassCard } from "./ui/GlassCard";
 import { BookOpen, BookMarked, HelpCircle, Users, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -8,21 +9,25 @@ interface StatItemProps {
   value: number | string;
   icon: React.ReactNode;
   color: string;
+  onClick?: () => void;
 }
 
-const StatItem = ({ label, value, icon, color }: StatItemProps) => (
-  <GlassCard className="flex items-center gap-4 p-4 min-w-[140px]" hover={true}>
-    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center shadow-lg`}>
-      {icon}
-    </div>
-    <div>
-      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
-      <p className="text-xl font-extrabold text-foreground">{value}</p>
-    </div>
-  </GlassCard>
+const StatItem = ({ label, value, icon, color, onClick }: StatItemProps) => (
+  <div onClick={onClick} className="cursor-pointer transition-transform active:scale-95">
+    <GlassCard className="flex items-center gap-4 p-4 min-w-[140px]" hover={true}>
+      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color} flex items-center justify-center shadow-lg`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-xl font-extrabold text-foreground">{value}</p>
+      </div>
+    </GlassCard>
+  </div>
 );
 
 export const DashboardStats = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     subjects: 0,
     lessons: 0,
@@ -70,24 +75,28 @@ export const DashboardStats = () => {
         value={stats.subjects} 
         icon={<BookMarked className="w-5 h-5 text-white" />} 
         color="from-blue-500 to-indigo-500" 
+        onClick={() => navigate('/content')}
       />
       <StatItem 
         label="Lessons" 
         value={stats.lessons} 
         icon={<BookOpen className="w-5 h-5 text-white" />} 
         color="from-purple-500 to-pink-500" 
+        onClick={() => navigate('/content')}
       />
       <StatItem 
         label="Quizzes" 
         value={stats.quizzes} 
         icon={<HelpCircle className="w-5 h-5 text-white" />} 
         color="from-orange-500 to-red-500" 
+        onClick={() => navigate('/content')}
       />
       <StatItem 
         label="Students" 
         value={stats.students} 
         icon={<Users className="w-5 h-5 text-white" />} 
         color="from-emerald-500 to-teal-500" 
+        onClick={() => navigate('/users')}
       />
     </div>
   );

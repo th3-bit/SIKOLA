@@ -1,5 +1,5 @@
 import { GlassButton } from "./ui/GlassButton";
-import { Layers, ArrowLeft, Save, Sun, Moon, Search, Users, BookOpen } from "lucide-react";
+import { Layers, ArrowLeft, Save, Sun, Moon, Search, Users, BookOpen, Wand2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -90,6 +90,10 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
             {/* User Management Link */}
             <GlassButton variant="ghost" size="sm" onClick={() => navigate("/users")} title="User Management">
               <Users className="w-5 h-5" />
+            </GlassButton>
+
+            <GlassButton variant="ghost" size="sm" onClick={() => navigate("/settings/ai")} title="AI Connection">
+              <Wand2 className="w-5 h-5" />
             </GlassButton>
             
             <GlassButton variant="ghost" size="sm" onClick={toggleTheme} title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}>

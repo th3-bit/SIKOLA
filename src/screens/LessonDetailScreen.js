@@ -120,7 +120,9 @@ export default function LessonDetailScreen({ route, navigation }) {
                   <View style={styles.metaRow}>
                     <View style={styles.metaItem}>
                       <Clock size={16} color={theme.colors.textSecondary} />
-                      <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>~ min</Text>
+                      <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
+                        {Math.floor(lessons.reduce((acc, l) => acc + (l.duration || 5), 0))} min
+                      </Text>
                     </View>
                     <View style={styles.metaItem}>
                       <Award size={16} color={theme.colors.textSecondary} />

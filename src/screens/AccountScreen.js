@@ -24,7 +24,12 @@ import {
   PenTool,
   Flame,
   Zap,
-  Layout
+  Layout,
+  Star,
+  Target,
+  Activity,
+  Calendar,
+  CheckCircle2
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
@@ -143,6 +148,58 @@ export default function AccountScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  // Mock Data for Achievements and Activity
+  const achievements = [
+    { id: 1, title: 'Early Bird', icon: Zap, color: '#FACC15', unlocked: true, desc: 'Completed 5 lessons before 9AM' },
+    { id: 2, title: 'Quiz Master', icon: Star, color: '#FF453A', unlocked: true, desc: 'Scored 100% on 3 quizzes' },
+    { id: 3, title: 'Scholar', icon: BookOpen, color: '#3B82F6', unlocked: false, desc: 'Study for 10 hours total' },
+    { id: 4, title: 'Sharpshooter', icon: Target, color: '#10B981', unlocked: false, desc: 'Maintain 7 day streak' },
+  ];
+
+  const activities = [
+    { id: 1, title: 'Completed "Accounting Basics"', time: '2 hours ago', icon: CheckCircle2, color: '#10B981' },
+    { id: 2, title: 'Scored 85% in Biology Quiz', time: 'Yesterday', icon: Award, color: '#FACC15' },
+    { id: 3, title: 'Started "Business Management"', time: '2 days ago', icon: BookOpen, color: '#3B82F6' },
+  ];
+
+  const AchievementsSection = () => (
+    <View style={styles.sectionContainer}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Achievements</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.achievementsScroll}>
+        {achievements.map((item) => (
+          <View key={item.id} style={[styles.achievementCard, { opacity: item.unlocked ? 1 : 0.6 }]}>
+            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.achievementContent, { borderColor: theme.colors.glassBorder, backgroundColor: item.unlocked ? theme.colors.glass : 'rgba(0,0,0,0.02)' }]}>
+              <View style={[styles.achievementIcon, { backgroundColor: item.unlocked ? item.color + '20' : '#88888820' }]}>
+                <item.icon size={24} color={item.unlocked ? item.color : '#888'} />
+              </View>
+              <Text style={[styles.achievementTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.achievementDesc, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]} numberOfLines={2}>{item.desc}</Text>
+            </BlurView>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const RecentActivitySection = () => (
+    <View style={styles.sectionContainer}>
+      <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Recent Activity</Text>
+      <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.activityList, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
+        {activities.map((item, index) => (
+          <View key={item.id} style={[styles.activityItem, index === activities.length - 1 && styles.noBorder, { borderBottomColor: theme.colors.glassBorder }]}>
+            <View style={[styles.activityIconBox, { backgroundColor: item.color + '15' }]}>
+              <item.icon size={16} color={item.color} />
+            </View>
+            <View style={styles.activityInfo}>
+              <Text style={[styles.activityTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{item.title}</Text>
+              <Text style={[styles.activityTime, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{item.time}</Text>
+            </View>
+          </View>
+        ))}
+      </BlurView>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <LinearGradient
@@ -221,6 +278,12 @@ export default function AccountScreen({ navigation }) {
              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Current Progress</Text>
              <StreakCard />
            </View>
+
+           {/* Achievements Section */}
+           <AchievementsSection />
+
+           {/* Recent Activity Section */}
+           <RecentActivitySection />
 
           {/* Menu Sections */}
           <View style={styles.menuSection}>
@@ -545,5 +608,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     marginTop: 10,
-  }
+  },
+  sectionContainer: {
+    marginBottom: 25,
+  },
+  achievementsScroll: {
+    paddingRight: 20,
+    gap: 12,
+  },
+  achievementCard: {
+    width: 140,
+    height: 150,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  achievementContent: {
+    flex: 1,
+    padding: 15,
+    borderWidth: 1,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  achievementIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  achievementTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  achievementDesc: {
+    fontSize: 11,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  activityList: {
+    borderRadius: 24,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  activityIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activityTime: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
 });

@@ -10,39 +10,57 @@ import StreakCard from '../components/StreakCard';
 import LessonCard from '../components/LessonCard';
 import CategoryCard from '../components/CategoryCard';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
+import { supabase } from '../lib/supabase';
+import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { recentLessons, continueLearning, isLoading } = useProgress();
   
-  // Mock data
-  const continueLearning = [
-    { id: 1, title: 'Introduction to Algebra', category: 'Mathematics', progress: 65, duration: 25, color: '#FACC15' },
-    { id: 2, title: 'Chemical Reactions', category: 'Science', progress: 40, duration: 30, color: '#EC4899' },
-    { id: 3, title: 'Economics Fundamentals', category: 'Economics', progress: 80, duration: 20, color: '#8B5CF6' },
-    { id: 10, title: 'Javascript Basics', category: 'Coding', progress: 25, duration: 45, color: '#10B981' },
-    { id: 11, title: 'Renaissance Art', category: 'Arts', progress: 10, duration: 35, color: '#F97316' },
-  ];
+  console.log('HomeScreen mounted. isLoading:', isLoading, 'Recent:', recentLessons?.length);
 
-  const categories = [
-    { id: 1, name: 'Mathematics', icon: Calculator, color: '#FACC15', lessonCount: 24 },
-    { id: 2, name: 'Science', icon: Beaker, color: '#EC4899', lessonCount: 18 },
-    { id: 3, name: 'Economics', icon: TrendingUp, color: '#8B5CF6', lessonCount: 32 },
-    { id: 4, name: 'History', icon: Globe, color: '#3B82F6', lessonCount: 22 },
-    { id: 5, name: 'Arts', icon: Palette, color: '#F97316', lessonCount: 15 },
-    { id: 6, name: 'Coding', icon: Code, color: '#10B981', lessonCount: 28 },
-  ];
+  // Fetch categories (subjects) dynamically
+  const [categories, setCategories] = React.useState([]);
 
-  const recentLessons = [
-    { id: 4, title: 'World Geography', category: 'History', progress: 100, duration: 15, color: '#3B82F6' },
-    { id: 5, title: 'Physical Fitness', category: 'Health', progress: 30, duration: 20, color: '#EF4444' },
-    { id: 6, title: 'Ancient Civilizations', category: 'History', progress: 75, duration: 25, color: '#3B82F6' },
-    { id: 7, title: 'Digital Art Basics', category: 'Arts', progress: 50, duration: 30, color: '#F97316' },
-    { id: 8, title: 'Macroeconomics', category: 'Economics', progress: 90, duration: 40, color: '#8B5CF6' },
-    { id: 9, title: 'Organic Chemistry', category: 'Science', progress: 15, duration: 55, color: '#EC4899' },
-    { id: 15, title: 'Geometry Proofs', category: 'Mathematics', progress: 60, duration: 30, color: '#FACC15' },
-  ];
+  React.useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+        const { data, error } = await supabase
+          .from('subjects')
+          .select(`
+            *,
+            topics (id)
+          `)
+          .order('name');
+      
+      if (data) {
+        const formatted = data.map(sub => {
+          const style = getSubjectStyle(sub.name);
+          return {
+            id: sub.id,
+            name: sub.name, 
+            icon: style.icon,
+            color: style.color,
+            topicCount: sub.topics ? sub.topics.length : 0
+          };
+        });
+        setCategories(formatted);
+      }
+    } catch (err) {
+      console.error("Failed to fetch categories", err);
+    }
+  };
+
+  /* 
+  // Old Static Data
+  const categories = [ ... ]
+  */
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -52,7 +70,10 @@ export default function HomeScreen({ navigation }) {
       />
       
       <SafeAreaView style={styles.safeArea}>
-        <GlassHeader showSearch={true} />
+        <GlassHeader 
+          showSearch={true} 
+          onSearchPress={() => navigation.navigate('Search')}
+        />
         
         <ScrollView 
           style={styles.scrollView}
@@ -101,25 +122,30 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* Continue Learning */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-              Continue Learning
-            </Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalScroll}
-            >
-              {continueLearning.map((lesson) => (
-                <LessonCard 
-                  key={lesson.id} 
-                  lesson={lesson} 
-                  shadowColor={lesson.color}
-                  onPress={() => navigation.navigate('LessonDetail', { lesson })}
-                />
-              ))}
-            </ScrollView>
-          </View>
+          {continueLearning.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                Continue Learning
+              </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalScroll}
+              >
+                {continueLearning.map((topic) => (
+                  <LessonCard 
+                    key={topic.id} 
+                    lesson={topic} 
+                    shadowColor={topic.color}
+                    onPress={() => navigation.navigate('LessonDetail', { 
+                       lesson: topic, // Passing topic as lesson since LessonDetail expects topic object structure
+                       subject: { name: topic.category, color: topic.color } // Construct subject object
+                    })}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Explore Subjects */}
           <View style={styles.section}>
@@ -138,25 +164,35 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* Recent Lessons */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-              Recent Lessons
-            </Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalScroll}
-            >
-              {recentLessons.map((lesson) => (
-                <LessonCard 
-                  key={lesson.id} 
-                  lesson={lesson} 
-                  shadowColor={lesson.color}
-                  onPress={() => navigation.navigate('LessonDetail', { lesson })}
-                />
-              ))}
-            </ScrollView>
-          </View>
+          {recentLessons.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                Recent Lessons
+              </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalScroll}
+              >
+                {recentLessons.map((lesson) => (
+                  <LessonCard 
+                    key={lesson.id} 
+                    lesson={lesson} 
+                    shadowColor={lesson.color}
+                    onPress={() => navigation.navigate('LearningContent', { 
+                      lesson: lesson,
+                      // We need to pass topic and subject if possible, or fetch them in LearningContent
+                      // For now, let's assume LearningContent can handle missing parents or we limit this
+                      // Since we didn't fetch full hierarchy in recentLessons properly, we might need a fetch or passed props
+                      // Edit: ProgressContext now fetches topic and subject!
+                      subject: { name: lesson.category, color: lesson.color },
+                      topic: { id: lesson.topic_id, title: lesson.topic_title } // Correctly mapping to Topic properties
+                    })}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Bottom padding for tab bar */}
           <View style={{ height: 100 }} />

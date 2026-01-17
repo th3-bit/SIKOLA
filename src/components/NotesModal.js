@@ -67,9 +67,37 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
            </Text>
         </View>
 
-        <Text style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-          {notes || "No detailed notes provided for this lesson yet. Please check back later or use the reference material if available."}
-        </Text>
+        <View style={styles.notesContainer}>
+          {notes && notes.split('\n\n').map((line, idx) => {
+            if (line === 'CORE CONCEPTS' || line === 'PRACTICAL EXAMPLES') {
+              return (
+                <Text key={idx} style={[styles.sectionHeading, { color: theme.colors.secondary }]}>
+                  {line}
+                </Text>
+              );
+            }
+            if (line === '───────────────────') {
+              return <View key={idx} style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />;
+            }
+            if (line.startsWith('## ')) {
+              return (
+                <Text key={idx} style={[styles.itemTitle, { color: theme.colors.textPrimary }]}>
+                  {line.replace('## ', '')}
+                </Text>
+              );
+            }
+            return (
+              <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                {line}
+              </Text>
+            );
+          })}
+          {!notes && (
+            <Text style={[styles.notesText, { color: theme.colors.textSecondary, fontStyle: 'italic' }]}>
+              No detailed notes provided for this lesson yet.
+            </Text>
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -192,10 +220,33 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
   },
+  notesContainer: {
+    paddingBottom: 20,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 2,
+    marginTop: 10,
+    marginBottom: 15,
+    opacity: 0.8,
+  },
+  itemTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 20,
+    marginBottom: 8,
+  },
   notesText: {
-    fontSize: 17,
-    lineHeight: 30,
-    opacity: 0.9,
+    fontSize: 16,
+    lineHeight: 28,
+    opacity: 0.8,
+    marginBottom: 12,
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+    marginVertical: 30,
   },
   pdfContainer: {
     flex: 1,

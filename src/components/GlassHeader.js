@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   View, 
+  Text,
   StyleSheet, 
   TouchableOpacity, 
   TextInput, 
@@ -15,17 +16,36 @@ import { BlurView } from 'expo-blur';
 
 const { width } = Dimensions.get('window');
 
-export default function GlassHeader({ showSearch = true, onSearch = (text) => {} }) {
+export default function GlassHeader({ 
+  showSearch = true, 
+  onSearch = (text) => {}, 
+  onSearchPress = null,
+  initialExpanded = false,
+  overrideBack = null
+}) {
   const { theme, isDark } = useTheme();
   const navigation = useNavigation();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(initialExpanded);
   const [query, setQuery] = useState('');
   
-  const animationWidth = useRef(new Animated.Value(48)).current;
-  const animationOpacity = useRef(new Animated.Value(1)).current;
+  const animationWidth = useRef(new Animated.Value(initialExpanded ? width - 40 : 48)).current;
+  const animationOpacity = useRef(new Animated.Value(initialExpanded ? 0 : 1)).current;
   const inputRef = useRef(null);
 
+  // Auto-focus if initially expanded
+  React.useEffect(() => {
+    if (initialExpanded) {
+       setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [initialExpanded]);
+
   const toggleSearch = (expand) => {
+    console.log('GlassHeader toggleSearch:', expand, 'Has onSearchPress:', !!onSearchPress);
+    if (expand && onSearchPress) {
+      onSearchPress();
+      return;
+    }
+
     if (expand) {
       setIsExpanded(true);
       Animated.parallel([
@@ -43,6 +63,11 @@ export default function GlassHeader({ showSearch = true, onSearch = (text) => {}
         inputRef.current?.focus();
       });
     } else {
+      if (overrideBack) {
+        overrideBack();
+        return;
+      }
+      
       Animated.parallel([
         Animated.spring(animationWidth, {
           toValue: 48,
@@ -98,8 +123,8 @@ export default function GlassHeader({ showSearch = true, onSearch = (text) => {}
                       onSearch(text);
                     }}
                   />
-                  <TouchableOpacity onPress={() => toggleSearch(false)} style={styles.closeButton}>
-                    <X color={theme.colors.textSecondary} size={18} />
+                  <TouchableOpacity onPress={() => toggleSearch(false)} style={styles.cancelButton}>
+                    <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>Cancel</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -188,12 +213,11 @@ const styles = StyleSheet.create({
     padding: 0,
     marginTop: Platform.OS === 'ios' ? 0 : 2,
   },
-  closeButton: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+  cancelButton: {
+    marginLeft: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
 });

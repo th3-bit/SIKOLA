@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import Svg, { Circle } from 'react-native-svg';
+import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
 
 export default function DailyProgressCard() {
+  const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const { sessions, isLoading } = useProgress();
   const [categories, setCategories] = useState([]);
@@ -39,24 +42,27 @@ export default function DailyProgressCard() {
 
       const total = monthlySessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
       setTotalMinutes(total);
-
       if (total === 0) {
         // Default empty state or mock-like but zeroed
-        setCategories(subjects.slice(0, 6).map(s => ({
-          name: s.name,
-          percentage: 0,
-          color: s.color || '#8B5CF6'
-        })));
+        setCategories(subjects.slice(0, 6).map(s => {
+          const style = getSubjectStyle(s.name);
+          return {
+            name: s.name,
+            percentage: 0,
+            color: style.color
+          };
+        }));
       } else {
         // Calculate percentages
         const breakdown = subjects.map(s => {
+          const style = getSubjectStyle(s.name);
           const subjectTime = monthlySessions
             .filter(ses => ses.subject_id === s.id)
             .reduce((acc, curr) => acc + curr.duration_minutes, 0);
           
           return {
             name: s.name,
-            color: s.color || '#8B5CF6',
+            color: style.color,
             minutes: subjectTime,
             percentage: Math.round((subjectTime / total) * 100)
           };
@@ -142,36 +148,57 @@ export default function DailyProgressCard() {
             
             {/* Center Content */}
             <View style={styles.centerContent}>
-              <Text style={[styles.centerLabel, { color: theme.colors.textSecondary }]}>
+              <Text style={[styles.centerLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                 Total
               </Text>
-              <Text style={[styles.centerValue, { color: theme.colors.textPrimary }]}>
+              <Text style={[styles.centerValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                 {totalMinutes}
-                <Text style={[styles.centerUnit, { color: theme.colors.textSecondary }]}>min</Text>
+                <Text style={[styles.centerUnit, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>min</Text>
               </Text>
             </View>
           </View>
 
           {/* Legend */}
           <View style={styles.legend}>
-            {categories.slice(0, 6).map((category, index) => (
+            {categories.slice(0, 5).map((category, index) => (
               <View key={index} style={styles.legendItem}>
                 <View style={[styles.legendColor, { backgroundColor: category.color }]} />
                 <View style={styles.legendText}>
-                  <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary, flex: 1 }]}>
+                  <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary, flex: 1, fontFamily: theme.typography.fontFamily }]}>
                     {category.name}
                   </Text>
-                  <Text style={[styles.legendPercentage, { color: theme.colors.textPrimary }]}>
+                  <Text style={[styles.legendPercentage, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     {category.percentage}%
                   </Text>
                 </View>
               </View>
             ))}
+            {categories.length > 5 && (
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('LearningProgress')}
+                style={styles.moreButton}
+              >
+                <Text style={[styles.moreText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>
+                  +{categories.length - 5} more subjects
+                </Text>
+              </TouchableOpacity>
+            )}
             {categories.length === 0 && (
-              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>No session data yet</Text>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>No session data yet</Text>
             )}
           </View>
         </View>
+
+        <TouchableOpacity 
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('LearningProgress')}
+          style={[styles.footerButton, { borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+        >
+          <Text style={[styles.footerButtonText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>
+            View Detailed Analytics
+          </Text>
+        </TouchableOpacity>
       </BlurView>
     </View>
   );
@@ -277,5 +304,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginLeft: 8,
+  },
+  moreButton: {
+    marginTop: 4,
+    paddingVertical: 2,
+  },
+  moreText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footerButton: {
+    marginTop: 10,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    alignItems: 'center',
+  },
+  footerButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

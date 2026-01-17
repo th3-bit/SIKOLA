@@ -23,6 +23,7 @@ import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import StreakCard from '../components/StreakCard';
 import Svg, { Circle } from 'react-native-svg';
+import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -54,32 +55,47 @@ export default function LearningProgressScreen({ navigation }) {
       const filteredSessions = allSessions.filter(s => new Date(s.started_at) >= dateFilter);
       setRangeSessions(filteredSessions);
 
-      // 2. Fetch Subjects and Progress for Donut Chart
-      const { data: subjects } = await supabase.from('subjects').select('*');
+      // 2. Fetch Subjects and Progress for Donut Chart & Detailed List
+      const { data: subjects } = await supabase
+        .from('subjects')
+        .select(`
+          *,
+          topics (id)
+        `);
+      
       if (subjects) {
-        const total = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+        // Fetch all completed topics for this user to calculate completion %
+        const { data: userProgress } = await supabase
+          .from('user_progress')
+          .select('topic_id')
+          .eq('user_id', user.id);
         
-        if (total === 0) {
-          setCategories([]);
-        } else {
-          const breakdown = subjects.map(s => {
-            const subjectTime = filteredSessions
-              .filter(ses => ses.subject_id === s.id)
-              .reduce((acc, curr) => acc + curr.duration_minutes, 0);
-            
-            return {
-              id: s.id,
-              name: s.name,
-              color: s.color || '#8B5CF6',
-              minutes: subjectTime,
-              percentage: Math.round((subjectTime / total) * 100)
-            };
-          })
-          .filter(c => c.minutes > 0)
-          .sort((a, b) => b.minutes - a.minutes);
+        const completedTopicIds = new Set(userProgress?.map(p => p.topic_id) || []);
+        const totalMinutesActive = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+        
+        const breakdown = subjects.map(s => {
+          const style = getSubjectStyle(s.name);
+          const subjectTime = filteredSessions
+            .filter(ses => ses.subject_id === s.id)
+            .reduce((acc, curr) => acc + curr.duration_minutes, 0);
+          
+          const subjectTopics = s.topics || [];
+          const completedInSubject = subjectTopics.filter(t => completedTopicIds.has(t.id)).length;
 
-          setCategories(breakdown);
-        }
+          return {
+            id: s.id,
+            name: s.name,
+            color: style.color,
+            minutes: subjectTime,
+            percentage: totalMinutesActive > 0 ? Math.round((subjectTime / totalMinutesActive) * 100) : 0,
+            totalTopics: subjectTopics.length,
+            completedTopics: completedInSubject,
+            icon: style.icon
+          };
+        })
+        .sort((a, b) => b.completedTopics - a.completedTopics || a.name.localeCompare(b.name));
+
+        setCategories(breakdown);
       }
 
       // 3. Recent Activity (Global, not just range)
@@ -190,8 +206,9 @@ export default function LearningProgressScreen({ navigation }) {
                       {totalMinutes === 0 ? (
                         <Circle cx="80" cy="80" r={radius} stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth={strokeWidth} fill="none" />
                       ) : (
-                        categories.map((cat, i) => {
-                          const prevPerc = categories.slice(0, i).reduce((sum, c) => sum + c.percentage, 0);
+                        categories.filter(c => c.minutes > 0).map((cat, i, filtered) => {
+                          const activeCats = filtered;
+                          const prevPerc = activeCats.slice(0, i).reduce((sum, c) => sum + c.percentage, 0);
                           return (
                             <Circle
                               key={cat.id}
@@ -210,22 +227,27 @@ export default function LearningProgressScreen({ navigation }) {
                       )}
                     </Svg>
                     <View style={styles.centerContent}>
-                      <Text style={[styles.centerLabel, { color: theme.colors.textSecondary }]}>Total</Text>
-                      <Text style={[styles.centerValue, { color: theme.colors.textPrimary }]}>{totalMinutes}<Text style={{ fontSize: 16 }}>min</Text></Text>
+                      <Text style={[styles.centerLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Total</Text>
+                      <Text style={[styles.centerValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{totalMinutes}<Text style={{ fontSize: 16 }}>min</Text></Text>
                     </View>
                   </View>
 
                   <View style={styles.legendGrid}>
-                    {categories.slice(0, 4).map(cat => (
+                    {categories.filter(c => c.minutes > 0).slice(0, 4).map(cat => (
                       <View key={cat.id} style={styles.legendItem}>
                         <View style={[styles.legendBar, { backgroundColor: cat.color }]} />
-                        <View>
-                          <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary }]}>{cat.name}</Text>
-                          <Text style={[styles.legendValue, { color: theme.colors.textPrimary }]}>{cat.percentage}%</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{cat.name}</Text>
+                          <Text style={[styles.legendValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{cat.percentage}%</Text>
                         </View>
                       </View>
                     ))}
-                    {categories.length === 0 && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>No data for this period</Text>}
+                    {totalMinutes === 0 && <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>No data for this period</Text>}
+                    {categories.filter(c => c.minutes > 0).length > 4 && (
+                      <Text style={{ color: theme.colors.secondary, fontSize: 11, fontWeight: '600', fontFamily: theme.typography.fontFamily }}>
+                        +{categories.filter(c => c.minutes > 0).length - 4} more active
+                      </Text>
+                    )}
                   </View>
                 </View>
               </BlurView>
@@ -237,9 +259,60 @@ export default function LearningProgressScreen({ navigation }) {
                 <StatCard icon={CheckCircle} label="XP" value={userStats?.total_xp || 0} color="#10B981" />
               </View>
 
+              {/* Subject Breakdown */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Subject Progress</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Overall Curriculum Completion</Text>
+                </View>
+                
+                <View style={styles.subjectList}>
+                  {categories.map((subject) => {
+                    const completedCount = subject.completedTopics || 0;
+                    const totalCount = subject.totalTopics || 0;
+                    const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+                    
+                    return (
+                      <BlurView 
+                        key={subject.id} 
+                        intensity={20} 
+                        tint={isDark ? "dark" : "light"} 
+                        style={[styles.subjectProgressCard, { borderColor: theme.colors.glassBorder }]}
+                      >
+                        <View style={styles.subjectHeaderRow}>
+                          <View style={[styles.subjectIconBox, { backgroundColor: `${subject.color}15` }]}>
+                            {subject.icon ? <subject.icon size={18} color={subject.color} /> : <BookOpen size={18} color={subject.color} />}
+                          </View>
+                          <View style={styles.subjectMeta}>
+                            <Text numberOfLines={1} style={[styles.subjectName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                              {subject.name}
+                            </Text>
+                            <Text style={[styles.subjectStats, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                              {completedCount} of {totalCount} topics completed
+                            </Text>
+                          </View>
+                          <Text style={[styles.subjectPercentage, { color: subject.color, fontFamily: theme.typography.fontFamily }]}>
+                            {progress}%
+                          </Text>
+                        </View>
+                        
+                        <View style={styles.progressBarBg}>
+                          <LinearGradient
+                            colors={[subject.color, subject.color + '80']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={[styles.progressBarFill, { width: `${progress}%` }]}
+                          />
+                        </View>
+                      </BlurView>
+                    );
+                  })}
+                </View>
+              </View>
+
               {/* Activity Timeline */}
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Recent Activity</Text>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Recent Activity</Text>
                 <View style={[styles.timelineContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)', borderColor: theme.colors.glassBorder }]}>
                   {recentActivity.map((activity, index) => (
                     <View key={index} style={[styles.activityRow, index !== recentActivity.length - 1 && styles.activityBorder]}>
@@ -385,4 +458,61 @@ const styles = StyleSheet.create({
   activityInfo: { flex: 1 },
   activityTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
   activityTime: { fontSize: 12 },
+  sectionHeader: {
+    marginBottom: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.8,
+  },
+  subjectList: {
+    gap: 12,
+  },
+  subjectProgressCard: {
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  subjectHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  subjectIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  subjectMeta: {
+    flex: 1,
+  },
+  subjectName: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  subjectStats: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  subjectPercentage: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginLeft: 12,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
 });

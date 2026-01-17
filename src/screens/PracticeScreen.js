@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   ScrollView, 
   TouchableOpacity, 
-  Dimensions 
+  Dimensions,
+  TextInput,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,84 +20,276 @@ import {
   RotateCcw, 
   ChevronRight,
   Flame,
-  Dumbbell
+  Dumbbell,
+  Search,
+  BookOpen,
+  Beaker,
+  Calculator,
+  Globe,
+  TrendingUp,
+  Briefcase,
+  Code,
+  Scale,
+  Clock,
+  Award
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import GlassHeader from '../components/GlassHeader';
+import { supabase } from '../lib/supabase';
+import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
 
-const practiceModes = [
-  { 
-    id: 1, 
-    title: 'Daily Sprint', 
-    desc: '10 quick questions to keep you sharp', 
-    icon: Timer, 
-    color: '#FACC15',
-    xp: '+20 XP'
-  },
-  { 
-    id: 2, 
-    title: 'Deep Dive', 
-    desc: 'Master a specific topic with focusing', 
-    icon: Brain, 
-    color: '#8B5CF6',
-    xp: '+50 XP'
-  },
-  { 
-    id: 3, 
-    title: 'Flashcards', 
-    desc: 'Quick recall and memorization', 
-    icon: RotateCcw, 
-    color: '#EC4899',
-    xp: '+15 XP'
-  },
-  { 
-    id: 4, 
-    title: 'Challenge Mode', 
-    desc: 'Beat your high score and earn rewards', 
-    icon: Trophy, 
-    color: '#10B981',
-    xp: '+100 XP'
-  },
-];
+const iconMap = {
+  'Timer': Timer,
+  'Brain': Brain,
+  'RotateCcw': RotateCcw,
+  'Trophy': Trophy,
+  'Zap': Zap,
+  'Flame': Flame,
+  'Dumbbell': Dumbbell
+};
 
-const revisionTopics = [
-  { id: 1, name: 'Algebra Fundamentals', subject: 'Mathematics', strength: 85, color: '#FACC15' },
-  { id: 2, name: 'Chemical Bonds', subject: 'Science', strength: 40, color: '#EC4899' },
-  { id: 3, name: 'Macro Trends', subject: 'Economics', strength: 15, color: '#8B5CF6' },
-];
+
 
 export default function PracticeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { getTopicScore, userStats, weeklyActivity, sessions } = useProgress();
 
-  const ModeCard = ({ mode }) => (
-    <TouchableOpacity 
-      activeOpacity={0.9}
-      style={[styles.modeCardWrapper, { shadowColor: mode.color }]}
-    >
-      <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.modeCard, { borderColor: theme.colors.glassBorder }]}>
+  const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
+    <View style={[styles.statCardWrapper, { shadowColor: shadowColor }]}>
+      <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.statCard, { borderColor: theme.colors.glassBorder }]}>
         <LinearGradient
-          colors={[`${mode.color}20`, 'transparent']}
+          colors={isDark 
+            ? [`${color}30`, `${color}10`, 'transparent'] 
+            : [`${color}20`, `${color}10`, `${color}05`]
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.modeIconContainer, { backgroundColor: `${mode.color}20` }]}>
-          <mode.icon color={mode.color} size={24} />
+        <View style={[styles.statIconContainer, { backgroundColor: `${color}${isDark ? '20' : '30'}` }]}>
+          <Icon color={color} size={18} />
         </View>
-        <View style={styles.modeInfo}>
-          <Text style={[styles.modeTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-            {mode.title}
-          </Text>
-          <Text style={[styles.modeDesc, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-            {mode.desc}
-          </Text>
-        </View>
-        <View style={styles.modeXp}>
-          <Text style={[styles.modeXpText, { color: mode.color }]}>{mode.xp}</Text>
-        </View>
+        <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
+        <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
+        <View style={[styles.liquidGlow, { backgroundColor: color, opacity: isDark ? 0.15 : 0.2 }]} />
       </BlurView>
-    </TouchableOpacity>
+    </View>
   );
+
+  const StreakCard = () => {
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const days = dayLabels.map((label, index) => ({
+      label,
+      active: weeklyActivity[index] || false
+    }));
+    
+    const streak = userStats?.current_streak || 0;
+
+    return (
+      <TouchableOpacity activeOpacity={0.9} style={styles.streakCardWrapper}>
+        <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.streakCard, { borderColor: theme.colors.glassBorder }]}>
+          <LinearGradient
+            colors={isDark ? ['rgba(255, 69, 58, 0.15)', 'transparent'] : ['rgba(255, 69, 58, 0.1)', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.streakContent}>
+            <View style={styles.streakInfo}>
+              <View style={styles.streakIconCircle}>
+                <Flame color="#FF453A" size={32} fill="#FF453A" />
+              </View>
+              <View style={styles.streakTextContainer}>
+                <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Test Streak: {streak} Days</Text>
+                <Text style={[styles.streakSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{streak < 7 ? `Practice daily to reach 7 days!` : 'You are on fire! Keep it up!'}</Text>
+              </View>
+            </View>
+            <View style={styles.streakBadge}>
+              <Zap color="#FF453A" size={16} fill="#FF453A" />
+              <Text style={[styles.streakValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>ACTIVE</Text>
+            </View>
+          </View>
+          
+          {/* Progress Days Chips */}
+          <View style={styles.streakDaysContainer}>
+            {days.map((day, index) => (
+              <View 
+                key={index} 
+                style={[
+                  styles.dayChip,
+                  { 
+                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.05)' : '#ffffff'),
+                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                  }
+                ]}
+              >
+                <Zap 
+                  size={14} 
+                  color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
+                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
+                />
+                <Text style={[
+                  styles.dayChipText, 
+                  { 
+                    color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
+                    fontFamily: theme.typography.fontFamily 
+                  }
+                ]}>
+                  {day.label[0]}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </BlurView>
+      </TouchableOpacity>
+    );
+  };
+  
+  // State
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubject, setSelectedSubject] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    fetchContent();
+  }, []);
+
+  const fetchContent = async () => {
+    try {
+      setLoading(true);
+      // Fetch subjects and their topics
+      const { data: subjectsData, error } = await supabase
+        .from('subjects')
+        .select(`
+          *,
+          topics (
+            id,
+            title,
+            subject_id
+          )
+        `)
+        .order('name');
+
+      if (!error && subjectsData) {
+        const formattedSubjects = subjectsData.map(subject => {
+          const style = getSubjectStyle(subject.name);
+          return {
+            ...subject,
+            icon: style.icon,
+            color: style.color,
+            topics: (subject.topics || []).sort((a, b) => a.title.localeCompare(b.title))
+          };
+        });
+        
+        setSubjects(formattedSubjects);
+        if (formattedSubjects.length > 0) {
+          setSelectedSubject(formattedSubjects[0]);
+        }
+      }
+    } catch (error) {
+      console.log('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredTopics = searchQuery.trim() !== '' 
+    ? subjects.flatMap(sub => 
+        sub.topics
+          .filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()))
+          .map(topic => ({ ...topic, parentSubject: sub }))
+      )
+    : (selectedSubject 
+        ? selectedSubject.topics.map(t => ({ ...t, parentSubject: selectedSubject }))
+        : []);
+
+  const handleStartComprehensiveTest = async (topic, subject) => {
+    try {
+      setLoading(true);
+      // 1. Fetch all lessons and their contents for this topic
+      const { data: lessonsData, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('topic_id', topic.id);
+
+      if (error) throw error;
+      if (!lessonsData || lessonsData.length === 0) {
+        alert('No questions available for this topic yet.');
+        return;
+      }
+
+      let allQuestions = [];
+      let lessonsWithQuestions = [];
+
+      // 2. Extract questions from each lesson
+      lessonsData.forEach(lesson => {
+        const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+        const quizSlides = slides?.filter(s => s.type === 'quiz') || [];
+        
+        if (quizSlides.length > 0) {
+          lessonsWithQuestions.push({
+            lessonId: lesson.id,
+            questions: quizSlides.map(q => ({
+              ...q,
+              lesson_id: lesson.id,
+              subject_name: subject.name
+            }))
+          });
+        }
+      });
+
+      if (lessonsWithQuestions.length === 0) {
+        alert('No questions found in the lessons of this topic.');
+        return;
+      }
+
+      // 3. Selection Logic (The User's Rule: 2 per lesson, total max 20)
+      let selectedQuestions = [];
+      
+      // Step A: Pick 2 questions from every lesson that has questions
+      lessonsWithQuestions.forEach(lwq => {
+        const shuffled = [...lwq.questions].sort(() => 0.5 - Math.random());
+        selectedQuestions.push(...shuffled.slice(0, 2));
+      });
+
+      // Step B: If we need more to reach 20, fill from the remaining pool
+      if (selectedQuestions.length < 20) {
+        let remainingPool = [];
+        lessonsWithQuestions.forEach(lwq => {
+          // Add questions not already selected
+          const notTaken = lwq.questions.filter(q => !selectedQuestions.includes(q));
+          remainingPool.push(...notTaken);
+        });
+
+        // Shuffle and fill up to 20
+        const extraNeeded = 20 - selectedQuestions.length;
+        const shuffledPool = remainingPool.sort(() => 0.5 - Math.random());
+        selectedQuestions.push(...shuffledPool.slice(0, extraNeeded));
+      } else if (selectedQuestions.length > 20) {
+        // Technically this might happen if there are more than 10 lessons.
+        // We trim to 20
+        selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random()).slice(0, 20);
+      }
+
+      // 4. Navigate to Quiz screen with the combined questions
+      navigation.navigate('Quiz', { 
+        questions: selectedQuestions,
+        topic: topic,
+        subject: subject,
+        isComprehensive: true
+      });
+
+    } catch (err) {
+      console.error('Error starting test:', err);
+      alert('Failed to load test questions.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -105,76 +299,113 @@ export default function PracticeScreen({ navigation }) {
       />
       
       <SafeAreaView style={styles.safeArea}>
-        <GlassHeader />
+        <GlassHeader showSearch={false} />
         
         <ScrollView 
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Daily Streak Header */}
-          <View style={styles.streakSection}>
-            <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.streakBlur, { borderColor: theme.colors.glassBorder }]}>
-               <View style={styles.streakHeader}>
-                  <View style={styles.streakInfo}>
-                     <Text style={[styles.streakLabel, { color: theme.colors.textSecondary }]}>Current Streak</Text>
-                     <Text style={[styles.streakValue, { color: theme.colors.textPrimary }]}>7 Days</Text>
-                  </View>
-                  <View style={[styles.flameCircle, { backgroundColor: `${theme.colors.secondary}20` }]}>
-                     <Flame size={32} color={theme.colors.secondary} fill={theme.colors.secondary} />
-                  </View>
-               </View>
-               
-               <View style={styles.weekContainer}>
-                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                    <View key={i} style={styles.dayItem}>
-                       <View style={[
-                         styles.dayCircle, 
-                         i < 6 ? { backgroundColor: theme.colors.secondary } : { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: theme.colors.glassBorder }
-                       ]}>
-                          {i < 6 && <Zap size={10} color="#FFF" fill="#FFF" />}
-                       </View>
-                       <Text style={[styles.dayText, { color: theme.colors.textSecondary }]}>{day}</Text>
-                    </View>
-                  ))}
-               </View>
-            </BlurView>
+          {/* Test Streak Section */}
+          <View style={styles.streakCardSection}>
+            <StreakCard />
           </View>
 
-          {/* Practice Modes */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Choose Mode</Text>
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
+            <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
+            <StatCard icon={Clock} label="Hours" value={Math.floor((sessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
           </View>
 
-          <View style={styles.modeGrid}>
-            {practiceModes.map((mode) => (
-              <ModeCard key={mode.id} mode={mode} />
-            ))}
+          {/* Content Browser Section */}
+          <View style={[styles.sectionHeader]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Select Course for Test</Text>
           </View>
 
-          {/* Revision Section */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Recommended Revise</Text>
-            <TouchableOpacity><Text style={{ color: theme.colors.secondary, fontWeight: 'bold' }}>All Topics</Text></TouchableOpacity>
+          {/* Search Bar */}
+          <View style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}>
+            <Search size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+            <TextInput
+              placeholder="Search courses..."
+              placeholderTextColor={theme.colors.textSecondary}
+              style={[styles.searchInput, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
 
-          <View style={styles.revisionList}>
-            {revisionTopics.map((topic) => (
-              <TouchableOpacity key={topic.id} style={[styles.topicRowWrapper, { shadowColor: topic.color }]}>
-                <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicRow, { borderColor: theme.colors.glassBorder }]}>
-                  <View style={styles.topicMain}>
-                    <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{topic.name}</Text>
-                    <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>{topic.subject}</Text>
-                  </View>
-                  <View style={styles.topicStat}>
-                    <Text style={[styles.strengthLabel, { color: theme.colors.textSecondary }]}>Mastery</Text>
-                    <View style={styles.strengthBarBg}>
-                       <View style={[styles.strengthBarFill, { width: `${topic.strength}%`, backgroundColor: topic.color }]} />
-                    </View>
-                  </View>
-                  <ChevronRight size={18} color={theme.colors.textSecondary} />
-                </BlurView>
+          {/* Subject Selector */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.subjectsContainer}
+          >
+            {subjects.map((sub) => (
+              <TouchableOpacity
+                key={sub.id}
+                onPress={() => setSelectedSubject(sub)}
+                style={[
+                  styles.subjectChip,
+                  selectedSubject?.id === sub.id && { 
+                    backgroundColor: sub.color,
+                    borderColor: sub.color,
+                    shadowColor: sub.color,
+                    shadowOpacity: 0.5,
+                    elevation: 5
+                  },
+                  { borderColor: theme.colors.glassBorder }
+                ]}
+              >
+                <sub.icon 
+                  size={16} 
+                  color={selectedSubject?.id === sub.id ? '#FFF' : sub.color} 
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[
+                  styles.subjectChipText,
+                  { color: selectedSubject?.id === sub.id ? '#FFF' : theme.colors.textSecondary,
+                    fontFamily: theme.typography.fontFamily }
+                ]}>
+                  {sub.name}
+                </Text>
               </TouchableOpacity>
             ))}
+          </ScrollView>
+
+          {/* Topics List */}
+          <View style={styles.revisionList}>
+            {loading ? (
+              <ActivityIndicator color={theme.colors.secondary} />
+            ) : filteredTopics.length > 0 ? (
+              filteredTopics.map((topic) => (
+                <TouchableOpacity 
+                  key={topic.id} 
+                  onPress={() => handleStartComprehensiveTest(topic, topic.parentSubject)}
+                  style={[styles.topicRowWrapper, { shadowColor: topic.parentSubject?.color }]}
+                >
+                  <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicRow, { borderColor: theme.colors.glassBorder }]}>
+                    <View style={styles.topicMain}>
+                      <Text style={[styles.topicName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                        {topic.title}
+                      </Text>
+                      <Text style={[styles.topicSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                        {topic.parentSubject?.name} • Start Proficiency Test
+                      </Text>
+                    </View>
+                    <View style={styles.scoreInfo}>
+                      <Text style={[styles.scorePercent, { color: topic.parentSubject?.color || theme.colors.secondary }]}>
+                        {getTopicScore(topic.parentSubject?.id, topic.id)}%
+                      </Text>
+                      <Zap size={18} color={topic.parentSubject?.color || theme.colors.secondary} />
+                    </View>
+                  </BlurView>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginTop: 20 }}>
+                {subjects.length === 0 ? "Loading content..." : "No courses found matching your search."}
+              </Text>
+            )}
           </View>
 
           <View style={{ height: 120 }} />
@@ -198,56 +429,87 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
   },
-  streakSection: {
+  streakCardSection: {
     marginBottom: 25,
   },
-  streakBlur: {
-    padding: 20,
-    borderRadius: 24,
-    borderWidth: 1,
+  streakCardWrapper: {
+    width: '100%',
+    height: 160,
+    borderRadius: 28,
     overflow: 'hidden',
+    shadowColor: '#FF453A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 10,
   },
-  streakHeader: {
+  streakCard: {
+    flex: 1,
+    padding: 20,
+    borderWidth: 1,
+  },
+  streakContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
   },
-  streakLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+  streakInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  streakValue: {
-    fontSize: 28,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  flameCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  streakIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 15,
   },
-  weekContainer: {
+  streakTextContainer: {
+    justifyContent: 'center',
+  },
+  streakTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  streakSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  streakBadge: {
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  streakValue: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  streakDaysContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 10,
-  },
-  dayItem: {
+    paddingHorizontal: 0,
     alignItems: 'center',
-    gap: 8,
+    marginTop: 5,
   },
-  dayCircle: {
-    width: 24,
-    height: 24,
+  dayChip: {
+    width: (width - 80) / 7,
+    height: 55,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    gap: 4,
   },
-  dayText: {
-    fontSize: 12,
-    fontWeight: '700',
+  dayChipText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -309,6 +571,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+  },
+  subjectsContainer: {
+    paddingBottom: 15,
+    gap: 10,
+  },
+  subjectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  subjectChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   revisionList: {
     gap: 12,
   },
@@ -339,23 +631,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.6,
   },
-  topicStat: {
-    width: 80,
+  scoreInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  strengthLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    textAlign: 'right',
+  scorePercent: {
+    fontSize: 14,
+    fontWeight: '800',
   },
-  strengthBarBg: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 2,
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+  },
+  statCardWrapper: {
+    width: (width - 60) / 3,
+    height: 110,
+    borderRadius: 24,
+    overflow: 'visible',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  statCard: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    borderRadius: 24,
     overflow: 'hidden',
   },
-  strengthBarFill: {
-    height: '100%',
-    borderRadius: 2,
-  }
+  statIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '600',
+    opacity: 0.8,
+  },
+  liquidGlow: {
+    position: 'absolute',
+    bottom: -20,
+    right: -20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
 });

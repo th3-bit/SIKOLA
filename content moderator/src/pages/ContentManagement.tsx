@@ -14,10 +14,15 @@ import {
   ChevronRight,
   Search,
   Plus,
-  Wand2
+  Wand2,
+  X,
+  Save,
+  Clock
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { GlassInput } from "@/components/ui/GlassInput";
+import { ContentBuilder } from "@/components/ContentBuilder";
 
 interface Subject {
   id: string;
@@ -34,6 +39,7 @@ interface Lesson {
   id: string;
   title: string;
   topic_id: string;
+  duration?: number;
 }
 
 export const ContentManagement = () => {
@@ -42,10 +48,17 @@ export const ContentManagement = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+
+  // Creation State
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [showCourseModal, setShowCourseModal] = useState(false);
+  const [showTopicBuilder, setShowTopicBuilder] = useState(false);
+
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [newCourseTitle, setNewCourseTitle] = useState("");
+  const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -98,12 +111,67 @@ export const ContentManagement = () => {
 
   const handleDeleteLesson = async (id: string) => {
     const { error } = await supabase.from('lessons').delete().eq('id', id);
-    if (error) toast.error("Failed to delete lesson");
+    if (error) toast.error("Failed to delete topic");
     else {
       setLessons(lessons.filter(l => l.id !== id));
-      toast.success("Lesson deleted");
+      toast.success("Topic deleted");
     }
   };
+
+  const handleEditLesson = (lesson: Lesson) => {
+      setEditingLesson(lesson);
+      setShowTopicBuilder(true);
+  };
+
+  const handleCreateSubject = async () => {
+    if (!newSubjectName.trim()) return;
+    const { data, error } = await supabase.from('subjects').insert([{ name: newSubjectName, icon: 'BookOpen' }]).select();
+    if (error) toast.error("Error creating subject");
+    else {
+        setSubjects([...subjects, data[0]]);
+        setNewSubjectName("");
+        setShowSubjectModal(false);
+        toast.success("Subject created");
+    }
+  };
+
+  const handleCreateCourse = async () => {
+    if (!newCourseTitle.trim() || !selectedSubjectId) return;
+    const { data, error } = await supabase.from('topics').insert([{ title: newCourseTitle, subject_id: selectedSubjectId }]).select();
+    if (error) toast.error("Error creating course");
+    else {
+        setTopics([...topics, data[0]]);
+        setNewCourseTitle("");
+        setShowCourseModal(false);
+        toast.success("Course created");
+    }
+  };
+
+  if (showTopicBuilder && selectedSubjectId && selectedTopicId) {
+      const subject = subjects.find(s => s.id === selectedSubjectId) || { id: selectedSubjectId };
+      const topic = topics.find(t => t.id === selectedTopicId) || { id: selectedTopicId };
+      
+      return (
+        <div className="min-h-screen relative p-6">
+            <FloatingOrbs />
+            <div className="relative z-10 max-w-4xl mx-auto">
+                <GlassButton onClick={() => setShowTopicBuilder(false)} variant="ghost" className="mb-4">
+                    <ArrowLeft className="w-4 h-4 mr-2" /> Back to Explorer
+                </GlassButton>
+                <ContentBuilder 
+                    subject={subject} 
+                    topic={topic} // This is actually the Course
+                    initialData={editingLesson || undefined}
+                    onComplete={() => {
+                        setShowTopicBuilder(false);
+                        setEditingLesson(null);
+                        fetchLessons(selectedTopicId); // Refresh Topics list
+                    }} 
+                />
+            </div>
+        </div>
+      );
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -151,8 +219,22 @@ export const ContentManagement = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
               <h3 className="font-bold flex items-center gap-2"><BookMarked className="w-4 h-4 text-primary" /> Subjects</h3>
-              <span className="text-xs text-muted-foreground">{subjects.length} total</span>
+              <div className="flex items-center gap-2">
+                 <span className="text-xs text-muted-foreground">{subjects.length} total</span>
+                 <button onClick={() => setShowSubjectModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors"><Plus className="w-4 h-4 text-primary" /></button>
+              </div>
             </div>
+            
+            {showSubjectModal && (
+                <div className="glass-panel p-3 mb-4 animate-fade-down">
+                    <GlassInput autoFocus placeholder="Subject Name..." value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} className="mb-2 text-sm" />
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => setShowSubjectModal(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                        <button onClick={handleCreateSubject} className="text-xs font-bold text-primary hover:text-primary/80">Create</button>
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               {subjects.map((s) => (
                 <div 
@@ -178,16 +260,31 @@ export const ContentManagement = () => {
           {/* Topics Column */}
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold flex items-center gap-2"><Layers className="w-4 h-4 text-accent" /> Topics</h3>
-              <span className="text-xs text-muted-foreground">{topics.length} in subject</span>
+              <h3 className="font-bold flex items-center gap-2"><Layers className="w-4 h-4 text-accent" /> Courses</h3>
+              <div className="flex items-center gap-2">
+                 <span className="text-xs text-muted-foreground">{topics.length} in subject</span>
+                 {selectedSubjectId && <button onClick={() => setShowCourseModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors"><Plus className="w-4 h-4 text-accent" /></button>}
+              </div>
             </div>
+
+            {showCourseModal && (
+                <div className="glass-panel p-3 mb-4 animate-fade-down">
+                    <GlassInput autoFocus placeholder="Course Title..." value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} className="mb-2 text-sm" />
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => setShowCourseModal(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                        <button onClick={handleCreateCourse} className="text-xs font-bold text-accent hover:text-accent/80">Create</button>
+                    </div>
+                </div>
+            )}
+
+            <span className="text-xs text-muted-foreground hidden">Topics</span>
             {!selectedSubjectId ? (
               <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
                 Select a subject to view topics
               </div>
             ) : topics.length === 0 ? (
               <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                No topics in this subject
+                No courses in this subject
               </div>
             ) : (
               <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -202,7 +299,7 @@ export const ContentManagement = () => {
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }}
                         className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
-                        title="Delete topic"
+                        title="Delete course"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -216,16 +313,31 @@ export const ContentManagement = () => {
           {/* Lessons Column */}
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold flex items-center gap-2"><BookOpen className="w-4 h-4 text-secondary" /> Lessons</h3>
-              <span className="text-xs text-muted-foreground">{lessons.length} in topic</span>
+              <h3 className="font-bold flex items-center gap-2"><BookOpen className="w-4 h-4 text-secondary" /> Topics</h3>
+              <div className="flex items-center gap-2">
+                 {lessons.length > 0 && selectedTopicId && (
+                     <div className="flex items-center gap-1.5 bg-secondary/10 px-2 py-1 rounded-md border border-secondary/20">
+                        <Clock className="w-3 h-3 text-secondary" />
+                        <span className="text-xs font-mono text-secondary font-bold">
+                          {Math.floor(lessons.reduce((acc, l) => acc + (l.duration || 10), 0) / 60)}h {lessons.reduce((acc, l) => acc + (l.duration || 10), 0) % 60}m
+                        </span>
+                     </div>
+                 )}
+                 <span className="text-xs text-muted-foreground">{lessons.length} in course</span>
+                 {selectedTopicId && (
+                     <button onClick={() => setShowTopicBuilder(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Topic">
+                         <Plus className="w-4 h-4 text-secondary" />
+                     </button>
+                 )}
+              </div>
             </div>
             {!selectedTopicId ? (
               <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                Select a topic to view lessons
+                Select a course to view topics
               </div>
             ) : lessons.length === 0 ? (
               <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                No lessons in this topic
+                No topics here. Add one to start building content!
               </div>
             ) : (
               <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -235,12 +347,24 @@ export const ContentManagement = () => {
                     className="group glass-panel p-3 hover:bg-foreground/5 transition-all"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium truncate">{l.title}</span>
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-col gap-1 min-w-0">
+                          <span className="font-medium truncate">{l.title}</span>
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-secondary/70" /> {l.duration || 10} mins
+                          </span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                          onClick={() => handleEditLesson(l)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-accent transition-all"
+                          title="Edit topic"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button 
                           onClick={() => handleDeleteLesson(l.id)}
                           className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
-                          title="Delete lesson"
+                          title="Delete topic"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

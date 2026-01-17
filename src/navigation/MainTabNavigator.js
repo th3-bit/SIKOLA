@@ -125,7 +125,7 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen 
-        name="Practice" 
+        name="Test" 
         component={PracticeScreen}
         options={{
           tabBarIcon: ({ color, size }) => <PenTool color={color} size={size} />,

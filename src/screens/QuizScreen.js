@@ -5,49 +5,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, CheckCircle, X, Award, TrendingUp } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 
 const { width } = Dimensions.get('window');
 
 export default function QuizScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { lesson, subject } = route.params;
+  const { completeTopic } = useProgress();
+  // Safe params destructuring
+  const { 
+    lesson: initialLesson, 
+    subject, 
+    questions: passedQuestions, 
+    topic, 
+    isComprehensive 
+  } = route.params || {};
+
+  // Comprehensive test might not have a single 'lesson', so we use topic/subject
+  const lesson = initialLesson || topic || { name: 'Test', color: subject?.color || theme.colors.secondary };
+  const primaryColor = lesson.color || subject?.color || theme.colors.secondary;
+
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showResults, setShowResults] = useState(false);
 
-  // Mock quiz questions
-  const questions = [
-    {
-      question: `What is the fundamental concept in ${lesson.category}?`,
-      options: [
-        'The basic principle we studied',
-        'An advanced technique',
-        'A common misconception',
-        'A practice method'
-      ],
-      correctAnswer: 0,
-    },
-    {
-      question: 'How do you apply this concept in practice?',
-      options: [
-        'By memorizing formulas',
-        'By understanding the underlying logic',
-        'By skipping the basics',
-        'By guessing randomly'
-      ],
-      correctAnswer: 1,
-    },
-    {
-      question: 'Which of these is a key takeaway from the lesson?',
-      options: [
-        'Theory is more important than practice',
-        'Practice without understanding is sufficient',
-        'Both theory and practice are essential',
-        'Neither theory nor practice matters'
-      ],
-      correctAnswer: 2,
-    },
-  ];
+  // Use passed questions or empty array
+  const questions = passedQuestions || [];
+
+  if (questions.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: theme.colors.textPrimary }}>No questions found for this test.</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
+          <Text style={{ color: theme.colors.secondary }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const totalQuestions = questions.length;
   const currentQuestionData = questions[currentQuestion];
@@ -88,10 +82,17 @@ export default function QuizScreen({ route, navigation }) {
     };
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const score = calculateScore();
-    if (score.percentage >= 60) {
-      // Pass - go to learning content
+    if (isComprehensive) {
+      // Save the score for the topic
+      if (topic) {
+        await completeTopic(subject?.id, topic.id, score.percentage);
+      }
+      // Go back to the test/practice list
+      navigation.navigate('MainApp', { screen: 'Test' });
+    } else if (score.percentage >= 60) {
+      // Pass - go to learning content (normal lesson quiz)
       navigation.navigate('LearningContent', { lesson, subject });
     } else {
       // Fail - go back to lesson detail
@@ -157,10 +158,10 @@ export default function QuizScreen({ route, navigation }) {
                 </View>
 
                 {passed && (
-                  <View style={[styles.xpBadge, { backgroundColor: `${lesson.color}20` }]}>
-                    <Award color={lesson.color} size={20} />
-                    <Text style={[styles.xpText, { color: lesson.color, fontFamily: theme.typography.fontFamily }]}>
-                      +25 XP Earned
+                  <View style={[styles.xpBadge, { backgroundColor: `${primaryColor}20` }]}>
+                    <Award color={primaryColor} size={20} />
+                    <Text style={[styles.xpText, { color: primaryColor, fontFamily: theme.typography.fontFamily }]}>
+                      +{isComprehensive ? '50' : '25'} XP Earned
                     </Text>
                   </View>
                 )}
@@ -169,12 +170,12 @@ export default function QuizScreen({ route, navigation }) {
 
             {/* Action Buttons */}
             <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: passed ? lesson.color : theme.colors.textSecondary }]}
+              style={[styles.actionButton, { backgroundColor: passed ? primaryColor : theme.colors.textSecondary }]}
               onPress={handleContinue}
               activeOpacity={0.9}
             >
               <Text style={[styles.actionButtonText, { fontFamily: theme.typography.fontFamily }]}>
-                {passed ? 'Continue Learning' : 'Review Lesson'}
+                {isComprehensive ? 'Close Test' : (passed ? 'Continue Learning' : 'Review Lesson')}
               </Text>
             </TouchableOpacity>
 
@@ -213,15 +214,15 @@ export default function QuizScreen({ route, navigation }) {
 
           <View style={styles.headerInfo}>
             <Text style={[styles.headerTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-              Quick Quiz
+              {isComprehensive ? 'Comprehensive Test' : 'Quick Quiz'}
             </Text>
             <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
               Question {currentQuestion + 1} of {totalQuestions}
             </Text>
           </View>
 
-          <View style={[styles.progressCircle, { borderColor: lesson.color }]}>
-            <Text style={[styles.progressText, { color: lesson.color, fontFamily: theme.typography.fontFamily }]}>
+          <View style={[styles.progressCircle, { borderColor: primaryColor }]}>
+            <Text style={[styles.progressText, { color: primaryColor, fontFamily: theme.typography.fontFamily }]}>
               {currentQuestion + 1}/{totalQuestions}
             </Text>
           </View>
@@ -233,12 +234,12 @@ export default function QuizScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
         >
           {/* Question Card */}
-          <View style={[styles.questionCardWrapper, { shadowColor: lesson.color }]}>
+          <View style={[styles.questionCardWrapper, { shadowColor: primaryColor }]}>
             <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.questionCard, { borderColor: theme.colors.glassBorder }]}>
               <LinearGradient
                 colors={isDark 
-                  ? [`${lesson.color}30`, `${lesson.color}10`, 'transparent'] 
-                  : [`${lesson.color}20`, `${lesson.color}10`, `${lesson.color}05`]
+                  ? [`${primaryColor}30`, `${primaryColor}10`, 'transparent'] 
+                  : [`${primaryColor}20`, `${primaryColor}10`, `${primaryColor}05`]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -254,6 +255,7 @@ export default function QuizScreen({ route, navigation }) {
                   const isSelected = selectedAnswer === index;
                   const showCorrect = isAnswered && index === currentQuestionData.correctAnswer;
                   const showWrong = isAnswered && isSelected && !isCorrect;
+                  const label = String.fromCharCode(65 + index);
 
                   return (
                     <TouchableOpacity
@@ -269,9 +271,22 @@ export default function QuizScreen({ route, navigation }) {
                       onPress={() => handleAnswerSelect(index)}
                       disabled={isAnswered}
                     >
-                      <Text style={[styles.optionText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                        {option}
-                      </Text>
+                      <View style={styles.optionContent}>
+                        <View style={[
+                          styles.optionLabel, 
+                          { 
+                            backgroundColor: showCorrect ? '#10B981' : showWrong ? '#EF4444' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                            borderColor: showCorrect ? '#10B981' : showWrong ? '#EF4444' : theme.colors.glassBorder
+                          }
+                        ]}>
+                          <Text style={[styles.optionLabelText, { color: (showCorrect || showWrong) ? '#FFF' : theme.colors.textPrimary }]}>
+                            {label}
+                          </Text>
+                        </View>
+                        <Text style={[styles.optionText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                          {option}
+                        </Text>
+                      </View>
                       {showCorrect && <CheckCircle color="#10B981" size={24} />}
                       {showWrong && <X color="#EF4444" size={24} />}
                     </TouchableOpacity>
@@ -307,7 +322,7 @@ export default function QuizScreen({ route, navigation }) {
             )}
 
             <TouchableOpacity 
-              style={[styles.navButton, styles.nextButton, { backgroundColor: lesson.color, marginLeft: currentQuestion > 0 ? 12 : 0 }]}
+              style={[styles.navButton, styles.nextButton, { backgroundColor: primaryColor, marginLeft: currentQuestion > 0 ? 12 : 0 }]}
               onPress={handleNext}
             >
               <Text style={[styles.navButtonText, { color: '#FFFFFF', fontFamily: theme.typography.fontFamily }]}>
@@ -397,13 +412,33 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     gap: 12,
+    flexDirection: 'column',
   },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 18,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 20,
+    width: '100%',
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  optionLabel: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  optionLabelText: {
+    fontSize: 14,
+    fontWeight: '900',
   },
   optionText: {
     fontSize: 16,
@@ -483,6 +518,7 @@ const styles = StyleSheet.create({
   scoreValue: {
     fontSize: 64,
     fontWeight: '800',
+    marginBottom: 8,
   },
   scoreLabel: {
     fontSize: 16,

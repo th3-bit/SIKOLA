@@ -147,6 +147,12 @@ export default function ContentCreatorScreen({ navigation }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [pdfUrl, setPdfUrl] = useState('');
 
+  // Examples State
+  const [examples, setExamples] = useState([]);
+  const [exTitle, setExTitle] = useState('');
+  const [exProblem, setExProblem] = useState('');
+  const [exSolution, setExSolution] = useState('');
+
   // Quiz Form State
   const [quizQuestion, setQuizQuestion] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
@@ -157,17 +163,17 @@ export default function ContentCreatorScreen({ navigation }) {
   }, []);
 
   const fetchSubjects = async () => {
-    const { data, error } = await supabase.from('subjects').select('*').order('name');
+    const { data, error } = await supabase.from('subjects').select('*').order('id'); // Creation order
     if (data) setSubjectsList(data);
   };
 
   const fetchTopics = async (subjectId) => {
-    const { data, error } = await supabase.from('topics').select('*').eq('subject_id', subjectId).order('title');
+    const { data, error } = await supabase.from('topics').select('*').eq('subject_id', subjectId).order('id'); // Creation Order
     if (data) setTopicsList(data);
   };
 
   const fetchLessons = async (topicId) => {
-    const { data, error } = await supabase.from('lessons').select('*').eq('topic_id', topicId).order('title');
+    const { data, error } = await supabase.from('lessons').select('*').eq('topic_id', topicId).order('id'); // Creation Order
     if (data) setLessonsList(data);
   };
 
@@ -227,13 +233,26 @@ export default function ContentCreatorScreen({ navigation }) {
         const { error } = await supabase.from('lessons').insert([{
           topic_id: selectedTopic,
           title: lessonTitle,
-          content: lessonContent,
-          notes: lessonNotes,
           video_url: videoUrl,
-          pdf_url: pdfUrl
+          pdf_url: pdfUrl,
+          content: JSON.stringify([
+            // Slide 1: Big Title
+            { type: 'intro', title: lessonTitle, content: 'Welcome to this lesson! Tap next to begin.' },
+            // Slide 2: Lesson Goal
+            { type: 'content', title: 'What you will learn', content: lessonContent.substring(0, 200) + (lessonContent.length > 200 ? '...' : '') },
+            // Slide 3: Core Content
+            { type: 'content', title: 'Lesson Explanation', content: lessonContent },
+            // Examples (Each on its own slide)
+            ...examples.map(ex => ({
+              type: 'content',
+              isExample: true,
+              title: ex.title,
+              content: `${ex.problem}\n\nSolution:\n${ex.solution}\n\n💡 Access more examples via the bulb icon.`
+            }))
+          ])
         }]);
         if (error) throw error;
-        Alert.alert('Success ✨', 'Lesson saved!');
+        Alert.alert('Success ✨', 'Lesson saved with refined 4-step flow!');
         setLessonTitle('');
         setLessonContent('');
         setLessonNotes('');
@@ -276,7 +295,7 @@ export default function ContentCreatorScreen({ navigation }) {
         placeholder="Choose Father Subject"
       />
       <GlassInput 
-        label="Topic Title" 
+        label="Course Title" 
         placeholder="e.g. Differentiation Rules" 
         value={topicTitle}
         onChangeText={setTopicTitle}
@@ -302,7 +321,7 @@ export default function ContentCreatorScreen({ navigation }) {
         placeholder="Pick Subject"
       />
       <GlassPicker 
-        label="Select Topic" 
+        label="Select Course" 
         items={topicsList} 
         value={selectedTopic} 
         onValueChange={(val) => {
@@ -311,7 +330,7 @@ export default function ContentCreatorScreen({ navigation }) {
         }} 
         theme={theme} 
         isDark={isDark} 
-        placeholder="Pick Topic"
+        placeholder="Pick Course"
       />
       <GlassInput 
         label="Lesson Title" 
@@ -368,6 +387,81 @@ export default function ContentCreatorScreen({ navigation }) {
         isDark={isDark}
         multiline={true}
       />
+    </Animated.View>
+  );
+
+  const handleAddExample = () => {
+    if (!exTitle || !exProblem || !exSolution) {
+      Alert.alert('Missing Info', 'Please fill in title, problem and solution.');
+      return;
+    }
+    setExamples([...examples, { title: exTitle, problem: exProblem, solution: exSolution }]);
+    setExTitle('');
+    setExProblem('');
+    setExSolution('');
+  };
+
+  const renderExamplesForm = () => (
+    <Animated.View style={styles.formContainer}>
+      <GlassPicker 
+        label="Select Lesson" 
+        items={lessonsList} 
+        value={selectedLesson} 
+        onValueChange={setSelectedLesson} 
+        theme={theme} 
+        isDark={isDark} 
+        placeholder="Assign to Lesson"
+      />
+      
+      <View style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, gap: 15 }}>
+        <Text style={[styles.inputLabel, { color: theme.colors.secondary }]}>Add New Example</Text>
+        <GlassInput 
+          label="Example Title" 
+          placeholder="e.g. Solving for X" 
+          value={exTitle}
+          onChangeText={setExTitle}
+          theme={theme}
+          isDark={isDark}
+          icon={Tag}
+        />
+        <GlassInput 
+          label="Problem" 
+          placeholder="The math problem or scenario..." 
+          value={exProblem}
+          onChangeText={setExProblem}
+          theme={theme}
+          isDark={isDark}
+          multiline={true}
+        />
+        <GlassInput 
+          label="Solution" 
+          placeholder="Step-by-step solution..." 
+          value={exSolution}
+          onChangeText={setExSolution}
+          theme={theme}
+          isDark={isDark}
+          multiline={true}
+        />
+        <TouchableOpacity 
+          onPress={handleAddExample}
+          style={{ backgroundColor: `${theme.colors.secondary}20`, padding: 15, borderRadius: 15, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.secondary }}
+        >
+          <Text style={{ color: theme.colors.secondary, fontWeight: 'bold' }}>+ Add to Lesson</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Current Examples ({examples.length})</Text>
+      {examples.map((ex, idx) => (
+        <View key={idx} style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontWeight: 'bold' }}>{ex.title}</Text>
+            <Text numberOfLines={1} style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{ex.problem.substring(0, 40)}...</Text>
+          </View>
+          <TouchableOpacity onPress={() => setExamples(examples.filter((_, i) => i !== idx))}>
+            <Trash2 size={18} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+      ))}
     </Animated.View>
   );
 
@@ -448,8 +542,9 @@ export default function ContentCreatorScreen({ navigation }) {
             {/* Tab Swiper */}
             <View style={styles.tabContainer}>
                <TabButton active={activeTab === 'subject'} label="Sub" icon={Layout} theme={theme} onPress={() => setActiveTab('subject')} />
-               <TabButton active={activeTab === 'topic'} label="Topic" icon={Tag} theme={theme} onPress={() => setActiveTab('topic')} />
+               <TabButton active={activeTab === 'topic'} label="Course" icon={Tag} theme={theme} onPress={() => setActiveTab('topic')} />
                <TabButton active={activeTab === 'lesson'} label="Lesson" icon={BookOpen} theme={theme} onPress={() => setActiveTab('lesson')} />
+               <TabButton active={activeTab === 'example'} label="Ex" icon={Lightbulb} theme={theme} onPress={() => setActiveTab('example')} />
                <TabButton active={activeTab === 'quiz'} label="Quiz" icon={HelpCircle} theme={theme} onPress={() => setActiveTab('quiz')} />
             </View>
 
@@ -492,6 +587,7 @@ export default function ContentCreatorScreen({ navigation }) {
             )}
             {activeTab === 'topic' && renderTopicForm()}
             {activeTab === 'lesson' && renderLessonForm()}
+            {activeTab === 'example' && renderExamplesForm()}
             {activeTab === 'quiz' && renderQuizForm()}
 
             <View style={{ height: 100 }} />

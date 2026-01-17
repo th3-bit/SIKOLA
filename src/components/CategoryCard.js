@@ -33,7 +33,7 @@ export default function CategoryCard({ category, onPress }) {
           {category.name}
         </Text>
         <Text style={[styles.count, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-          {category.lessonCount} lessons
+          {category.topicCount} topics
         </Text>
 
         <View style={[styles.glow, { backgroundColor: category.color, opacity: isDark ? 0.15 : 0.2 }]} />

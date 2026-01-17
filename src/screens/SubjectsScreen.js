@@ -6,65 +6,32 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Dimensions, 
-  TextInput,
-  Image,
-  ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { 
-  Search, 
-  Filter, 
   Calculator, 
   Beaker, 
   TrendingUp, 
-  Palette, 
   Code, 
   Globe, 
   ChevronRight,
-  Star,
   BookOpen,
   Briefcase,
-  Users,
   Scale
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import GlassHeader from '../components/GlassHeader';
 import { supabase } from '../lib/supabase';
+import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
 
-// Icon mapping for different subjects
-const subjectIcons = {
-  'Mathematics': Calculator,
-  'English': BookOpen,
-  'Biology': Beaker,
-  'Chemistry': Beaker,
-  'Physics': Beaker,
-  'Geography': Globe,
-  'History': BookOpen,
-  'Economics': TrendingUp,
-  'Entrepreneurship / Business Studies': Briefcase,
-  'ICT / Computer Studies': Code,
-  'Civic Education': Scale,
-};
 
-// Color mapping for different subjects
-const subjectColors = {
-  'Mathematics': '#FACC15',
-  'English': '#3B82F6',
-  'Biology': '#10B981',
-  'Chemistry': '#EC4899',
-  'Physics': '#8B5CF6',
-  'Geography': '#14B8A6',
-  'History': '#F97316',
-  'Economics': '#6366F1',
-  'Entrepreneurship / Business Studies': '#EF4444',
-  'ICT / Computer Studies': '#22C55E',
-  'Civic Education': '#A855F7',
-};
 
 export default function SubjectsScreen({ navigation, route }) {
   const { theme, isDark } = useTheme();
@@ -74,19 +41,25 @@ export default function SubjectsScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Get route params safely
+  const params = route.params || {};
+  const { selectingForSubscription, plan } = params;
+
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     fetchSubjects().then(() => setRefreshing(false));
   }, []);
 
+  const { courseProgress } = useProgress();
+
   useEffect(() => {
     fetchSubjects();
-  }, []);
+  }, [courseProgress]); 
 
   const fetchSubjects = async () => {
     try {
       setLoading(true);
-      // Fetch subjects and their topics in a single query
+      
       const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select(`
@@ -94,7 +67,8 @@ export default function SubjectsScreen({ navigation, route }) {
           topics (
             id,
             title,
-            subject_id
+            subject_id,
+            lessons (id)
           )
         `)
         .order('name');
@@ -103,38 +77,53 @@ export default function SubjectsScreen({ navigation, route }) {
 
       const subjectsMap = new Map();
       
-      subjectsData.forEach(subject => {
-        const normalizedName = subject.name.charAt(0).toUpperCase() + subject.name.slice(1).toLowerCase();
-        const icon = subjectIcons[normalizedName] || BookOpen;
-        const color = subjectColors[normalizedName] || '#8B5CF6';
-        
-        const formattedTopic = (subject.topics || []).map(topic => ({
-          id: topic.id,
-          title: topic.title,
-          count: '0 Lessons',
-          progress: 0
-        })).sort((a, b) => a.title.localeCompare(b.title));
+      if (subjectsData) {
+        subjectsData.forEach(subject => {
+            const style = getSubjectStyle(subject.name);
+            const icon = style.icon;
+            const color = style.color;
+            
+            const formattedTopic = (subject.topics || []).map(topic => {
+              // Calculate Lesson Count safely
+              const lessonCount = topic.lessons ? topic.lessons.length : 0;
+              
+              // Calculate Progress
+              let progress = 0;
+              const topicState = courseProgress[topic.id];
+              if (topicState?.completed) {
+                progress = 100;
+              } else if (topicState?.score) {
+                progress = topicState.score;
+              }
 
-        if (subjectsMap.has(normalizedName)) {
-           // Merge topics into existing subject
-           const existing = subjectsMap.get(normalizedName);
-           existing.topics = [...existing.topics, ...formattedTopic];
-        } else {
-           subjectsMap.set(normalizedName, {
-             id: subject.id, // Keep the first ID found
-             name: normalizedName,
-             icon,
-             color,
-             category: 'Academic',
-             topics: formattedTopic
-           });
-        }
-      });
+              return {
+                id: topic.id,
+                title: topic.title,
+                count: `${lessonCount} Lessons`,
+                progress: progress
+              };
+            }).sort((a, b) => a.title.localeCompare(b.title));
+
+            if (subjectsMap.has(style.name)) {
+               const existing = subjectsMap.get(style.name);
+               existing.topics = [...existing.topics, ...formattedTopic];
+            } else {
+               subjectsMap.set(style.name, {
+                 id: subject.id,
+                 name: style.name,
+                 icon,
+                 color,
+                 category: 'Academic',
+                 topics: formattedTopic
+               });
+            }
+          });
+      }
 
       const formattedSubjects = Array.from(subjectsMap.values());
 
       setSubjects(formattedSubjects);
-      if (formattedSubjects.length > 0) {
+      if (formattedSubjects.length > 0 && !selectedSubject) {
         setSelectedSubject(formattedSubjects[0]);
       }
     } catch (error) {
@@ -143,8 +132,6 @@ export default function SubjectsScreen({ navigation, route }) {
       setLoading(false);
     }
   };
-
-  const { selectingForSubscription, plan } = route.params || {};
 
   const TopicCard = ({ topic, color }) => (
     <TouchableOpacity 
@@ -189,7 +176,10 @@ export default function SubjectsScreen({ navigation, route }) {
       />
       
       <SafeAreaView style={styles.safeArea}>
-        <GlassHeader />
+        <GlassHeader 
+          showSearch={true} 
+          onSearchPress={() => navigation.navigate('Search')}
+        />
         
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -201,7 +191,7 @@ export default function SubjectsScreen({ navigation, route }) {
         ) : subjects.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-              No subjects available yet. Teachers can add subjects from the Content Moderator.
+              No subjects available yet.
             </Text>
           </View>
         ) : (
@@ -213,7 +203,7 @@ export default function SubjectsScreen({ navigation, route }) {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textPrimary} />
             }
           >
-            <View style={styles.headerTitleSection}>
+             <View style={styles.headerTitleSection}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <View>
                   <Text style={[styles.mainTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
@@ -236,7 +226,6 @@ export default function SubjectsScreen({ navigation, route }) {
               </View>
             </View>
 
-            {/* Subject Selection (Horizontal Scroll like the image) */}
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false} 
@@ -244,8 +233,7 @@ export default function SubjectsScreen({ navigation, route }) {
             >
               {subjects
                 .filter(sub => 
-                  sub.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  (sub.category && sub.category.toLowerCase().includes(searchQuery.toLowerCase()))
+                  sub.name.toLowerCase().includes(searchQuery.toLowerCase())
                 )
                 .map((sub) => (
                 <TouchableOpacity
@@ -282,7 +270,6 @@ export default function SubjectsScreen({ navigation, route }) {
 
             {selectedSubject && (
               <>
-                {/* Selected Subject Header */}
                 <View style={styles.topicHeaderSection}>
                   <Text style={[styles.topicHeaderTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     {selectedSubject.name} Topics
@@ -294,7 +281,6 @@ export default function SubjectsScreen({ navigation, route }) {
                   </View>
                 </View>
 
-                {/* Topics Grid */}
                 <View style={styles.topicsGrid}>
                   {selectedSubject.topics.length > 0 ? (
                     selectedSubject.topics.map((topic) => (

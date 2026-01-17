@@ -24,6 +24,23 @@ export default function LearningContentScreen({ route, navigation }) {
   // content parsing
   const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
 
+  // Safety check for empty slides
+  if (!slides || !Array.isArray(slides) || slides.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+         <Text style={{ color: theme.colors.textPrimary, fontSize: 18, textAlign: 'center' }}>
+            No content available for this lesson.
+         </Text>
+         <TouchableOpacity 
+           onPress={() => navigation.goBack()}
+           style={{ marginTop: 20, padding: 12, backgroundColor: primaryColor, borderRadius: 12 }}
+         >
+            <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Go Back</Text>
+         </TouchableOpacity>
+      </View>
+    );
+  }
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showXPModal, setShowXPModal] = useState(false);
@@ -46,13 +63,35 @@ export default function LearningContentScreen({ route, navigation }) {
   const slideAnim = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef(null);
 
+  // Aggregated Study Notes for the Modal
+  const aggregatedNotes = React.useMemo(() => {
+    const coreContent = (slides || [])
+      .filter(s => s.type === 'content' && !s.isExample && !(s.title && s.title.toLowerCase().includes('example')))
+      .map(s => `## ${s.title}\n${s.content}`)
+      .join('\n\n');
+      
+    const examples = (slides || [])
+      .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')))
+      .map(s => `## ${s.title}\n${s.content}`)
+      .join('\n\n');
+      
+    let total = '';
+    if (coreContent) total += `CORE CONCEPTS\n\n${coreContent}\n\n`;
+    if (examples) {
+      if (total) total += `───────────────────\n\n`;
+      total += `PRACTICAL EXAMPLES\n\n${examples}`;
+    }
+    
+    return total || "No detailed notes provided for this lesson yet.";
+  }, [slides]);
+
   const currentSlideData = slides[currentSlide];
   const isLastSlide = currentSlide === slides.length - 1;
   const progress = ((currentSlide + 1) / slides.length) * 100;
 
   useEffect(() => {
     // Reset video loading state when slide changes
-    if (currentSlideData.type === 'video') {
+    if (currentSlideData && currentSlideData.type === 'video') {
       setIsVideoLoading(true);
     }
     
@@ -95,11 +134,11 @@ export default function LearningContentScreen({ route, navigation }) {
   const finishLesson = () => {
     // Calculate score
     let correct = 0;
-    let totalQuiz = 0;
+    const quizSlides = slides.filter(s => s.type === 'quiz');
+    const totalQuiz = quizSlides.length;
     
     slides.forEach((slide, index) => {
       if (slide.type === 'quiz') {
-        totalQuiz++;
         if (selectedAnswers[index] === slide.correctAnswer) {
           correct++;
         }
@@ -112,11 +151,12 @@ export default function LearningContentScreen({ route, navigation }) {
 
     if (percentage >= 70) {
       setShowXPModal(true);
-      completeTopic(subject.id, topic.id, percentage);
       
-      // Log learning session
-      const durationMinutes = Math.max(1, Math.round((Date.now() - startTime) / 60000));
-      logSession(subject.id, durationMinutes);
+      // Calculate actual duration
+      const durationNum = Math.max(1, Math.round((Date.now() - startTime) / 60000));
+      
+      // completeTopic now handles session logging internally
+      completeTopic(subject.id, topic.id, percentage, durationNum);
       
       Animated.spring(xpScale, {
         toValue: 1,
@@ -129,21 +169,7 @@ export default function LearningContentScreen({ route, navigation }) {
     }
   };
 
-  const logSession = async (subjectId, duration) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      await supabase.from('learning_sessions').insert([{
-        user_id: user.id,
-        subject_id: subjectId,
-        duration_minutes: duration,
-        started_at: new Date(startTime).toISOString()
-      }]);
-    } catch (error) {
-      console.error('Error logging session:', error);
-    }
-  };
 
   const handleRetry = () => {
     setRetryModalVisible(false);
@@ -224,16 +250,36 @@ export default function LearningContentScreen({ route, navigation }) {
     );
   };
 
-  const renderTextContent = () => (
-    <View style={styles.contentSlide}>
-      <Text style={[styles.slideTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-        {currentSlideData.title}
-      </Text>
-      <Text style={[styles.slideContent, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-        {currentSlideData.content}
-      </Text>
-    </View>
-  );
+  const renderTextContent = () => {
+    const isIntro = currentSlideData.type === 'intro';
+    
+    return (
+      <View style={[styles.contentSlide, isIntro && { justifyContent: 'center', alignItems: 'center', minHeight: 400 }]}>
+        <Text style={[
+          styles.slideTitle, 
+          { color: isIntro ? primaryColor : theme.colors.textPrimary, fontFamily: theme.typography.fontFamily },
+          isIntro && { textAlign: 'center', fontSize: 32, marginBottom: 30 }
+        ]}>
+          {currentSlideData.title}
+        </Text>
+        <Text style={[
+          styles.slideContent, 
+          { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily },
+          isIntro && { textAlign: 'center', fontSize: 20, opacity: 0.8 }
+        ]}>
+          {currentSlideData.content}
+        </Text>
+        
+        {currentSlideData.content.includes('💡') && (
+          <View style={{ marginTop: 30, padding: 15, backgroundColor: `${primaryColor}10`, borderRadius: 15, borderWidth: 1, borderColor: `${primaryColor}30`, borderStyle: 'dashed' }}>
+            <Text style={{ color: primaryColor, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>
+              PRO TIP: Tap the bulb icon (top right) anytime!
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderQuiz = () => {
     const selectedAnswer = selectedAnswers[currentSlide];
@@ -250,6 +296,7 @@ export default function LearningContentScreen({ route, navigation }) {
             const isSelected = selectedAnswer === index;
             const showCorrect = isAnswered && index === currentSlideData.correctAnswer;
             const showWrong = isAnswered && isSelected && !isCorrect;
+            const label = String.fromCharCode(65 + index);
 
             return (
               <TouchableOpacity
@@ -265,9 +312,22 @@ export default function LearningContentScreen({ route, navigation }) {
                 onPress={() => !isAnswered && handleAnswerSelect(index)}
                 disabled={isAnswered}
               >
-                <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
-                {showCorrect && <CheckCircle color="#10B981" size={24} />}
-                {showWrong && <X color="#EF4444" size={24} />}
+                <View style={styles.optionContent}>
+                   <View style={[
+                     styles.optionLabel, 
+                     { 
+                       backgroundColor: showCorrect ? '#10B981' : showWrong ? '#EF4444' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                       borderColor: showCorrect ? '#10B981' : showWrong ? '#EF4444' : theme.colors.glassBorder
+                     }
+                   ]}>
+                      <Text style={[styles.optionLabelText, { color: (showCorrect || showWrong) ? '#FFF' : theme.colors.textPrimary }]}>
+                        {label}
+                      </Text>
+                   </View>
+                   <Text style={[styles.optionText, { color: theme.colors.textPrimary }]}>{option}</Text>
+                </View>
+                {showCorrect && <CheckCircle color="#10B981" size={22} />}
+                {showWrong && <X color="#EF4444" size={22} />}
               </TouchableOpacity>
             );
           })}
@@ -474,22 +534,50 @@ export default function LearningContentScreen({ route, navigation }) {
         </View>
       </Modal>
 
-      {/* Examples Modal (Simple Version for now) */}
-      <Modal visible={showExamples} animationType="slide">
-        <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      {/* Examples Modal */}
+      <Modal visible={showExamples} animationType="slide" transparent>
+        <View style={[styles.container, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <BlurView intensity={80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.header}>
-              <Text style={[styles.slideTitle, { flex: 1, marginBottom: 0 }]}>Quick Tips</Text>
-              <TouchableOpacity onPress={() => setShowExamples(false)}>
-                <X color={theme.colors.textPrimary} size={30} />
+               <View style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}>
+                  <Lightbulb color={primaryColor} size={20} />
+               </View>
+              <Text style={[styles.headerTitle, { flex: 1, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, marginLeft: 10 }]}>Examples & Tips</Text>
+              <TouchableOpacity 
+                onPress={() => setShowExamples(false)}
+                style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+              >
+                <X color={theme.colors.textPrimary} size={24} />
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={styles.content}>
-               <BlurView intensity={20} style={styles.contentCard}>
-                  <Text style={[styles.slideContent, { color: theme.colors.textSecondary }]}>
-                    Stay focused and take your time with each concept. Mastery comes with practice!
-                  </Text>
-               </BlurView>
+
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+               {slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).length > 0 ? (
+                 slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).map((ex, idx) => (
+                   <View key={idx} style={[styles.contentCardWrapper, { marginBottom: 20, shadowColor: primaryColor }]}>
+                     <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.contentCard, { minHeight: 0, padding: 24, borderColor: theme.colors.glassBorder }]}>
+                        <Text style={[styles.slideTitle, { fontSize: 20, color: primaryColor, marginBottom: 12, fontFamily: theme.typography.fontFamily }]}>
+                          {ex.title}
+                        </Text>
+                        <Text style={[styles.slideContent, { fontSize: 15, color: theme.colors.textPrimary, lineHeight: 24, fontFamily: theme.typography.fontFamily }]}>
+                          {ex.content}
+                        </Text>
+                     </BlurView>
+                   </View>
+                 ))
+               ) : (
+                 <View style={{ alignItems: 'center', marginTop: 100 }}>
+                    <Lightbulb size={60} color={theme.colors.textSecondary} style={{ opacity: 0.3, marginBottom: 20 }} />
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 16, textAlign: 'center', opacity: 0.7 }}>
+                       No specific examples added for this lesson.
+                    </Text>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 10, paddingHorizontal: 40 }}>
+                       Check the core concept slides for general theory and explanations!
+                    </Text>
+                 </View>
+               )}
+               <View style={{ height: 40 }} />
             </ScrollView>
           </SafeAreaView>
         </View>
@@ -503,7 +591,7 @@ export default function LearningContentScreen({ route, navigation }) {
       <NotesModal 
         visible={showNotes} 
         onClose={() => setShowNotes(false)}
-        notes={currentSlideData.notes}
+        notes={aggregatedNotes}
         pdfUrl={currentSlideData.pdfUrl}
       />
     </View>
@@ -611,13 +699,35 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 24,
   },
-  optionsContainer: { gap: 12 },
+  optionsContainer: { 
+    gap: 12,
+    flexDirection: 'column'
+  },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    padding: 16,
+    borderRadius: 20,
+    width: '100%'
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  optionLabel: {
+    width: 36,
+    height: 36,
     borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  optionLabelText: {
+    fontSize: 14,
+    fontWeight: '900',
   },
   optionText: { fontSize: 16, fontWeight: '600', flex: 1 },
   navigationContainer: {

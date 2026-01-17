@@ -3,7 +3,7 @@ import { GlassCard } from "./ui/GlassCard";
 import { GlassInput } from "./ui/GlassInput";
 import { GlassTextarea } from "./ui/GlassTextarea";
 import { GlassButton } from "./ui/GlassButton";
-import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2, Wand2 } from "lucide-react";
+import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2, Wand2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { generateLessonContent, getOpenAIConfig } from "@/lib/openai";
@@ -48,7 +48,8 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
   // 2. video: YouTube Link
   // 3. examples: Add examples
   // 4. questions: Add questions
-  const [wizardStep, setWizardStep] = useState<"info" | "video" | "examples" | "questions" | "complete">("info");
+  // 5. duration: Time validation
+  const [wizardStep, setWizardStep] = useState<"info" | "video" | "examples" | "questions" | "duration" | "complete">("info");
 
   // Step 1: Info
   const [title, setTitle] = useState(initialData?.title || "");
@@ -107,6 +108,9 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
   const [qAnswers, setQAnswers] = useState(["", "", "", ""]);
   const [qCorrectIndex, setQCorrectIndex] = useState<number | null>(null);
 
+  // Step 5: Duration
+  const [duration, setDuration] = useState<number>(initialData?.duration || 10);
+
   const handleAiGenerate = async () => {
     const config = getOpenAIConfig();
     if (!config || !config.apiKey) {
@@ -116,7 +120,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
 
     setAiGenerating(true);
     try {
-      const data = await generateLessonContent(topic.title || "Subject Lesson", config);
+      const data = await generateLessonContent(topic.title || "Course Topic", config);
       
       if (data.title) setTitle(data.title);
       if (data.intro) setIntro(data.intro);
@@ -164,6 +168,8 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       setWizardStep("examples");
     } else if (wizardStep === "examples") {
       setWizardStep("questions");
+    } else if (wizardStep === "questions") {
+      setWizardStep("duration");
     }
   };
 
@@ -277,7 +283,8 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
         topic_id: topic.id,
         title: title,
         content: JSON.stringify(slides),
-        video_url: videoLink
+        video_url: videoLink,
+        duration: duration
       };
 
       let error;
@@ -299,7 +306,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       if (error) throw error;
 
       setWizardStep("complete");
-      toast.success(initialData?.id ? "Lesson updated successfully!" : "Lesson saved successfully!");
+      toast.success(initialData?.id ? "Topic updated successfully!" : "Topic saved successfully!");
     } catch (error: any) {
       toast.error(`Error saving: ${error.message}`);
     } finally {
@@ -318,6 +325,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
     setVideoLink("");
     setExamples([]);
     setQuestions([]);
+    setDuration(10);
     setWizardStep("info");
   };
 
@@ -331,7 +339,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
           </h2>
           <p className="text-muted-foreground mt-1">
             {initialData ? 'Editing content for ' : 'Build content for '} 
-            <span className="font-medium text-foreground">{topic.title}</span>
+            <span className="font-medium text-foreground">Course: {topic.title}</span>
           </p>
         </div>
         <GlassButton 
@@ -355,13 +363,15 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       {/* Progress Steps */}
       {wizardStep !== "complete" && (
         <div className="glass-panel p-4 rounded-xl flex items-center justify-between text-sm">
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'info' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>1. Lesson Info</div>
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'info' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>1. Topic</div>
            <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
            <div className={`px-3 py-1 rounded-lg ${wizardStep === 'video' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>2. Video</div>
            <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
            <div className={`px-3 py-1 rounded-lg ${wizardStep === 'examples' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>3. Examples</div>
            <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'questions' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>4. Questions</div>
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'questions' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>4. Quiz</div>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
+           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'duration' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>5. Time</div>
         </div>
       )}
 
@@ -370,9 +380,9 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
           
           {wizardStep === "info" && (
             <>
-              <h3 className="text-lg font-semibold flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary"/> Step 1: Lesson Overview</h3>
-              <GlassInput label="Lesson Title" placeholder="e.g. Introduction to Algebra" value={title} onChange={e => setTitle(e.target.value)} />
-              <GlassTextarea label="What you will learn (Goal/Intro)" placeholder="Briefly explain the goal of this lesson..." value={intro} onChange={e => setIntro(e.target.value)} />
+              <h3 className="text-lg font-semibold flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary"/> Step 1: Topic Overview</h3>
+              <GlassInput label="Topic Title" placeholder="e.g. Introduction to Algebra" value={title} onChange={e => setTitle(e.target.value)} />
+              <GlassTextarea label="What you will learn (Goal/Intro)" placeholder="Briefly explain the goal of this topic..." value={intro} onChange={e => setIntro(e.target.value)} />
               <GlassTextarea label="Core Content (Explanation)" placeholder="Detailed explanation of the concept..." className="min-h-[150px]" value={coreContent} onChange={e => setCoreContent(e.target.value)} />
               <GlassButton variant="primary" onClick={handleNextStep} className="w-full">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
             </>
@@ -462,10 +472,10 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
                   <Check className="w-8 h-8 text-green-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">{initialData ? 'Lesson Updated Successfully!' : 'Lesson Saved Successfully!'}</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-2">{initialData ? 'Topic Updated Successfully!' : 'Topic Saved Successfully!'}</h3>
                 <p className="text-muted-foreground mb-6">Your content is now live on the mobile app.</p>
                 <GlassButton variant="primary" onClick={handleStartNew} className="w-full">
-                  <Plus className="w-4 h-4 mr-2" /> {initialData ? 'Return to Dashboard' : 'Build Another Lesson'}
+                  <Plus className="w-4 h-4 mr-2" /> {initialData ? 'Return to Courses' : 'Build Another Topic'}
                 </GlassButton>
               </div>
           )}

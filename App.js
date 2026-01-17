@@ -19,17 +19,20 @@ import PaymentScreen from './src/screens/PaymentScreen';
 import PersonalInfoScreen from './src/screens/PersonalInfoScreen';
 import LearningProgressScreen from './src/screens/LearningProgressScreen';
 import CourseCompletionScreen from './src/screens/CourseCompletionScreen';
+import SearchScreen from './src/screens/SearchScreen';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { ProgressProvider } from './src/context/ProgressContext';
 
 const Stack = createNativeStackNavigator();
 
+import ErrorBoundary from './src/components/ErrorBoundary';
+
 function AppNavigator() {
   const { isDark } = useTheme();
   
   return (
-    <>
+    <ErrorBoundary>
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Onboarding">
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -50,8 +53,9 @@ function AppNavigator() {
         <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
         <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
         <Stack.Screen name="CourseCompletion" component={CourseCompletionScreen} />
+        <Stack.Screen name="Search" component={SearchScreen} />
       </Stack.Navigator>
-    </>
+    </ErrorBoundary>
   );
 }
 

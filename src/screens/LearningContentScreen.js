@@ -553,9 +553,9 @@ export default function LearningContentScreen({ route, navigation }) {
                     <Lightbulb size={40} color="#FFF" />
                  </View>
                  <Text style={[styles.xpTitle, { color: theme.colors.textPrimary, fontSize: 24 }]}>Selection Required</Text>
-                 <Text style={[styles.xpSubtitle, { color: theme.colors.textSecondary, marginBottom: 30 }]}>
-                   Please select an answer to proceed with the lesson.
-                 </Text>
+                  <Text style={[styles.xpSubtitle, { color: theme.colors.textSecondary, marginBottom: 30 }]}>
+                    Please select an answer that you think is true to move to the next question .
+                  </Text>
                  
                  <TouchableOpacity 
                    style={[styles.collectButton, { backgroundColor: '#FACC15' }]}

@@ -66,20 +66,20 @@ export const ContentManagement = () => {
 
   const fetchInitialData = async () => {
     setLoading(true);
-    const { data: subjectData } = await supabase.from('subjects').select('*').order('name');
+    const { data: subjectData } = await supabase.from('subjects').select('*').order('id', { ascending: true });
     setSubjects(subjectData || []);
     setLoading(false);
   };
 
   const fetchTopics = async (subjId: string) => {
-    const { data } = await supabase.from('topics').select('*').eq('subject_id', subjId).order('title');
+    const { data } = await supabase.from('topics').select('*').eq('subject_id', subjId).order('id', { ascending: true });
     setTopics(data || []);
     setLessons([]);
     setSelectedTopicId(null);
   };
 
   const fetchLessons = async (topId: string) => {
-    const { data } = await supabase.from('lessons').select('*').eq('topic_id', topId).order('title');
+    const { data } = await supabase.from('lessons').select('*').eq('topic_id', topId).order('id', { ascending: true });
     setLessons(data || []);
   };
 

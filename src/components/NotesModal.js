@@ -72,9 +72,10 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
         <View style={styles.notesContainer}>
           {(() => {
             let currentSection = '';
+            const sectionHeaders = ['EXPLANATION', 'EXAMPLES', 'KEY TAKEAWAYS', 'CORE CONCEPTS', 'PRACTICAL EXAMPLES'];
+
             return notes && notes.split('\n\n').map((line, idx) => {
               const trimmed = line.trim();
-              const sectionHeaders = ['EXPLANATION', 'EXAMPLES', 'KEY TAKEAWAYS', 'CORE CONCEPTS', 'PRACTICAL EXAMPLES'];
               
               if (sectionHeaders.includes(trimmed)) {
                 currentSection = trimmed;
@@ -86,23 +87,29 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
               }
 
               if (line === '───────────────────') {
+                currentSection = ''; // Reset section context after a divider
                 return <View key={idx} style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />;
               }
 
               if (currentSection === 'KEY TAKEAWAYS') {
-                const subCards = line.split('---TAKAEAWAY_CARD---');
-                return subCards.map((cardContent, cIdx) => (
-                  <View key={`${idx}-${cIdx}`} style={styles.takeawayCard}>
-                    <View style={[styles.takeawayIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
-                      <Zap size={16} color={theme.colors.secondary} />
+                const subCards = line.split('[||CARD_BREAK||]');
+                return subCards.map((cardContent, cIdx) => {
+                  const cleaned = cardContent.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
+                  if (!cleaned) return null;
+                  
+                  return (
+                    <View key={`${idx}-${cIdx}`} style={styles.takeawayCard}>
+                      <View style={[styles.takeawayIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
+                        <Zap size={16} color={theme.colors.secondary} />
+                      </View>
+                      <View style={styles.takeawayContent}>
+                         <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                           {cleaned}
+                         </Text>
+                      </View>
                     </View>
-                    <View style={styles.takeawayContent}>
-                       <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                         {cardContent.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '')}
-                       </Text>
-                    </View>
-                  </View>
-                ));
+                  );
+                });
               }
 
               if (line.startsWith('## ')) {

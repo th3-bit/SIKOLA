@@ -78,11 +78,12 @@ export default function LearningContentScreen({ route, navigation }) {
     const exampleSlides = (slides || [])
       .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')));
     
-    // Regex for grabbing "Key Takeaway" or "Key Takeaways" followed by colon
-    const takeawayRegex = /(?:Key Takeaway|Key Takeaways|💡 Key Takeaway):\s*/i;
+    // Regex for grabbing "Key Takeaway" or "Key Takeaways" with various prefixes and symbols
+    const takeawayRegex = /\n?\s*(?:💡\s*)?(?:Key\s*)?Takeaways?[:\-]\s*/i;
     
     const examplesText = exampleSlides
       .map(s => {
+        // Split and take the part BEFORE the takeaway
         const body = s.content.split(takeawayRegex)[0].split('💡')[0].trim();
         return body ? `## ${s.title}\n${body}` : null;
       })
@@ -94,13 +95,13 @@ export default function LearningContentScreen({ route, navigation }) {
       .map(s => {
         const parts = s.content.split(takeawayRegex);
         if (parts.length > 1) {
-          // We only trim leading/trailing NEWLINES, keeping spaces for indentation!
+          // Take the part AFTER the takeaway label
           return parts[1].split('💡')[0].replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
         }
         return null;
       })
       .filter(t => t)
-      .join('\n---TAKAEAWAY_CARD---\n');
+      .join('[||CARD_BREAK||]');
       
     let total = '';
     if (explanationContent) {

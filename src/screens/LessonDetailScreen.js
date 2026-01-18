@@ -111,7 +111,7 @@ export default function LessonDetailScreen({ route, navigation }) {
             <View style={[styles.heroSection, { shadowColor: primaryColor }]}>
                <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.heroCard, { borderColor: theme.colors.glassBorder }]}>
                   <View style={[styles.typeBadge, { backgroundColor: `${primaryColor}20` }]}>
-                    <Text style={[styles.typeText, { color: primaryColor }]}>TOPIC</Text>
+                    <Text style={[styles.typeText, { color: primaryColor }]}>COURSE</Text>
                   </View>
                   <Text style={[styles.lessonTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     {topic.title}
@@ -149,7 +149,7 @@ export default function LessonDetailScreen({ route, navigation }) {
             {/* About Section */}
             <View style={styles.sectionHeader}>
                <Info size={18} color={theme.colors.secondary} />
-               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>About Topic</Text>
+               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>About Course</Text>
             </View>
             
             <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={[styles.descriptionCard, { borderColor: theme.colors.glassBorder }]}>
@@ -162,7 +162,7 @@ export default function LessonDetailScreen({ route, navigation }) {
             <View style={styles.sectionHeader}>
                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Curriculum</Text>
                <View style={[styles.countBadge, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{lessons.length} lessons</Text>
+                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{lessons.length} topics</Text>
                </View>
             </View>
 
@@ -198,8 +198,9 @@ export default function LessonDetailScreen({ route, navigation }) {
                            </View>
                            <View style={styles.topicInfo}>
                               <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{lessonItem.title}</Text>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                 <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>Lesson {index + 1}</Text>
+                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>Topic {index + 1}</Text>
+                                  <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>• {lessonItem.duration || 5} min</Text>
                                  {isLocked && <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontStyle: 'italic' }}>Locked</Text>}
                               </View>
                            </View>

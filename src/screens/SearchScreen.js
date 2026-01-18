@@ -137,8 +137,8 @@ export default function SearchScreen({ navigation }) {
               )}
               
               <ResultSection title="Subjects" data={results.subjects} icon={BookOpen} type="subject" />
-              <ResultSection title="Topics" data={results.topics} icon={Hash} type="topic" />
-              <ResultSection title="Lessons" data={results.lessons} icon={FileText} type="lesson" />
+              <ResultSection title="Courses" data={results.topics} icon={Hash} type="topic" />
+              <ResultSection title="Topics" data={results.lessons} icon={FileText} type="lesson" />
             </>
           )}
         </ScrollView>

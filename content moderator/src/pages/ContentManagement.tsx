@@ -221,7 +221,7 @@ export const ContentManagement = () => {
               <h3 className="font-bold flex items-center gap-2"><BookMarked className="w-4 h-4 text-primary" /> Subjects</h3>
               <div className="flex items-center gap-2">
                  <span className="text-xs text-muted-foreground">{subjects.length} total</span>
-                 <button onClick={() => setShowSubjectModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors"><Plus className="w-4 h-4 text-primary" /></button>
+                 <button onClick={() => setShowSubjectModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Subject"><Plus className="w-4 h-4 text-primary" /></button>
               </div>
             </div>
             
@@ -263,7 +263,7 @@ export const ContentManagement = () => {
               <h3 className="font-bold flex items-center gap-2"><Layers className="w-4 h-4 text-accent" /> Courses</h3>
               <div className="flex items-center gap-2">
                  <span className="text-xs text-muted-foreground">{topics.length} in subject</span>
-                 {selectedSubjectId && <button onClick={() => setShowCourseModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors"><Plus className="w-4 h-4 text-accent" /></button>}
+                 {selectedSubjectId && <button onClick={() => setShowCourseModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Course"><Plus className="w-4 h-4 text-accent" /></button>}
               </div>
             </div>
 

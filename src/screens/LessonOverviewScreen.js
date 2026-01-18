@@ -157,7 +157,7 @@ export default function LessonOverviewScreen({ route, navigation }) {
             >
               <Play color="#FFFFFF" size={24} fill="#FFFFFF" />
               <Text style={[styles.buttonText, { fontFamily: theme.typography.fontFamily }]}>
-                Start Learning
+                Start Topic
               </Text>
             </LinearGradient>
           </TouchableOpacity>

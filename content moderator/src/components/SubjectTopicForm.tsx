@@ -52,7 +52,7 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
 
   const fetchSubjects = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('subjects').select('id, name').order('name');
+    const { data, error } = await supabase.from('subjects').select('id, name').order('created_at', { ascending: true });
     if (error) {
       toast.error("Failed to fetch subjects");
     } else {
@@ -66,7 +66,7 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
       .from('topics')
       .select('id, title, subject_id')
       .eq('subject_id', subjectId)
-      .order('title');
+      .order('created_at', { ascending: true });
     
     if (error) {
       toast.error("Failed to fetch topics");

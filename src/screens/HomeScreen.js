@@ -37,7 +37,7 @@ export default function HomeScreen({ navigation }) {
             *,
             topics (id)
           `)
-          .order('name');
+          .order('created_at', { ascending: true });
       
       if (data) {
         const formatted = data.map(sub => {

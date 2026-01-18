@@ -71,7 +71,7 @@ export default function SubjectsScreen({ navigation, route }) {
             lessons (id)
           )
         `)
-        .order('name');
+        .order('created_at', { ascending: true });
 
       if (subjectsError) throw subjectsError;
 

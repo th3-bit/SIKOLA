@@ -307,7 +307,7 @@ export default function LearningContentScreen({ route, navigation }) {
         {currentSlideData.content.includes('💡') && (
           <View style={{ marginTop: 30, padding: 15, backgroundColor: `${primaryColor}10`, borderRadius: 15, borderWidth: 1, borderColor: `${primaryColor}30`, borderStyle: 'dashed' }}>
             <Text style={{ color: primaryColor, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>
-              PRO TIP: Tap the bulb icon (top right) anytime!
+              PRO TIP: Tap the bulb icon (top right) anytime for more examples!
             </Text>
           </View>
         )}

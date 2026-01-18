@@ -163,17 +163,17 @@ export default function ContentCreatorScreen({ navigation }) {
   }, []);
 
   const fetchSubjects = async () => {
-    const { data, error } = await supabase.from('subjects').select('*').order('id'); // Creation order
+    const { data, error } = await supabase.from('subjects').select('*').order('created_at', { ascending: true }); // Chronological Order
     if (data) setSubjectsList(data);
   };
 
   const fetchTopics = async (subjectId) => {
-    const { data, error } = await supabase.from('topics').select('*').eq('subject_id', subjectId).order('id'); // Creation Order
+    const { data, error } = await supabase.from('topics').select('*').eq('subject_id', subjectId).order('created_at', { ascending: true }); // Chronological Order
     if (data) setTopicsList(data);
   };
 
   const fetchLessons = async (topicId) => {
-    const { data, error } = await supabase.from('lessons').select('*').eq('topic_id', topicId).order('id'); // Creation Order
+    const { data, error } = await supabase.from('lessons').select('*').eq('topic_id', topicId).order('created_at', { ascending: true }); // Chronological Order
     if (data) setLessonsList(data);
   };
 

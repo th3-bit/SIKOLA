@@ -56,7 +56,7 @@ export default function LessonDetailScreen({ route, navigation }) {
         .from('lessons')
         .select('*')
         .eq('topic_id', topic.id)
-        .order('id', { ascending: true }); // Assume 'id' order or add a separate 'order' column later
+        .order('created_at', { ascending: true }); // Use created_at for accurate chronological order with UUIDs
 
       if (error) throw error;
       setLessons(data || []);

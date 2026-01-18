@@ -46,7 +46,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
           lessons (id, duration)
         `)
         .eq('subject_id', subject.id)
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: true });
 
       if (error) {
           console.error('Supabase Error in SubjectDetail:', error);

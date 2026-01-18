@@ -171,7 +171,7 @@ export default function LearnScreen({ navigation }) {
           lessons (duration)
         `)
         .eq('subject_id', subject.id)
-        .order('id'); // You might want a 'sequence' column here later
+        .order('created_at', { ascending: true });
 
       if (allTopics) {
         const path = allTopics.map((topic, index) => {

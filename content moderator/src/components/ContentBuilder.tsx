@@ -235,12 +235,13 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
         content: "Tap next to start this lesson!"
       });
 
-      // Slide 2: What you will learn
+      /* Removed Lesson Goal slide as per user request
       slides.push({
         type: "content",
         title: "Lesson Goal",
         content: intro
       });
+      */
 
       // Slide 3: Core Concept
       slides.push({

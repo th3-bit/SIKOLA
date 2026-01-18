@@ -67,7 +67,10 @@ export default function LearningContentScreen({ route, navigation }) {
   const aggregatedNotes = React.useMemo(() => {
     // 1. Explanation Section (includes all core content)
     const explanationContent = (slides || [])
-      .filter(s => (s.type === 'content' || s.type === 'text') && !s.isExample && !(s.title && s.title.toLowerCase().includes('example')))
+      .filter(s => (s.type === 'content' || s.type === 'text') && 
+                   !s.isExample && 
+                   s.title !== 'Lesson Goal' && 
+                   !(s.title && s.title.toLowerCase().includes('example')))
       .map(s => (s.title === 'Explanation' || s.title === topic?.title) ? s.content : `## ${s.title}\n${s.content}`)
       .join('\n\n');
       

@@ -69,7 +69,8 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
 
         <View style={styles.notesContainer}>
           {notes && notes.split('\n\n').map((line, idx) => {
-            if (line === 'CORE CONCEPTS' || line === 'PRACTICAL EXAMPLES') {
+            const sectionHeaders = ['EXPLANATION', 'EXAMPLES', 'KEY TAKEAWAYS', 'CORE CONCEPTS', 'PRACTICAL EXAMPLES'];
+            if (sectionHeaders.includes(line.trim())) {
               return (
                 <Text key={idx} style={[styles.sectionHeading, { color: theme.colors.secondary }]}>
                   {line}

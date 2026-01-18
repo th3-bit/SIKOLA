@@ -65,21 +65,45 @@ export default function LearningContentScreen({ route, navigation }) {
 
   // Aggregated Study Notes for the Modal
   const aggregatedNotes = React.useMemo(() => {
-    const coreContent = (slides || [])
-      .filter(s => s.type === 'content' && !s.isExample && !(s.title && s.title.toLowerCase().includes('example')))
-      .map(s => `## ${s.title}\n${s.content}`)
+    // 1. Explanation Section (includes all core content)
+    const explanationContent = (slides || [])
+      .filter(s => (s.type === 'content' || s.type === 'text') && !s.isExample && !(s.title && s.title.toLowerCase().includes('example')))
+      .map(s => (s.title === 'Explanation' || s.title === topic?.title) ? s.content : `## ${s.title}\n${s.content}`)
       .join('\n\n');
       
-    const examples = (slides || [])
-      .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')))
-      .map(s => `## ${s.title}\n${s.content}`)
+    // 2. Examples Section
+    const exampleSlides = (slides || [])
+      .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')));
+    
+    const examplesText = exampleSlides
+      .map(s => `## ${s.title}\n${s.content.split('Key Takeaway:')[0].split('💡')[0].trim()}`)
+      .join('\n\n');
+      
+    // 3. Key Takeaways Section
+    const takeaways = exampleSlides
+      .map(s => {
+        const parts = s.content.split('Key Takeaway:');
+        if (parts.length > 1) {
+          return `• ${parts[1].split('💡')[0].trim()}`;
+        }
+        return null;
+      })
+      .filter(t => t)
       .join('\n\n');
       
     let total = '';
-    if (coreContent) total += `CORE CONCEPTS\n\n${coreContent}\n\n`;
-    if (examples) {
+    if (explanationContent) {
+      total += `EXPLANATION\n\n${explanationContent}\n\n`;
+    }
+    
+    if (examplesText) {
       if (total) total += `───────────────────\n\n`;
-      total += `PRACTICAL EXAMPLES\n\n${examples}`;
+      total += `EXAMPLES\n\n${examplesText}\n\n`;
+    }
+
+    if (takeaways) {
+      if (total) total += `───────────────────\n\n`;
+      total += `KEY TAKEAWAYS\n\n${takeaways}`;
     }
     
     return total || "No detailed notes provided for this lesson yet.";

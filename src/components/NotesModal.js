@@ -17,7 +17,9 @@ import {
   ExternalLink, 
   BookOpen, 
   Download,
-  Info
+  Info,
+  Zap,
+  Lightbulb
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -68,31 +70,55 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
         </View>
 
         <View style={styles.notesContainer}>
-          {notes && notes.split('\n\n').map((line, idx) => {
-            const sectionHeaders = ['EXPLANATION', 'EXAMPLES', 'KEY TAKEAWAYS', 'CORE CONCEPTS', 'PRACTICAL EXAMPLES'];
-            if (sectionHeaders.includes(line.trim())) {
+          {(() => {
+            let currentSection = '';
+            return notes && notes.split('\n\n').map((line, idx) => {
+              const trimmed = line.trim();
+              const sectionHeaders = ['EXPLANATION', 'EXAMPLES', 'KEY TAKEAWAYS', 'CORE CONCEPTS', 'PRACTICAL EXAMPLES'];
+              
+              if (sectionHeaders.includes(trimmed)) {
+                currentSection = trimmed;
+                return (
+                  <Text key={idx} style={[styles.sectionHeading, { color: theme.colors.secondary }]}>
+                    {trimmed}
+                  </Text>
+                );
+              }
+
+              if (line === '───────────────────') {
+                return <View key={idx} style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />;
+              }
+
+              if (currentSection === 'KEY TAKEAWAYS') {
+                return (
+                  <View key={idx} style={styles.takeawayCard}>
+                    <View style={[styles.takeawayIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
+                      <Zap size={16} color={theme.colors.secondary} />
+                    </View>
+                    <View style={styles.takeawayContent}>
+                       <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                         {line}
+                       </Text>
+                    </View>
+                  </View>
+                );
+              }
+
+              if (line.startsWith('## ')) {
+                return (
+                  <Text key={idx} style={[styles.itemTitle, { color: theme.colors.textPrimary }]}>
+                    {line.replace('## ', '')}
+                  </Text>
+                );
+              }
+
               return (
-                <Text key={idx} style={[styles.sectionHeading, { color: theme.colors.secondary }]}>
+                <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                   {line}
                 </Text>
               );
-            }
-            if (line === '───────────────────') {
-              return <View key={idx} style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />;
-            }
-            if (line.startsWith('## ')) {
-              return (
-                <Text key={idx} style={[styles.itemTitle, { color: theme.colors.textPrimary }]}>
-                  {line.replace('## ', '')}
-                </Text>
-              );
-            }
-            return (
-              <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                {line}
-              </Text>
-            );
-          })}
+            });
+          })()}
           {!notes && (
             <Text style={[styles.notesText, { color: theme.colors.textSecondary, fontStyle: 'italic' }]}>
               No detailed notes provided for this lesson yet.
@@ -248,6 +274,34 @@ const styles = StyleSheet.create({
     height: 1,
     width: '100%',
     marginVertical: 30,
+  },
+  takeawayCard: {
+    padding: 20,
+    borderRadius: 24,
+    backgroundColor: 'rgba(124, 58, 237, 0.05)',
+    borderLeftWidth: 4,
+    borderLeftColor: '#8B5CF6',
+    marginBottom: 16,
+    flexDirection: 'row',
+    gap: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(124, 58, 237, 0.1)',
+  },
+  takeawayIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  takeawayContent: {
+    flex: 1,
+  },
+  takeawayText: {
+    fontSize: 15,
+    lineHeight: 24,
+    opacity: 0.9,
   },
   pdfContainer: {
     flex: 1,

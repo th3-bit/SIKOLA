@@ -94,7 +94,9 @@ export default function LearningContentScreen({ route, navigation }) {
       .map(s => {
         const parts = s.content.split(takeawayRegex);
         if (parts.length > 1) {
-          return `• ${parts[1].split('💡')[0].trim()}`;
+          // Remove the "Key Takeaway" label part and trim only leading/trailing empty lines
+          // we keep internal spaces and horizontal indentation
+          return parts[1].split('💡')[0].replace(/^[\r\n\s]+/, '').replace(/[\r\n\s]+$/, '');
         }
         return null;
       })
@@ -465,7 +467,7 @@ export default function LearningContentScreen({ route, navigation }) {
             activeOpacity={0.8}
           >
             <Text style={[styles.navButtonText, { color: '#FFFFFF' }]}>
-              {isLastSlide ? 'FINISH' : 'NEXT STEP'}
+              {isLastSlide ? 'FINISH' : (currentSlideData.type === 'quiz' ? 'NEXT QUESTION' : 'NEXT SLIDE')}
             </Text>
             <ChevronRight color="#FFFFFF" size={20} />
           </TouchableOpacity>

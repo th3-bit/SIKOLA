@@ -407,7 +407,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
                  <GlassInput label="Example Title" placeholder="e.g. Solving for X" value={exTitle} onChange={e => setExTitle(e.target.value)} />
                  <GlassTextarea label="Problem" placeholder="The problem statement..." value={exProblem} onChange={e => setExProblem(e.target.value)} />
                  <GlassTextarea label="Solution" placeholder="Step-by-step solution..." value={exSolution} onChange={e => setExSolution(e.target.value)} />
-                 <GlassInput label="Key Takeaway" placeholder="What should the student remember?" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
+                  <GlassTextarea label="Key Takeaway" placeholder="What should the student remember? (Use Enter for new lines)" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
                  <GlassButton variant="accent" onClick={handleAddExample} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Example</GlassButton>
               </div>
               <div className="flex gap-3">

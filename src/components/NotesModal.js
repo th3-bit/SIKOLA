@@ -90,18 +90,19 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
               }
 
               if (currentSection === 'KEY TAKEAWAYS') {
-                return (
-                  <View key={idx} style={styles.takeawayCard}>
+                const subCards = line.split('---TAKAEAWAY_CARD---');
+                return subCards.map((cardContent, cIdx) => (
+                  <View key={`${idx}-${cIdx}`} style={styles.takeawayCard}>
                     <View style={[styles.takeawayIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
                       <Zap size={16} color={theme.colors.secondary} />
                     </View>
                     <View style={styles.takeawayContent}>
                        <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                         {line}
+                         {cardContent.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '')}
                        </Text>
                     </View>
                   </View>
-                );
+                ));
               }
 
               if (line.startsWith('## ')) {

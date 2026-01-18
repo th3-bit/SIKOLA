@@ -94,14 +94,13 @@ export default function LearningContentScreen({ route, navigation }) {
       .map(s => {
         const parts = s.content.split(takeawayRegex);
         if (parts.length > 1) {
-          // Remove the "Key Takeaway" label part and trim only leading/trailing empty lines
-          // we keep internal spaces and horizontal indentation
-          return parts[1].split('💡')[0].replace(/^[\r\n\s]+/, '').replace(/[\r\n\s]+$/, '');
+          // We only trim leading/trailing NEWLINES, keeping spaces for indentation!
+          return parts[1].split('💡')[0].replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
         }
         return null;
       })
       .filter(t => t)
-      .join('\n\n');
+      .join('\n---TAKAEAWAY_CARD---\n');
       
     let total = '';
     if (explanationContent) {

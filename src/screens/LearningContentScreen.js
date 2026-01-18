@@ -75,14 +75,21 @@ export default function LearningContentScreen({ route, navigation }) {
     const exampleSlides = (slides || [])
       .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')));
     
+    // Regex for grabbing "Key Takeaway" or "Key Takeaways" followed by colon
+    const takeawayRegex = /(?:Key Takeaway|Key Takeaways|💡 Key Takeaway):\s*/i;
+    
     const examplesText = exampleSlides
-      .map(s => `## ${s.title}\n${s.content.split('Key Takeaway:')[0].split('💡')[0].trim()}`)
+      .map(s => {
+        const body = s.content.split(takeawayRegex)[0].split('💡')[0].trim();
+        return body ? `## ${s.title}\n${body}` : null;
+      })
+      .filter(Boolean)
       .join('\n\n');
       
     // 3. Key Takeaways Section
     const takeaways = exampleSlides
       .map(s => {
-        const parts = s.content.split('Key Takeaway:');
+        const parts = s.content.split(takeawayRegex);
         if (parts.length > 1) {
           return `• ${parts[1].split('💡')[0].trim()}`;
         }

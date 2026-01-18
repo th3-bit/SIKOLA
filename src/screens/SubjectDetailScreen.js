@@ -61,8 +61,9 @@ export default function SubjectDetailScreen({ route, navigation }) {
         let infoList = [];
 
         topics.forEach(topic => {
-           const topicProgress = courseProgress[topic.id];
-           const progress = topicProgress?.completed ? 100 : (topicProgress?.score || 0);
+           const subLessons = topic.lessons || [];
+           const completedSubCount = subLessons.filter(l => courseProgress[l.id]?.completed).length;
+           const progress = subLessons.length > 0 ? Math.round((completedSubCount / subLessons.length) * 100) : 0;
            
            if (progress === 100) totalCompleted++;
            
@@ -239,6 +240,12 @@ export default function SubjectDetailScreen({ route, navigation }) {
                            <Text style={[styles.curriculumSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                              {lesson.duration} mins • {lesson.category}
                            </Text>
+                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                              <View style={{ flex: 1, height: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 2 }}>
+                                 <View style={{ width: `${lesson.progress}%`, height: '100%', backgroundColor: subject.color || theme.colors.secondary, borderRadius: 2 }} />
+                              </View>
+                              <Text style={{ fontSize: 11, color: theme.colors.textSecondary, fontWeight: 'bold' }}>{lesson.progress}%</Text>
+                           </View>
                         </View>
                       </View>
 

@@ -175,35 +175,42 @@ export default function LearnScreen({ navigation }) {
 
       if (allTopics) {
         const path = allTopics.map((topic, index) => {
-          const isCompleted = courseProgress[topic.id]?.completed;
+          const subLessons = topic.lessons || [];
+          const completedCount = subLessons.filter(l => courseProgress[l.id]?.completed).length;
+          const progressPercent = subLessons.length > 0 ? Math.round((completedCount / subLessons.length) * 100) : 0;
+          const isCompleted = progressPercent === 100;
           
           // Determine status
           let status = 'locked';
           if (isCompleted) {
             status = 'completed';
           } else {
-            // It's the first uncompleted one, OR the previous one is completed
             const prevTopic = index > 0 ? allTopics[index - 1] : null;
-            if (!prevTopic || courseProgress[prevTopic.id]?.completed) {
+            // Check previous topic completion (aggregate check)
+            const prevSubLessons = prevTopic?.lessons || [];
+            const prevCompletedCount = prevSubLessons.filter(l => courseProgress[l.id]?.completed).length;
+            const prevCompleted = prevSubLessons.length > 0 ? (prevCompletedCount === prevSubLessons.length) : true;
+
+            if (!prevTopic || prevCompleted) {
               status = 'in-progress';
             }
           }
 
           // Calculate duration
-          const durationMins = topic.lessons?.reduce((sum, l) => sum + (l.duration || 15), 0) || 15;
+          const durationMins = subLessons.reduce((sum, l) => sum + (l.duration || 15), 0) || 15;
 
           return {
             id: topic.id,
             title: topic.title,
             status,
+            progress: progressPercent,
             duration: `${durationMins}m`,
-            originalTopic: topic // Keep ref for nav
+            originalTopic: topic
           };
         });
 
         setLearningPath(path);
       }
-
     } catch (err) {
       console.error('Failed to load learning path:', err);
     } finally {
@@ -268,6 +275,9 @@ export default function LearnScreen({ navigation }) {
                 <View style={styles.stepMeta}>
                   <Clock size={12} color={theme.colors.textSecondary} />
                   <Text style={[styles.stepMetaText, { color: theme.colors.textSecondary }]}>{step.duration}</Text>
+                  {!isLocked && !isCompleted && (
+                    <Text style={{ fontSize: 11, color: theme.colors.secondary, fontWeight: '800', marginLeft: 8 }}>{step.progress}% DONE</Text>
+                  )}
                 </View>
               </View>
               {!isLocked && <ChevronRight size={20} color={theme.colors.textSecondary} />}

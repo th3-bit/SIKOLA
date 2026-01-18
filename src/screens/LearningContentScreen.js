@@ -156,7 +156,7 @@ export default function LearningContentScreen({ route, navigation }) {
       const durationNum = Math.max(1, Math.round((Date.now() - startTime) / 60000));
       
       // completeTopic now handles session logging internally
-      completeTopic(subject.id, topic.id, percentage, durationNum);
+      completeTopic(subject.id, lesson.id, percentage, durationNum);
       
       Animated.spring(xpScale, {
         toValue: 1,

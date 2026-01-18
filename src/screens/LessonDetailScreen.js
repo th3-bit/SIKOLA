@@ -136,7 +136,9 @@ export default function LessonDetailScreen({ route, navigation }) {
 
                   <View style={styles.progressContainer}>
                      <View style={styles.progressHeader}>
-                        <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>Your Progress</Text>
+                        <Text style={[styles.progressLabel, { color: theme.colors.textSecondary }]}>
+                           {completedCount} of {totalCount} topics completed
+                         </Text>
                         <Text style={[styles.progressValue, { color: theme.colors.textPrimary }]}>{currentProgress}%</Text>
                      </View>
                      <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>

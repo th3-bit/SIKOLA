@@ -118,9 +118,21 @@ export const ContentManagement = () => {
     }
   };
 
-  const handleEditLesson = (lesson: Lesson) => {
-      setEditingLesson(lesson);
-      setShowTopicBuilder(true);
+  const handleEditLesson = async (lesson: Lesson) => {
+    // Fetch complete lesson data including content, video_url, and duration
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('id', lesson.id)
+      .single();
+    
+    if (error) {
+      toast.error("Failed to load lesson data");
+      return;
+    }
+    
+    setEditingLesson(data);
+    setShowTopicBuilder(true);
   };
 
   const handleCreateSubject = async () => {

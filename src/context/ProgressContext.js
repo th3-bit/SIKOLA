@@ -65,60 +65,70 @@ export const ProgressProvider = ({ children }) => {
         
         if (lessonIds.length > 0) {
           try {
-            console.log('ProgressContext: Fetching recent lessons details');
-            const { data: lessonsData, error: lessonsError } = await supabase
-              .from('lessons')
-              .select(`
-                *,
-                topics (
-                  id,
-                  title,
-                  subjects (
-                    id,
-                    name,
-                    color,
-                    icon
-                  )
-                )
-              `)
-              .in('id', lessonIds);
+            console.log('ProgressContext: Fetching recent activity details (lessons/topics)');
             
-            console.log('ProgressContext: lessonsData fetched', lessonsData?.length, lessonsError);
+            // Fetch everything we might need in parallel
+            const [lessonsRes, topicsRes] = await Promise.all([
+              supabase.from('lessons').select('*, topics(*, subjects(*))').in('id', lessonIds),
+              supabase.from('topics').select('*, subjects(*)').in('id', lessonIds)
+            ]);
 
-            if (lessonsError) throw lessonsError;
+            const lessonsData = lessonsRes.data || [];
+            const topicsAsActivity = topicsRes.data || [];
 
-            if (lessonsData) {
-              // Process Recent Lessons
-              const processedRecent = lessonsData.map(lesson => {
-                // Handle potential singular/plural response from Supabase
-                const topicData = Array.isArray(lesson.topics) ? lesson.topics[0] : lesson.topics;
-                const subjectData = topicData ? (Array.isArray(topicData.subjects) ? topicData.subjects[0] : topicData.subjects) : null;
+            // Combine and map based on original progress order
+            const processedRecent = lessonIds.map(id => {
+              const progressEntry = progressData.find(p => p.topic_id === id);
+              const lesson = lessonsData.find(l => l.id === id);
+              
+              if (lesson) {
+                const topicNav = Array.isArray(lesson.topics) ? lesson.topics[0] : lesson.topics;
+                const subjectNav = topicNav ? (Array.isArray(topicNav.subjects) ? topicNav.subjects[0] : topicNav.subjects) : null;
+                const style = getSubjectStyle(subjectNav?.name);
                 
-                  const style = getSubjectStyle(subjectData?.name);
-                  const progressEntry = progressData.find(p => p.topic_id === lesson.topic_id); // Find original progress entry for timestamp
-                  
-                  return {
-                    id: lesson.id,
-                    title: lesson.title,
-                    category: subjectData?.name || 'General',
-                    progress: formattedProgress[lesson.id]?.completed ? 100 : (formattedProgress[lesson.id]?.score || 0),
-                    duration: lesson.duration || 15,
-                    color: style.color,
-                    icon: style.icon,
-                    completed_at: progressEntry?.completed_at, // Add timestamp
-                    // Helper props for navigation
-                    topic_id: lesson.topic_id,
-                    topic_title: topicData?.title
+                return {
+                  id: lesson.id,
+                  title: lesson.title,
+                  category: subjectNav?.name || 'General',
+                  progress: 100, // If it's in progressData sorted by completed_at, it's completed
+                  duration: lesson.duration || 15,
+                  color: style.color,
+                  icon: style.icon,
+                  completed_at: progressEntry?.completed_at,
+                  topic_id: lesson.topic_id,
+                  topic_title: topicNav?.title,
+                  type: 'lesson'
                 };
-              }).sort((a, b) => {
-                const aIdx = progressData.findIndex(p => p.topic_id === a.id);
-                const bIdx = progressData.findIndex(p => p.topic_id === b.id);
-                return aIdx - bIdx;
-              });
-              setRecentLessons(processedRecent);
+              }
 
-              // Process Continue Learning (Group by Topic)
-              const uniqueTopicIds = [...new Set(lessonsData.map(l => l.topic_id).filter(Boolean))];
+              const topicAsAct = topicsAsActivity.find(t => t.id === id);
+              if (topicAsAct) {
+                const subjectNav = Array.isArray(topicAsAct.subjects) ? topicAsAct.subjects[0] : topicAsAct.subjects;
+                const style = getSubjectStyle(subjectNav?.name);
+                
+                return {
+                  id: topicAsAct.id,
+                  title: topicAsAct.title,
+                  category: subjectNav?.name || 'General',
+                  progress: 100,
+                  duration: 30, // Default for topic
+                  color: style.color,
+                  icon: style.icon,
+                  completed_at: progressEntry?.completed_at,
+                  topic_id: topicAsAct.id,
+                  topic_title: topicAsAct.title,
+                  type: 'topic'
+                };
+              }
+
+              return null;
+            }).filter(Boolean);
+
+            // Only show actual lessons in Recent Lessons, not topics
+            setRecentLessons(processedRecent.filter(item => item.type === 'lesson'));
+
+            // Process Continue Learning (Keep previous logic but ensure it uses the fetched lessonsData)
+            const uniqueTopicIds = [...new Set(lessonsData.map(l => l.topic_id).filter(Boolean))];
               
               console.log('ProgressContext: fetching topicLessons for stats', uniqueTopicIds);
               const { data: topicLessons } = await supabase
@@ -152,7 +162,6 @@ export const ProgressProvider = ({ children }) => {
                 });
                 setContinueLearning(topicStats.filter(t => t.progress < 100)); 
               }
-            }
           } catch (err) {
             console.error('Error fetching recent lessons details:', err);
           }

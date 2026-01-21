@@ -17,6 +17,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 type SubscriptionType = "free_trial" | "per_course" | "daily" | "weekly" | "monthly";
 
@@ -45,6 +52,15 @@ interface UserProfile {
   status: "active" | "inactive";
   created_at: string;
   subscriptions?: Subscription[];
+}
+
+interface UserActivity {
+  id: string;
+  topic_id: string;
+  score: number;
+  completed_at: string;
+  topic_title: string;
+  lesson_title?: string;
 }
 
 const subscriptionLabels: Record<SubscriptionType, string> = {
@@ -87,6 +103,10 @@ const UserManagement = () => {
     expires_at: "",
     subscription_id: null as string | null
   });
+
+  const [loadingActivity, setLoadingActivity] = useState(false);
+  const [selectedUserForActivity, setSelectedUserForActivity] = useState<UserProfile | null>(null);
+  const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
 
   useEffect(() => {
     fetchProfiles();
@@ -274,6 +294,65 @@ const UserManagement = () => {
       console.error("Update failed:", error);
       toast.error(error.message || "Failed to update user");
     }
+  };
+
+  const fetchUserActivity = async (userId: string) => {
+    setLoadingActivity(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_progress')
+        .select('*')
+        .eq('user_id', userId)
+        .order('completed_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Resolve titles
+        const activitiesWithTitles = await Promise.all(
+          data.map(async (act) => {
+            // Check if it's a lesson or topic
+            const { data: lesson } = await supabase
+              .from('lessons')
+              .select('title, topics(title)')
+              .eq('id', act.topic_id)
+              .single();
+
+            if (lesson) {
+              return {
+                ...act,
+                lesson_title: lesson.title,
+                topic_title: (lesson.topics as any)?.title || "Unknown Topic"
+              };
+            }
+
+            const { data: topic } = await supabase
+              .from('topics')
+              .select('title')
+              .eq('id', act.topic_id)
+              .single();
+
+            return {
+              ...act,
+              topic_title: topic?.title || "Unknown Activity"
+            };
+          })
+        );
+        setUserActivities(activitiesWithTitles);
+      } else {
+        setUserActivities([]);
+      }
+    } catch (err: any) {
+      console.error("Error fetching activity:", err);
+      toast.error("Failed to load user activity");
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
+
+  const handleViewActivity = (user: UserProfile) => {
+    setSelectedUserForActivity(user);
+    fetchUserActivity(user.id);
   };
 
   return (
@@ -485,6 +564,9 @@ const UserManagement = () => {
                               <><UserCheck className="w-3.5 h-3.5" /> Activate</>
                             )}
                           </button>
+                          <GlassButton variant="ghost" size="sm" onClick={() => handleViewActivity(user)} title="View Learning Activity">
+                            <Eye className="w-4 h-4" />
+                          </GlassButton>
                           <GlassButton variant="ghost" size="sm" onClick={() => handleStartEdit(user)}>
                             <Edit2 className="w-4 h-4" />
                           </GlassButton>
@@ -530,6 +612,65 @@ const UserManagement = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!selectedUserForActivity} onOpenChange={(open) => !open && setSelectedUserForActivity(null)}>
+        <DialogContent className="glass-panel max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Learning Activity: {selectedUserForActivity?.full_name}
+            </DialogTitle>
+            <DialogDescription>
+              Recent lessons and topics completed by this student.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto pr-2 mt-4 space-y-3 custom-scrollbar">
+            {loadingActivity ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading recent activity...</p>
+              </div>
+            ) : userActivities.length > 0 ? (
+              userActivities.map((activity) => (
+                <div key={activity.id} className="glass-panel p-4 flex items-center justify-between group hover:bg-white/5 transition-colors">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">
+                      {activity.lesson_title || activity.topic_title}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="bg-primary/20 text-primary-foreground px-2 py-0.5 rounded uppercase tracking-wider font-bold">
+                        {activity.lesson_title ? "Lesson" : "Topic"}
+                      </span>
+                      {activity.lesson_title && (
+                        <>
+                          <span>•</span>
+                          <span>{activity.topic_title}</span>
+                        </>
+                      )}
+                      <span>•</span>
+                      <span>{new Date(activity.completed_at).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-lg font-bold ${activity.score >= 80 ? "text-emerald-400" : activity.score >= 50 ? "text-amber-400" : "text-rose-400"}`}>
+                      {activity.score}%
+                    </div>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold">Score</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 space-y-3">
+                <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto">
+                  <Clock className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground">No learning activity recorded yet.</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

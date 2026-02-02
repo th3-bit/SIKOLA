@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { ArrowLeft, Play, Award, Clock, BookOpen, Target, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
@@ -50,8 +49,11 @@ export default function LessonOverviewScreen({ route, navigation }) {
           </View>
 
           {/* Hero Card */}
-          <View style={[styles.heroCardWrapper, { shadowColor: lesson.color }]}>
-            <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.heroCard, { borderColor: theme.colors.glassBorder }]}>
+          <View style={[styles.heroCardWrapper]}>
+            <View style={[styles.heroCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
               <LinearGradient
                 colors={isDark 
                   ? [`${lesson.color}30`, `${lesson.color}10`, 'transparent'] 
@@ -92,7 +94,7 @@ export default function LessonOverviewScreen({ route, navigation }) {
                   </Text>
                 </View>
               </View>
-            </BlurView>
+            </View>
           </View>
 
           {/* What You'll Learn */}
@@ -100,7 +102,10 @@ export default function LessonOverviewScreen({ route, navigation }) {
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
               What You'll Learn
             </Text>
-            <View style={[styles.objectivesCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)', borderColor: theme.colors.glassBorder }]}>
+            <View style={[styles.objectivesCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)', 
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
               {objectives.map((objective, index) => (
                 <View key={index} style={styles.objectiveItem}>
                   <View style={[styles.objectiveIcon, { backgroundColor: `${lesson.color}20` }]}>
@@ -296,11 +301,6 @@ const styles = StyleSheet.create({
   startButton: {
     borderRadius: 24,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
   },
   buttonGradient: {
     flexDirection: 'row',

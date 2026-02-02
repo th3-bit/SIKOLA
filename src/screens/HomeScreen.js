@@ -18,7 +18,7 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { recentLessons, continueLearning, isLoading } = useProgress();
+  const { recentLessons, continueLearning, isLoading, courseProgress } = useProgress();
   
   console.log('HomeScreen mounted. isLoading:', isLoading, 'Recent:', recentLessons?.length);
 
@@ -27,7 +27,7 @@ export default function HomeScreen({ navigation }) {
 
   React.useEffect(() => {
     fetchCategories();
-  }, []);
+  }, [courseProgress]); // Re-fetch or re-calculate when progress changes
 
   const fetchCategories = async () => {
     try {
@@ -42,12 +42,19 @@ export default function HomeScreen({ navigation }) {
       if (data) {
         const formatted = data.map(sub => {
           const style = getSubjectStyle(sub.name);
+          
+          // Calculate realistic progress for this subject
+          const topicIds = sub.topics ? sub.topics.map(t => t.id) : [];
+          const completedCount = topicIds.filter(id => courseProgress[id]?.completed).length;
+          const progress = topicIds.length > 0 ? (completedCount / topicIds.length) * 100 : 0;
+
           return {
             id: sub.id,
             name: sub.name, 
             icon: style.icon,
-            color: style.color,
-            topicCount: sub.topics ? sub.topics.length : 0
+            color: sub.color || style.color, // Use DB color or fallback
+            topicCount: topicIds.length,
+            progress: progress
           };
         });
         setCategories(formatted);
@@ -80,6 +87,7 @@ export default function HomeScreen({ navigation }) {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+
           {/* Daily Progress */}
           <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('LearningProgress')}>
             <DailyProgressCard />
@@ -87,21 +95,15 @@ export default function HomeScreen({ navigation }) {
 
           {/* Subscription Banner */}
           <TouchableOpacity
-            activeOpacity={0.9}
+            activeOpacity={1}
             onPress={() => navigation.navigate('Subscription')}
             style={styles.subscriptionBannerWrapper}
           >
-            <BlurView
-              intensity={isDark ? 30 : 40}
-              tint={isDark ? 'dark' : 'light'}
-              style={[styles.subscriptionBanner, { borderColor: '#FACC15' }]}
-            >
-              <LinearGradient
-                colors={['rgba(250, 204, 21, 0.2)', 'rgba(250, 204, 21, 0.05)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
+            <View style={[styles.subscriptionBanner, { 
+              backgroundColor: isDark ? 'rgba(250, 204, 21, 0.15)' : 'rgba(250, 204, 21, 0.1)',
+              borderColor: '#FACC15',
+              borderWidth: 1.5
+            }]}>
               <View style={styles.subscriptionContent}>
                 <View style={styles.subscriptionLeft}>
                   <View style={styles.crownContainer}>
@@ -118,7 +120,7 @@ export default function HomeScreen({ navigation }) {
                 </View>
                 <ChevronRight size={24} color="#FACC15" />
               </View>
-            </BlurView>
+            </View>
           </TouchableOpacity>
 
           {/* Continue Learning */}
@@ -236,9 +238,8 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    gap: 12,
   },
   recentList: {
     flexDirection: 'row',
@@ -251,11 +252,8 @@ const styles = StyleSheet.create({
   },
   subscriptionBannerWrapper: {
     marginBottom: 24,
-    shadowColor: '#FACC15',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    borderRadius: 24,
+    overflow: 'visible',
   },
   subscriptionBanner: {
     borderRadius: 24,

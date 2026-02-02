@@ -58,9 +58,9 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
   
   // Extract initial values from parsed content
   const initIntro = parsedContent.find((s: any) => s.type === 'intro');
-  const initCore = parsedContent.find((s: any) => s.type === 'content' && s.title === 'Core Concept');
+  const initCore = parsedContent.find((s: any) => s.type === 'content' && s.title === 'Explanation');
   const initVideo = parsedContent.find((s: any) => s.type === 'video');
-  const initExamples = parsedContent.filter((s: any) => s.type === 'content' && s.title !== 'Core Concept' && !s.title.startsWith('Coming Soon')); // Rough heuristic
+  const initExamples = parsedContent.filter((s: any) => s.type === 'content' && s.title !== 'Explanation' && !s.title.startsWith('Coming Soon')); // Rough heuristic
   const initQuestions = parsedContent.filter((s: any) => s.type === 'quiz');
 
   const [intro, setIntro] = useState(initIntro?.content || "");
@@ -72,19 +72,30 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
   // Step 3: Examples
   const [examples, setExamples] = useState<ContentEntry[]>(() => {
     if (!initExamples) return [];
-    return initExamples.map((ex: any, idx: number) => ({
-      id: `ex-${idx}`,
-      type: "example",
-      title: ex.title,
-      exampleData: {
+    return initExamples.map((ex: any, idx: number) => {
+      const parts = ex.content.split('\n\nSolution:\n');
+      const problem = parts[0] || "";
+      const rest = parts[1] || "";
+      const solutionParts = rest.split('\n\nKey Takeaway: ');
+      const solution = solutionParts[0] || "";
+      // Strip out the bulb icon text if present
+      const rawTakeaway = solutionParts[1] || "";
+      const keyTakeaway = rawTakeaway.split('\n\n💡')[0] || rawTakeaway;
+
+      return {
+        id: `ex-${idx}`,
+        type: "example",
         title: ex.title,
-        problem: ex.content.split('\n\nSolution:\n')[0] || "",
-        solution: ex.content.split('\n\nSolution:\n')[1]?.split('\n\nKey Takeaway: ')[0] || "",
-        keyTakeaway: ex.content.split('\n\nKey Takeaway: ')[1] || ""
-      }
-    }));
+        exampleData: {
+          title: ex.title,
+          problem,
+          solution,
+          keyTakeaway
+        }
+      };
+    });
   });
-  
+
   const [exTitle, setExTitle] = useState("");
   const [exProblem, setExProblem] = useState("");
   const [exSolution, setExSolution] = useState("");
@@ -156,7 +167,10 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
     }
   };
 
-  // ... (keep handleNextStep, handleAddExample, handleAddQuestion same) ...
+  // State for editing examples
+  const [editingExampleId, setEditingExampleId] = useState<string | null>(null);
+
+  // ... (keep handleNextStep same) ...
   const handleNextStep = () => {
     if (wizardStep === "info") {
       if (!title.trim() || !intro.trim() || !coreContent.trim()) {
@@ -178,47 +192,145 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       toast.error("Please fill in title, problem and solution");
       return;
     }
-    const newExample: ContentEntry = {
-      id: Date.now().toString(),
-      type: "example",
-      title: exTitle,
-      content: exProblem, 
-      exampleData: {
+
+    if (editingExampleId) {
+      // Update existing example
+      setExamples(examples.map(ex => {
+        if (ex.id === editingExampleId) {
+          return {
+            ...ex,
+            title: exTitle,
+            content: exProblem,
+            exampleData: {
+              title: exTitle,
+              problem: exProblem,
+              solution: exSolution,
+              keyTakeaway: exTakeaway
+            }
+          };
+        }
+        return ex;
+      }));
+      setEditingExampleId(null);
+      toast.success("Example updated!");
+    } else {
+      // Add new example
+      const newExample: ContentEntry = {
+        id: Date.now().toString(),
+        type: "example",
         title: exTitle,
-        problem: exProblem,
-        solution: exSolution,
-        keyTakeaway: exTakeaway
-      }
-    };
-    setExamples([...examples, newExample]);
+        content: exProblem, 
+        exampleData: {
+          title: exTitle,
+          problem: exProblem,
+          solution: exSolution,
+          keyTakeaway: exTakeaway
+        }
+      };
+      setExamples([...examples, newExample]);
+      toast.success("Example added!");
+    }
+    
+    // Reset form
     setExTitle("");
     setExProblem("");
     setExSolution("");
     setExTakeaway("");
-    toast.success("Example added!");
   };
+
+  const handleEditExample = (ex: ContentEntry) => {
+    setEditingExampleId(ex.id);
+    setExTitle(ex.exampleData?.title || ex.title || "");
+    setExProblem(ex.exampleData?.problem || ex.content || "");
+    setExSolution(ex.exampleData?.solution || "");
+    setExTakeaway(ex.exampleData?.keyTakeaway || "");
+    // Scroll to top of form if needed, or just focus title
+  };
+
+  const handleDeleteExample = (id: string) => {
+    setExamples(examples.filter(ex => ex.id !== id));
+    if (editingExampleId === id) {
+      handleCancelEdit();
+    }
+    toast.success("Example deleted");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingExampleId(null);
+    setExTitle("");
+    setExProblem("");
+    setExSolution("");
+    setExTakeaway("");
+  };
+
+  // State for editing questions
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   const handleAddQuestion = () => {
     if (!qText.trim()) { toast.error("Enter question text"); return; }
     if (qAnswers.some(a => !a.trim())) { toast.error("Fill all 4 answers"); return; }
     if (qCorrectIndex === null) { toast.error("Select correct answer"); return; }
 
-    const newQuestion: ContentEntry = {
-      id: Date.now().toString(),
-      type: "quiz",
-      title: "Quick Quiz",
-      content: "Test your knowledge",
-      questionData: {
-        question: qText,
-        answers: qAnswers,
-        correctAnswerIndex: qCorrectIndex
-      }
-    };
-    setQuestions([...questions, newQuestion]);
+    if (editingQuestionId) {
+      // Update existing question
+      setQuestions(questions.map(q => {
+        if (q.id === editingQuestionId) {
+          return {
+            ...q,
+            questionData: {
+              question: qText,
+              answers: qAnswers,
+              correctAnswerIndex: qCorrectIndex
+            }
+          };
+        }
+        return q;
+      }));
+      setEditingQuestionId(null);
+      toast.success("Question updated!");
+    } else {
+      // Add new question
+      const newQuestion: ContentEntry = {
+        id: Date.now().toString(),
+        type: "quiz",
+        title: "Quick Quiz",
+        content: "Test your knowledge",
+        questionData: {
+          question: qText,
+          answers: qAnswers,
+          correctAnswerIndex: qCorrectIndex
+        }
+      };
+      setQuestions([...questions, newQuestion]);
+      toast.success("Question added!");
+    }
+
     setQText("");
     setQAnswers(["", "", "", ""]);
     setQCorrectIndex(null);
-    toast.success("Question added!");
+  };
+
+  const handleEditQuestion = (q: ContentEntry) => {
+    if (!q.questionData) return;
+    setEditingQuestionId(q.id);
+    setQText(q.questionData.question);
+    setQAnswers([...q.questionData.answers]);
+    setQCorrectIndex(q.questionData.correctAnswerIndex);
+  };
+
+  const handleDeleteQuestion = (id: string) => {
+    setQuestions(questions.filter(q => q.id !== id));
+    if (editingQuestionId === id) {
+      handleCancelQuestionEdit();
+    }
+    toast.success("Question deleted");
+  };
+
+  const handleCancelQuestionEdit = () => {
+    setEditingQuestionId(null);
+    setQText("");
+    setQAnswers(["", "", "", ""]);
+    setQCorrectIndex(null);
   };
 
   const handleSaveLesson = async () => {
@@ -232,7 +344,7 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       slides.push({
         type: "intro",
         title: title,
-        content: "Tap next to start this lesson!"
+        content: intro || "Tap next to start this lesson!"
       });
 
       /* Removed Lesson Goal slide as per user request
@@ -363,20 +475,20 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
 
       {/* Progress Steps */}
       {wizardStep !== "complete" && (
-        <div className="glass-panel p-4 rounded-xl flex items-center justify-between text-sm">
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'info' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>1. Topic</div>
-           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'video' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>2. Video</div>
-           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'examples' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>3. Examples</div>
-           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'questions' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>4. Quiz</div>
-           <ArrowRight className="w-4 h-4 text-muted-foreground/50" />
-           <div className={`px-3 py-1 rounded-lg ${wizardStep === 'duration' ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>5. Time</div>
+        <div className="glass-panel p-4 rounded-xl flex items-center justify-between text-sm overflow-x-auto">
+           <button onClick={() => setWizardStep('info')} className={`px-3 py-1 rounded-lg whitespace-nowrap transition-colors hover:bg-primary/10 ${wizardStep === 'info' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground'}`}>1. Topic</button>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+           <button onClick={() => setWizardStep('video')} className={`px-3 py-1 rounded-lg whitespace-nowrap transition-colors hover:bg-primary/10 ${wizardStep === 'video' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground'}`}>2. Video</button>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+           <button onClick={() => setWizardStep('examples')} className={`px-3 py-1 rounded-lg whitespace-nowrap transition-colors hover:bg-primary/10 ${wizardStep === 'examples' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground'}`}>3. Examples</button>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+           <button onClick={() => setWizardStep('questions')} className={`px-3 py-1 rounded-lg whitespace-nowrap transition-colors hover:bg-primary/10 ${wizardStep === 'questions' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground'}`}>4. Quiz</button>
+           <ArrowRight className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+           <button onClick={() => setWizardStep('duration')} className={`px-3 py-1 rounded-lg whitespace-nowrap transition-colors hover:bg-primary/10 ${wizardStep === 'duration' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground'}`}>5. Time</button>
         </div>
       )}
 
-      <GlassCard className="max-w-3xl mx-auto" hover={false}>
+      <GlassCard className={`mx-auto ${wizardStep === 'examples' ? 'max-w-6xl' : 'max-w-3xl'}`} hover={false}>
         <div className="space-y-6">
           
           {wizardStep === "info" && (
@@ -403,14 +515,62 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
           {wizardStep === "examples" && (
             <>
               <h3 className="text-lg font-semibold flex items-center gap-2"><Lightbulb className="w-5 h-5 text-primary"/> Step 3: Examples ({examples.length} added)</h3>
-              <div className="p-4 bg-muted/10 rounded-xl space-y-3 mb-4">
-                 <GlassInput label="Example Title" placeholder="e.g. Solving for X" value={exTitle} onChange={e => setExTitle(e.target.value)} />
-                 <GlassTextarea label="Problem" placeholder="The problem statement..." value={exProblem} onChange={e => setExProblem(e.target.value)} />
-                 <GlassTextarea label="Solution" placeholder="Step-by-step solution..." value={exSolution} onChange={e => setExSolution(e.target.value)} />
-                  <GlassTextarea label="Key Takeaway" placeholder="What should the student remember? (Use Enter for new lines)" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
-                 <GlassButton variant="accent" onClick={handleAddExample} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Example</GlassButton>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Form */}
+                <div className="p-4 bg-muted/10 rounded-xl space-y-3 h-fit">
+                   <h4 className="font-medium text-sm text-muted-foreground mb-2">
+                     {editingExampleId ? "Edit Example" : "Add New Example"}
+                   </h4>
+                   <GlassInput label="Example Title" placeholder="e.g. Solving for X" value={exTitle} onChange={e => setExTitle(e.target.value)} />
+                   <GlassTextarea label="Problem" placeholder="The problem statement..." value={exProblem} onChange={e => setExProblem(e.target.value)} />
+                   <GlassTextarea label="Solution" placeholder="Step-by-step solution..." value={exSolution} onChange={e => setExSolution(e.target.value)} />
+                   <GlassTextarea label="Key Takeaway" placeholder="What should the student remember? (Use Enter for new lines)" value={exTakeaway} onChange={e => setExTakeaway(e.target.value)} />
+                   
+                   <div className="flex gap-2 pt-2">
+                     {editingExampleId && (
+                       <GlassButton variant="ghost" onClick={handleCancelEdit} className="flex-1">
+                         Cancel
+                       </GlassButton>
+                     )}
+                     <GlassButton variant="accent" onClick={handleAddExample} className="flex-1">
+                       {editingExampleId ? <Save className="w-4 h-4 mr-2"/> : <Plus className="w-4 h-4 mr-2"/>}
+                       {editingExampleId ? "Update Example" : "Add Example"}
+                     </GlassButton>
+                   </div>
+                </div>
+
+                {/* Right Column: List */}
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Example List</h4>
+                  {examples.length === 0 ? (
+                    <div className="text-center p-8 border border-dashed border-border rounded-xl text-muted-foreground text-sm">
+                      No examples added yet. Add one on the left!
+                    </div>
+                  ) : (
+                    examples.map((ex) => (
+                      <div key={ex.id} className={`glass-panel p-3 relative group transition-all ${editingExampleId === ex.id ? 'border-primary/50 bg-primary/5' : ''}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h5 className="font-bold text-sm">{ex.title}</h5>
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{ex.exampleData?.problem}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                             <button onClick={() => handleEditExample(ex)} className="p-1.5 hover:bg-white/10 rounded-md text-primary transition-colors" title="Edit">
+                               <Wand2 className="w-3.5 h-3.5" />
+                             </button>
+                             <button onClick={() => handleDeleteExample(ex.id)} className="p-1.5 hover:bg-white/10 rounded-md text-destructive transition-colors" title="Delete">
+                               <Plus className="w-3.5 h-3.5 rotate-45" />
+                             </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="flex gap-3">
+
+              <div className="flex gap-3 mt-6">
                  <GlassButton variant="ghost" onClick={() => setWizardStep("video")} className="flex-1">Back</GlassButton>
                  <GlassButton variant="primary" onClick={handleNextStep} className="flex-1">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
               </div>
@@ -420,46 +580,132 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
           {wizardStep === "questions" && (
             <>
               <h3 className="text-lg font-semibold flex items-center gap-2"><HelpCircle className="w-5 h-5 text-primary"/> Step 4: Quiz Questions ({questions.length} added)</h3>
-              <div className="p-4 bg-muted/10 rounded-xl space-y-3 mb-4">
-                 <GlassTextarea label="Question" placeholder="Enter the question..." value={qText} onChange={e => setQText(e.target.value)} />
-                  <div className="flex flex-col gap-3">
-                    {qAnswers.map((ans, idx) => (
-                      <div key={idx} className="flex items-center gap-3 group">
-                         <button 
-                           onClick={() => setQCorrectIndex(idx)} 
-                           className={`w-10 h-10 rounded-xl border-2 flex-shrink-0 flex items-center justify-center font-bold transition-all ${
-                             qCorrectIndex === idx 
-                               ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20 scale-105' 
-                               : 'border-border hover:border-primary/50 text-muted-foreground'
-                           }`}
-                         >
-                           {String.fromCharCode(65+idx)}
-                         </button>
-                         <div className="flex-1 relative">
-                           <input 
-                             className="w-full bg-background/50 backdrop-blur-sm border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" 
-                             placeholder={`Option ${String.fromCharCode(65+idx)}`} 
-                             value={ans} 
-                             onChange={e => {
-                               const newAns = [...qAnswers]; 
-                               newAns[idx] = e.target.value; 
-                               setQAnswers(newAns);
-                             }} 
-                           />
-                           {qCorrectIndex === idx && (
-                             <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                               <Check className="w-4 h-4 text-primary" />
-                             </div>
-                           )}
-                         </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Form */}
+                <div className="p-4 bg-muted/10 rounded-xl space-y-3 h-fit">
+                   <h4 className="font-medium text-sm text-muted-foreground mb-2">
+                     {editingQuestionId ? "Edit Question" : "Add New Question"}
+                   </h4>
+                   <GlassTextarea label="Question" placeholder="Enter the question..." value={qText} onChange={e => setQText(e.target.value)} />
+                    <div className="flex flex-col gap-3">
+                      {qAnswers.map((ans, idx) => (
+                        <div key={idx} className="flex items-center gap-3 group">
+                           <button 
+                             onClick={() => setQCorrectIndex(idx)} 
+                             className={`w-10 h-10 rounded-xl border-2 flex-shrink-0 flex items-center justify-center font-bold transition-all ${
+                               qCorrectIndex === idx 
+                                 ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20 scale-105' 
+                                 : 'border-border hover:border-primary/50 text-muted-foreground'
+                             }`}
+                           >
+                             {String.fromCharCode(65+idx)}
+                           </button>
+                           <div className="flex-1 relative">
+                             <input 
+                               className="w-full bg-background/50 backdrop-blur-sm border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all" 
+                               placeholder={`Option ${String.fromCharCode(65+idx)}`} 
+                               value={ans} 
+                               onChange={e => {
+                                 const newAns = [...qAnswers]; 
+                                 newAns[idx] = e.target.value; 
+                                 setQAnswers(newAns);
+                               }} 
+                             />
+                             {qCorrectIndex === idx && (
+                               <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                 <Check className="w-4 h-4 text-primary" />
+                               </div>
+                             )}
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                   <div className="flex gap-2 pt-2">
+                     {editingQuestionId && (
+                       <GlassButton variant="ghost" onClick={handleCancelQuestionEdit} className="flex-1">
+                         Cancel
+                       </GlassButton>
+                     )}
+                     <GlassButton variant="accent" onClick={handleAddQuestion} className="flex-1">
+                       {editingQuestionId ? <Save className="w-4 h-4 mr-2"/> : <Plus className="w-4 h-4 mr-2"/>}
+                       {editingQuestionId ? "Update Question" : "Add Question"}
+                     </GlassButton>
+                   </div>
+                </div>
+
+                {/* Right Column: List */}
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Question List</h4>
+                  {questions.length === 0 ? (
+                    <div className="text-center p-8 border border-dashed border-border rounded-xl text-muted-foreground text-sm">
+                      No questions added yet. Add one on the left!
+                    </div>
+                  ) : (
+                    questions.map((q, idx) => (
+                      <div key={q.id} className={`glass-panel p-3 relative group transition-all ${editingQuestionId === q.id ? 'border-primary/50 bg-primary/5' : ''}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h5 className="font-bold text-sm mb-1">Q{idx + 1}: {q.questionData?.question}</h5>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                              {q.questionData?.answers.map((ans, aIdx) => (
+                                <div key={aIdx} className={`text-xs flex items-center gap-1 ${q.questionData?.correctAnswerIndex === aIdx ? 'text-green-500 font-medium' : 'text-muted-foreground'}`}>
+                                  <span className="opacity-50">{String.fromCharCode(65+aIdx)}.</span> {ans}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                             <button onClick={() => handleEditQuestion(q)} className="p-1.5 hover:bg-white/10 rounded-md text-primary transition-colors" title="Edit">
+                               <Wand2 className="w-3.5 h-3.5" />
+                             </button>
+                             <button onClick={() => handleDeleteQuestion(q.id)} className="p-1.5 hover:bg-white/10 rounded-md text-destructive transition-colors" title="Delete">
+                               <Plus className="w-3.5 h-3.5 rotate-45" />
+                             </button>
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                 <GlassButton variant="accent" onClick={handleAddQuestion} className="w-full"><Plus className="w-4 h-4 mr-2"/> Add Question</GlassButton>
+                    ))
+                  )}
+                </div>
               </div>
               
               <div className="flex gap-3 pt-4">
                  <GlassButton variant="ghost" onClick={() => setWizardStep("examples")} className="flex-1">Back</GlassButton>
+                 <GlassButton variant="primary" onClick={handleNextStep} className="flex-1">Next Step <ArrowRight className="w-4 h-4 ml-2"/></GlassButton>
+              </div>
+            </>
+          )}
+
+          {wizardStep === "duration" && (
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2"><Clock className="w-5 h-5 text-primary"/> Step 5: Duration</h3>
+              <p className="text-sm text-muted-foreground mb-4">Select how long this lesson typically takes to complete.</p>
+              
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-6">
+                {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].map((mins) => (
+                  <button
+                    key={mins}
+                    onClick={() => setDuration(mins)}
+                    className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-1 ${
+                      duration === mins
+                        ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20 scale-105 font-bold'
+                        : 'bg-background/50 border-border hover:border-primary/50 hover:bg-primary/5 text-muted-foreground'
+                    }`}
+                  >
+                    <span className="text-lg">{mins}</span>
+                    <span className="text-[10px] uppercase tracking-wider opacity-70">Mins</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="glass-panel p-4 mb-6 flex items-center justify-center gap-2 text-muted-foreground bg-primary/5 border-primary/20">
+                 <Clock className="w-4 h-4" />
+                 <span>Selected Time: <span className="font-bold text-foreground">{duration} Minutes</span></span>
+              </div>
+
+              <div className="flex gap-3">
+                 <GlassButton variant="ghost" onClick={() => setWizardStep("questions")} className="flex-1">Back</GlassButton>
                  <GlassButton variant="accent" onClick={handleSaveLesson} disabled={loading} className="flex-[2]">
                     {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2"/>}
                     {initialData ? 'Update Lesson' : 'Complete & Save Lesson'}

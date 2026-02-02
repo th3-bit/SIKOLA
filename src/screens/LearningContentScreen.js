@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef, createElement } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, Animated, Easing, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { ArrowLeft, ChevronRight, CheckCircle, X, Trophy, Star, Zap, FileText, Calculator, Lightbulb } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -246,7 +245,10 @@ export default function LearningContentScreen({ route, navigation }) {
         </Text>
         
         <View style={[styles.videoWrapper, { shadowColor: primaryColor }]}>
-          <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.videoContainer, { borderColor: theme.colors.glassBorder }]}>
+          <View style={[styles.videoContainer, { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+          }]}>
             {isYouTube ? (
                Platform.OS === 'web' ? renderWebYoutube() : (
                   <WebView
@@ -276,7 +278,7 @@ export default function LearningContentScreen({ route, navigation }) {
                 />
               </>
             )}
-          </BlurView>
+          </View>
         </View>
         
         <Text style={[styles.slideContent, { color: theme.colors.textSecondary, marginTop: 20 }]}>
@@ -414,26 +416,35 @@ export default function LearningContentScreen({ route, navigation }) {
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity 
-              style={[styles.toolButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}
-              onPress={() => setShowNotes(true)}
-            >
-              <FileText color={theme.colors.secondary} size={18} />
-            </TouchableOpacity>
+            <View style={styles.toolItem}>
+              <TouchableOpacity 
+                style={[styles.toolButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}
+                onPress={() => setShowNotes(true)}
+              >
+                <FileText color={theme.colors.secondary} size={18} />
+              </TouchableOpacity>
+              <Text style={[styles.toolLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Notes</Text>
+            </View>
 
-            <TouchableOpacity 
-              style={[styles.toolButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}
-              onPress={() => setShowCalculator(true)}
-            >
-              <Calculator color={theme.colors.secondary} size={18} />
-            </TouchableOpacity>
+            <View style={styles.toolItem}>
+              <TouchableOpacity 
+                style={[styles.toolButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}
+                onPress={() => setShowCalculator(true)}
+              >
+                <Calculator color={theme.colors.secondary} size={18} />
+              </TouchableOpacity>
+              <Text style={[styles.toolLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Calc</Text>
+            </View>
 
-            <TouchableOpacity 
-              style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}
-              onPress={() => setShowExamples(true)}
-            >
-              <Lightbulb color={primaryColor} size={18} />
-            </TouchableOpacity>
+            <View style={styles.toolItem}>
+              <TouchableOpacity 
+                style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}
+                onPress={() => setShowExamples(true)}
+              >
+                <Lightbulb color={primaryColor} size={18} />
+              </TouchableOpacity>
+              <Text style={[styles.toolLabel, { color: primaryColor, fontFamily: theme.typography.fontFamily }]}>Examples</Text>
+            </View>
           </View>
         </View>
 
@@ -444,9 +455,12 @@ export default function LearningContentScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.contentCardWrapper, { shadowColor: primaryColor }]}>
-            <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.contentCard, { borderColor: theme.colors.glassBorder }]}>
+            <View style={[styles.contentCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
               {renderSlideContent()}
-            </BlurView>
+            </View>
           </View>
         </ScrollView>
 
@@ -477,7 +491,7 @@ export default function LearningContentScreen({ route, navigation }) {
       {/* Completion/XP Modal */}
       <Modal visible={showXPModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)' }]} />
            <Animated.View style={[styles.xpCard, { transform: [{ scale: xpScale }] }]}>
               <LinearGradient
                 colors={['#8B5CF6', '#EC4899']}
@@ -520,7 +534,7 @@ export default function LearningContentScreen({ route, navigation }) {
       {/* Retry Modal */}
       <Modal visible={retryModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)' }]} />
            <View style={[styles.xpCard, { backgroundColor: theme.colors.primary }]}>
               <View style={{ padding: 40, alignItems: 'center' }}>
                  <View style={{ marginBottom: 20, width: 80, height: 80, borderRadius: 40, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' }}>
@@ -548,7 +562,7 @@ export default function LearningContentScreen({ route, navigation }) {
       {/* Validation Modal */}
       <Modal visible={validationModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)' }]} />
            <View style={[styles.xpCard, { backgroundColor: theme.colors.primary, transform: [{scale: 0.9}] }]}>
               <View style={{ padding: 40, alignItems: 'center' }}>
                  <View style={{ marginBottom: 20, width: 80, height: 80, borderRadius: 40, backgroundColor: '#FACC15', justifyContent: 'center', alignItems: 'center' }}>
@@ -573,7 +587,7 @@ export default function LearningContentScreen({ route, navigation }) {
       {/* Examples Modal */}
       <Modal visible={showExamples} animationType="slide" transparent>
         <View style={[styles.container, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <BlurView intensity={80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)' }]} />
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.header}>
                <View style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}>
@@ -592,14 +606,19 @@ export default function LearningContentScreen({ route, navigation }) {
                {slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).length > 0 ? (
                  slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).map((ex, idx) => (
                    <View key={idx} style={[styles.contentCardWrapper, { marginBottom: 20, shadowColor: primaryColor }]}>
-                     <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.contentCard, { minHeight: 0, padding: 24, borderColor: theme.colors.glassBorder }]}>
+                     <View style={[styles.contentCard, { 
+                      minHeight: 0, 
+                      padding: 24, 
+                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 25, 0.9)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+                    }]}>
                         <Text style={[styles.slideTitle, { fontSize: 20, color: primaryColor, marginBottom: 12, fontFamily: theme.typography.fontFamily }]}>
                           {ex.title}
                         </Text>
                         <Text style={[styles.slideContent, { fontSize: 15, color: theme.colors.textPrimary, lineHeight: 24, fontFamily: theme.typography.fontFamily }]}>
                           {ex.content}
                         </Text>
-                     </BlurView>
+                     </View>
                    </View>
                  ))
                ) : (
@@ -674,15 +693,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  toolItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  toolLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   scrollView: { flex: 1 },
   content: { paddingHorizontal: 20 },
   contentCardWrapper: {
     borderRadius: 32,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
   },
   contentCard: {
     padding: 30,
@@ -696,10 +719,6 @@ const styles = StyleSheet.create({
   videoWrapper: {
     borderRadius: 24,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
     marginTop: 10,
   },
   videoContainer: {

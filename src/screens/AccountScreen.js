@@ -39,98 +39,9 @@ const { width } = Dimensions.get('window');
 
 export default function AccountScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { userStats, weeklyActivity, sessions, isLoading } = useProgress();
+  const { userStats, levelInfo, weeklyActivity, sessions, isLoading } = useProgress();
+  const currentRank = levelInfo?.current;
   
-  const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
-    <View style={[styles.statCardWrapper, { shadowColor: shadowColor }]}>
-      <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.statCard, { borderColor: theme.colors.glassBorder }]}>
-        <LinearGradient
-          colors={isDark 
-            ? [`${color}30`, `${color}10`, 'transparent'] 
-            : [`${color}20`, `${color}10`, `${color}05`]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.statIconContainer, { backgroundColor: `${color}${isDark ? '20' : '30'}` }]}>
-          <Icon color={color} size={18} />
-        </View>
-        <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
-        <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
-        <View style={[styles.liquidGlow, { backgroundColor: color, opacity: isDark ? 0.15 : 0.2 }]} />
-      </BlurView>
-    </View>
-  );
-
-  const StreakCard = () => {
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const days = dayLabels.map((label, index) => ({
-      label,
-      active: weeklyActivity[index] || false
-    }));
-    
-    const streak = userStats?.current_streak || 0;
-
-    return (
-      <TouchableOpacity activeOpacity={0.9} style={styles.streakCardWrapper}>
-        <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.streakCard, { borderColor: theme.colors.glassBorder }]}>
-          <LinearGradient
-            colors={isDark ? ['rgba(255, 69, 58, 0.15)', 'transparent'] : ['rgba(255, 69, 58, 0.1)', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.streakContent}>
-            <View style={styles.streakInfo}>
-              <View style={styles.streakIconCircle}>
-                <Flame color="#FF453A" size={32} fill="#FF453A" />
-              </View>
-              <View style={styles.streakTextContainer}>
-                <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{streak} Day Streak!</Text>
-                <Text style={[styles.streakSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{streak < 7 ? `Keep studying to reach 7 days!` : 'You are on fire! Keep it up!'}</Text>
-              </View>
-            </View>
-            <View style={styles.streakBadge}>
-              <Zap color="#FF453A" size={16} fill="#FF453A" />
-              <Text style={[styles.streakValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>+50 XP</Text>
-            </View>
-          </View>
-          
-          {/* Progress Days Chips */}
-          <View style={styles.streakDaysContainer}>
-            {days.map((day, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.dayChip,
-                  { 
-                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.05)' : '#ffffff'),
-                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-                  }
-                ]}
-              >
-                <Zap 
-                  size={14} 
-                  color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
-                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
-                />
-                <Text style={[
-                  styles.dayChipText, 
-                  { 
-                    color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
-                    fontFamily: theme.typography.fontFamily 
-                  }
-                ]}>
-                  {day.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </BlurView>
-      </TouchableOpacity>
-    );
-  };
 
   const MenuOption = ({ icon: Icon, label, onPress, isLast = false, color = theme.colors.textPrimary }) => (
     <TouchableOpacity 
@@ -229,7 +140,9 @@ export default function AccountScreen({ navigation }) {
             </View>
             
             <Text style={[styles.userName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola Student</Text>
-            <Text style={[styles.userEmail, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>student@sikolaplus.com</Text>
+            
+            
+            <Text style={[styles.userEmail, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily, marginTop: 8 }]}>student@sikolaplus.com</Text>
             
             <TouchableOpacity style={[styles.editProfileBtn, { backgroundColor: isDark ? 'rgba(240, 236, 29, 0.1)' : 'rgba(37, 99, 235, 0.1)', borderColor: isDark ? 'rgba(240, 236, 29, 0.2)' : 'rgba(37, 99, 235, 0.2)' }]}>
                <Text style={[styles.editProfileText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Edit Profile</Text>
@@ -265,19 +178,6 @@ export default function AccountScreen({ navigation }) {
               </View>
             </TouchableOpacity>
           </View>
-
-           {/* Stats Row */}
-           <View style={styles.statsRow}>
-             <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
-             <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
-             <StatCard icon={Clock} label="Hours" value={Math.floor((sessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
-           </View>
-
-           {/* Streak Section */}
-           <View style={styles.menuSection}>
-             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Current Progress</Text>
-             <StreakCard />
-           </View>
 
            {/* Achievements Section */}
            <AchievementsSection />
@@ -411,10 +311,6 @@ const styles = StyleSheet.create({
     height: 110,
     borderRadius: 24,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
   },
   statCard: {
     flex: 1,
@@ -434,12 +330,11 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
   statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   statValue: {
     fontSize: 20,
@@ -457,11 +352,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     marginTop: 10,
-    shadowColor: '#FF453A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 10,
   },
   streakCard: {
     flex: 1,

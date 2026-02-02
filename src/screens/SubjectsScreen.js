@@ -81,7 +81,8 @@ export default function SubjectsScreen({ navigation, route }) {
         subjectsData.forEach(subject => {
             const style = getSubjectStyle(subject.name);
             const icon = style.icon;
-            const color = style.color;
+            // Use database color if available, otherwise fallback to style.color
+            const color = subject.color || style.color;
             
             const formattedTopic = (subject.topics || []).map(topic => {
               // Calculate Lesson Count safely
@@ -104,13 +105,13 @@ export default function SubjectsScreen({ navigation, route }) {
               };
             }).sort((a, b) => a.title.localeCompare(b.title));
 
-            if (subjectsMap.has(style.name)) {
-               const existing = subjectsMap.get(style.name);
+            if (subjectsMap.has(subject.name)) {
+               const existing = subjectsMap.get(subject.name);
                existing.topics = [...existing.topics, ...formattedTopic];
             } else {
-               subjectsMap.set(style.name, {
+               subjectsMap.set(subject.name, {
                  id: subject.id,
-                 name: style.name,
+                 name: subject.name,
                  icon,
                  color,
                  category: 'Academic',
@@ -145,7 +146,13 @@ export default function SubjectsScreen({ navigation, route }) {
       }}
       style={[styles.topicCardWrapper, { shadowColor: color }]}
     >
-      <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.topicCard, { borderColor: theme.colors.glassBorder }]}>
+      <View style={[
+        styles.topicCard, 
+        { 
+          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+        }
+      ]}>
         <View style={styles.topicHeader}>
           <Text style={[styles.topicTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
             {topic.title}
@@ -164,7 +171,7 @@ export default function SubjectsScreen({ navigation, route }) {
             <Text style={[styles.progressVal, { color: theme.colors.textSecondary }]}>{topic.progress}%</Text>
           </View>
         </View>
-      </BlurView>
+      </View>
     </TouchableOpacity>
   );
 
@@ -244,10 +251,6 @@ export default function SubjectsScreen({ navigation, route }) {
                     selectedSubject?.id === sub.id && { 
                       backgroundColor: sub.color,
                       borderColor: sub.color,
-                      elevation: 10,
-                      shadowColor: sub.color,
-                      shadowOpacity: 0.5,
-                      shadowRadius: 10,
                     },
                     { borderColor: theme.colors.glassBorder }
                   ]}
@@ -374,10 +377,6 @@ const styles = StyleSheet.create({
   topicCardWrapper: {
     borderRadius: 20,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
   },
   topicCard: {
     padding: 20,

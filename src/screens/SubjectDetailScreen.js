@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { ArrowLeft, BookOpen, Clock, Award, Search } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
@@ -129,7 +128,10 @@ export default function SubjectDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
           
-          <View style={styles.headerContent}>
+          <View style={[styles.headerContent, { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+          }]}>
             <View style={[styles.subjectIcon, { backgroundColor: `${subject.color || '#8B5CF6'}15` }]}>
               {subject.icon && React.createElement(subject.icon, { color: subject.color || '#8B5CF6', size: 32 })}
             </View>
@@ -152,11 +154,13 @@ export default function SubjectDetailScreen({ route, navigation }) {
           <>
             {/* Stats Card */}
             <View style={[styles.statsCardWrapper, { shadowColor: subject.color || '#8B5CF6' }]}>
-              <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.statsCard, { borderColor: theme.colors.glassBorder }]}>
-                <LinearGradient
-                  colors={isDark ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.01)'] : ['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
-                  style={StyleSheet.absoluteFill}
-                />
+              <View style={[
+                styles.statsCard, 
+                { 
+                  backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+                }
+              ]}>
                 
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
@@ -195,7 +199,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
                     </Text>
                   </View>
                 </View>
-              </BlurView>
+              </View>
             </View>
 
             {/* Topics/Lessons List (Curriculum Style) */}
@@ -310,6 +314,9 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
   },
   subjectIcon: {
     width: 64,
@@ -335,10 +342,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     borderRadius: 24,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
   },
   statsCard: {
     padding: 20,

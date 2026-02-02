@@ -22,6 +22,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import StreakCard from '../components/StreakCard';
+import MonthlyStreakCalendar from '../components/MonthlyStreakCalendar';
 import Svg, { Circle } from 'react-native-svg';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 
@@ -85,7 +86,7 @@ export default function LearningProgressScreen({ navigation }) {
           return {
             id: s.id,
             name: s.name,
-            color: style.color,
+            color: s.color || style.color,
             minutes: subjectTime,
             percentage: totalMinutesActive > 0 ? Math.round((subjectTime / totalMinutesActive) * 100) : 0,
             totalTopics: subjectTopics.length,
@@ -140,7 +141,10 @@ export default function LearningProgressScreen({ navigation }) {
   const circumference = 2 * Math.PI * radius;
 
   const StatCard = ({ icon: Icon, label, value, color }) => (
-    <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.statCard, { borderColor: theme.colors.glassBorder }]}>
+    <View style={[styles.statCard, { 
+      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+    }]}>
        <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
          <Icon size={20} color={color} />
        </View>
@@ -148,7 +152,7 @@ export default function LearningProgressScreen({ navigation }) {
          <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{value}</Text>
          <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{label}</Text>
        </View>
-    </BlurView>
+    </View>
   );
 
   return (
@@ -199,7 +203,10 @@ export default function LearningProgressScreen({ navigation }) {
           ) : (
             <>
               {/* Donut Chart Card */}
-              <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.donutCard, { borderColor: theme.colors.glassBorder }]}>
+              <View style={[styles.donutCard, { 
+                backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+              }]}>
                 <View style={styles.donutRow}>
                   <View style={styles.chartSection}>
                     <Svg width={160} height={160}>
@@ -250,10 +257,14 @@ export default function LearningProgressScreen({ navigation }) {
                     )}
                   </View>
                 </View>
-              </BlurView>
+              </View>
 
               {/* Stats Grid */}
-              <StreakCard />
+              {timeRange === 'monthly' ? (
+                <MonthlyStreakCalendar />
+              ) : (
+                <StreakCard />
+              )}
               
               <View style={styles.statsGrid}>
                 <StatCard icon={CheckCircle} label="XP" value={userStats?.total_xp || 0} color="#10B981" />
@@ -273,11 +284,12 @@ export default function LearningProgressScreen({ navigation }) {
                     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                     
                     return (
-                      <BlurView 
+                      <View 
                         key={subject.id} 
-                        intensity={20} 
-                        tint={isDark ? "dark" : "light"} 
-                        style={[styles.subjectProgressCard, { borderColor: theme.colors.glassBorder }]}
+                        style={[styles.subjectProgressCard, { 
+                          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+                        }]}
                       >
                         <View style={styles.subjectHeaderRow}>
                           <View style={[styles.subjectIconBox, { backgroundColor: `${subject.color}15` }]}>
@@ -304,7 +316,7 @@ export default function LearningProgressScreen({ navigation }) {
                             style={[styles.progressBarFill, { width: `${progress}%` }]}
                           />
                         </View>
-                      </BlurView>
+                      </View>
                     );
                   })}
                 </View>

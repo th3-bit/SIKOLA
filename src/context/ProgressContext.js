@@ -2,6 +2,8 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
+// import NotificationService from '../services/NotificationService';
+import { getLevelInfo } from '../constants/LevelConfig';
 
 const ProgressContext = createContext();
 
@@ -21,6 +23,7 @@ export const ProgressProvider = ({ children }) => {
   const [continueLearning, setContinueLearning] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [weeklyActivity, setWeeklyActivity] = useState(new Array(7).fill(false));
+  const [levelInfo, setLevelInfo] = useState(getLevelInfo(0));
   const [isLoading, setIsLoading] = useState(true);
 
   // Load progress from storage on mount
@@ -178,6 +181,7 @@ export const ProgressProvider = ({ children }) => {
 
       if (statsData) {
         setUserStats(statsData);
+        setLevelInfo(getLevelInfo(statsData.total_xp));
       } else if (statsError && statsError.code === 'PGRST116') {
         const initialStats = {
           user_id: user.id,
@@ -218,6 +222,13 @@ export const ProgressProvider = ({ children }) => {
           }
         });
         setWeeklyActivity(activity);
+
+        // Retention Check: If hasn't studied today and it's late (e.g., after 6 PM)
+        const hour = now.getHours();
+        const studiedToday = activity[(now.getDay() + 6) % 7];
+        if (!studiedToday && hour >= 18 && statsData?.current_streak > 0) {
+           // NotificationService.scheduleStreakAlert();
+        }
       }
       console.log('ProgressContext: loadProgress finished');
     } catch (error) {
@@ -290,14 +301,29 @@ export const ProgressProvider = ({ children }) => {
         .eq('user_id', user.id);
 
       // Log learning session automatically for topic completion
-      await supabase.from('learning_sessions').insert([{
-        user_id: user.id,
-        subject_id: courseId,
-        duration_minutes: duration,
-        started_at: new Date().toISOString()
-      }]);
+        await supabase.from('learning_sessions').insert([{
+          user_id: user.id,
+          subject_id: courseId,
+          duration_minutes: duration,
+          started_at: new Date().toISOString()
+        }]);
 
-      setUserStats(prev => ({ ...prev, ...newStats }));
+        // 🎉 Achievement / Celebration Notification
+        if (newStats.current_streak > (currentStats?.current_streak || 0)) {
+           // NotificationService.scheduleAchievementUnlocked(`${newStats.current_streak} Day Streak Reached!`);
+        } else {
+           // NotificationService.scheduleAchievementUnlocked("Lesson Mastered!");
+        }
+
+        // 🏅 Level Up Check
+        const oldLevel = getLevelInfo(currentStats?.total_xp || 0);
+        const newLevel = getLevelInfo(newStats.total_xp);
+        if (newLevel.current.level > oldLevel.current.level) {
+           // NotificationService.scheduleAchievementUnlocked(`Leveled Up to ${newLevel.current.title}! 🏆`);
+        }
+
+        setUserStats(prev => ({ ...prev, ...newStats }));
+        setLevelInfo(newLevel);
       
       // Update local state for immediate UI feedback
       setCourseProgress(prev => ({
@@ -339,6 +365,7 @@ export const ProgressProvider = ({ children }) => {
       weeklyActivity,
       recentLessons,
       continueLearning,
+      levelInfo,
       completeTopic, 
       isTopicCompleted,
       getTopicScore,

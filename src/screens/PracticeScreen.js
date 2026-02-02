@@ -36,6 +36,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import GlassHeader from '../components/GlassHeader';
+import StreakCard from '../components/StreakCard';
 import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 
@@ -59,94 +60,22 @@ export default function PracticeScreen({ navigation }) {
 
   const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
     <View style={[styles.statCardWrapper, { shadowColor: shadowColor }]}>
-      <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.statCard, { borderColor: theme.colors.glassBorder }]}>
-        <LinearGradient
-          colors={isDark 
-            ? [`${color}30`, `${color}10`, 'transparent'] 
-            : [`${color}20`, `${color}10`, `${color}05`]
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.statIconContainer, { backgroundColor: `${color}${isDark ? '20' : '30'}` }]}>
-          <Icon color={color} size={18} />
+      <View style={[
+        styles.statCard, 
+        { 
+          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+        }
+      ]}>
+        <View style={styles.statIconContainer}>
+          <Icon color={color} size={24} />
         </View>
         <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
         <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
-        <View style={[styles.liquidGlow, { backgroundColor: color, opacity: isDark ? 0.15 : 0.2 }]} />
-      </BlurView>
+        <View style={[styles.liquidGlow, { backgroundColor: color, opacity: isDark ? 0.08 : 0.1 }]} />
+      </View>
     </View>
   );
-
-  const StreakCard = () => {
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const days = dayLabels.map((label, index) => ({
-      label,
-      active: weeklyActivity[index] || false
-    }));
-    
-    const streak = userStats?.current_streak || 0;
-
-    return (
-      <TouchableOpacity activeOpacity={0.9} style={styles.streakCardWrapper}>
-        <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.streakCard, { borderColor: theme.colors.glassBorder }]}>
-          <LinearGradient
-            colors={isDark ? ['rgba(255, 69, 58, 0.15)', 'transparent'] : ['rgba(255, 69, 58, 0.1)', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.streakContent}>
-            <View style={styles.streakInfo}>
-              <View style={styles.streakIconCircle}>
-                <Flame color="#FF453A" size={32} fill="#FF453A" />
-              </View>
-              <View style={styles.streakTextContainer}>
-                <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Test Streak: {streak} Days</Text>
-                <Text style={[styles.streakSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{streak < 7 ? `Practice daily to reach 7 days!` : 'You are on fire! Keep it up!'}</Text>
-              </View>
-            </View>
-            <View style={styles.streakBadge}>
-              <Zap color="#FF453A" size={16} fill="#FF453A" />
-              <Text style={[styles.streakValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>ACTIVE</Text>
-            </View>
-          </View>
-          
-          {/* Progress Days Chips */}
-          <View style={styles.streakDaysContainer}>
-            {days.map((day, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.dayChip,
-                  { 
-                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.05)' : '#ffffff'),
-                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-                  }
-                ]}
-              >
-                <Zap 
-                  size={14} 
-                  color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
-                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
-                />
-                <Text style={[
-                  styles.dayChipText, 
-                  { 
-                    color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
-                    fontFamily: theme.typography.fontFamily 
-                  }
-                ]}>
-                  {day.label[0]}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </BlurView>
-      </TouchableOpacity>
-    );
-  };
   
   // State
   const [subjects, setSubjects] = useState([]);
@@ -432,85 +361,6 @@ const styles = StyleSheet.create({
   streakCardSection: {
     marginBottom: 25,
   },
-  streakCardWrapper: {
-    width: '100%',
-    height: 160,
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#FF453A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  streakCard: {
-    flex: 1,
-    padding: 20,
-    borderWidth: 1,
-  },
-  streakContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  streakInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  streakIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 69, 58, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  streakTextContainer: {
-    justifyContent: 'center',
-  },
-  streakTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  streakSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  streakBadge: {
-    backgroundColor: 'rgba(255, 69, 58, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  streakValue: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  streakDaysContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 0,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  dayChip: {
-    width: (width - 80) / 7,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    gap: 4,
-  },
-  dayChipText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -650,10 +500,6 @@ const styles = StyleSheet.create({
     height: 110,
     borderRadius: 24,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
   },
   statCard: {
     flex: 1,
@@ -665,12 +511,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   statValue: {
     fontSize: 20,

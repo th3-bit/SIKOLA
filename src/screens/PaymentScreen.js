@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import {
   ArrowLeft,
   CreditCard,
@@ -18,6 +18,8 @@ import {
   CheckCircle,
   Clock,
   Shield,
+  ChevronDown,
+  Globe,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
@@ -29,6 +31,17 @@ export default function PaymentScreen({ route, navigation }) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('momo'); // 'momo' or 'airtel'
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState({ name: 'Rwanda', code: '+250', flag: '🇷🇼' });
+
+  const countries = [
+    { name: 'Rwanda', code: '+250', flag: '🇷🇼' },
+    { name: 'Uganda', code: '+256', flag: '🇺🇬' },
+    { name: 'Kenya', code: '+254', flag: '🇰🇪' },
+    { name: 'Tanzania', code: '+255', flag: '🇹🇿' },
+    { name: 'Burundi', code: '+257', flag: '🇧🇮' },
+    { name: 'DR Congo', code: '+243', flag: '🇨🇩' },
+  ];
 
   const handlePayment = async () => {
     if (!phoneNumber || phoneNumber.length < 9) {
@@ -69,7 +82,7 @@ export default function PaymentScreen({ route, navigation }) {
       // Show success message
       Alert.alert(
         'Payment Initiated',
-        `Please check your ${paymentMethod === 'momo' ? 'MTN Mobile Money' : 'Airtel Money'} phone (${phoneNumber}) to complete the payment of ${plan.price.toLocaleString()} RWF.`,
+        `Please check your ${paymentMethod === 'momo' ? 'MTN Mobile Money' : 'Airtel Money'} phone (${selectedCountry.code} ${phoneNumber}) to complete the payment of ${plan.price.toLocaleString()} RWF.`,
         [
           {
             text: 'OK',
@@ -116,11 +129,10 @@ export default function PaymentScreen({ route, navigation }) {
           contentContainerStyle={styles.scrollContent}
         >
           {/* Plan Summary */}
-          <BlurView
-            intensity={isDark ? 30 : 40}
-            tint={isDark ? 'dark' : 'light'}
-            style={[styles.summaryCard, { borderColor: theme.colors.glassBorder }]}
-          >
+          <View style={[styles.summaryCard, { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+          }]}>
             <Text style={[styles.summaryTitle, { color: theme.colors.textPrimary }]}>
               Order Summary
             </Text>
@@ -159,7 +171,7 @@ export default function PaymentScreen({ route, navigation }) {
                 {plan?.price?.toLocaleString()} RWF
               </Text>
             </View>
-          </BlurView>
+          </View>
 
           {/* Payment Methods */}
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -174,11 +186,9 @@ export default function PaymentScreen({ route, navigation }) {
               { borderColor: paymentMethod === 'momo' ? '#FFCC00' : theme.colors.glassBorder }
             ]}
           >
-            <BlurView
-              intensity={isDark ? 20 : 30}
-              tint={isDark ? 'dark' : 'light'}
-              style={styles.paymentMethodContent}
-            >
+            <View style={[styles.paymentMethodContent, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
+            }]}>
               <View style={styles.paymentMethodLeft}>
                 <View style={[styles.paymentIcon, { backgroundColor: '#FFCC00' }]}>
                   <Smartphone size={24} color="#000" />
@@ -195,7 +205,7 @@ export default function PaymentScreen({ route, navigation }) {
               {paymentMethod === 'momo' && (
                 <CheckCircle size={24} color="#FFCC00" />
               )}
-            </BlurView>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -206,11 +216,9 @@ export default function PaymentScreen({ route, navigation }) {
               { borderColor: paymentMethod === 'airtel' ? '#FF0000' : theme.colors.glassBorder }
             ]}
           >
-            <BlurView
-              intensity={isDark ? 20 : 30}
-              tint={isDark ? 'dark' : 'light'}
-              style={styles.paymentMethodContent}
-            >
+            <View style={[styles.paymentMethodContent, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
+            }]}>
               <View style={styles.paymentMethodLeft}>
                 <View style={[styles.paymentIcon, { backgroundColor: '#FF0000' }]}>
                   <Smartphone size={24} color="#FFF" />
@@ -227,31 +235,72 @@ export default function PaymentScreen({ route, navigation }) {
               {paymentMethod === 'airtel' && (
                 <CheckCircle size={24} color="#FF0000" />
               )}
-            </BlurView>
+            </View>
           </TouchableOpacity>
 
           {/* Phone Number Input */}
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
             Phone Number
           </Text>
-          <BlurView
-            intensity={isDark ? 20 : 30}
-            tint={isDark ? 'dark' : 'light'}
-            style={[styles.inputContainer, { borderColor: theme.colors.glassBorder }]}
-          >
+          <View style={[styles.inputContainer, { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+          }]}>
             <View style={styles.phoneInputContent}>
-              <Text style={[styles.phonePrefix, { color: theme.colors.textPrimary }]}>+250</Text>
+              <TouchableOpacity 
+                style={[styles.countrySelector, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
+                onPress={() => setShowCountryPicker(true)}
+              >
+                <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+                <Text style={[styles.phonePrefix, { color: theme.colors.textPrimary }]}>{selectedCountry.code}</Text>
+                <ChevronDown size={14} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
               <TextInput
                 style={[styles.input, { color: theme.colors.textPrimary }]}
                 placeholder="7X XXX XXXX"
                 placeholderTextColor={theme.colors.textSecondary}
-                keyboardType="phone-pad"
+                keyboardType="numeric"
                 value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                maxLength={9} // Adjusted for without prefix (9 digits for Rwanda? usually 78... is 9 digits)
+                onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, ''))}
+                maxLength={10}
               />
             </View>
-          </BlurView>
+          </View>
+
+          {/* Country Picker Modal */}
+          <Modal visible={showCountryPicker} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { 
+                backgroundColor: isDark ? '#1A1A1A' : '#FFF',
+                borderColor: theme.colors.glassBorder 
+              }]}>
+                <View style={styles.modalHeader}>
+                  <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Select Country</Text>
+                  <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                    <Text style={{ color: theme.colors.secondary, fontWeight: '700' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView>
+                  {countries.map((c) => (
+                    <TouchableOpacity 
+                      key={c.code} 
+                      style={[styles.countryItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
+                      onPress={() => {
+                        setSelectedCountry(c);
+                        setShowCountryPicker(false);
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Text style={{ fontSize: 24 }}>{c.flag}</Text>
+                        <Text style={[styles.countryName, { color: theme.colors.textPrimary }]}>{c.name}</Text>
+                      </View>
+                      <Text style={[styles.countryCodeText, { color: theme.colors.textSecondary }]}>{c.code}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
 
           {/* Security Notice */}
           <View style={styles.securityNotice}>
@@ -373,19 +422,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 2,
     marginBottom: 12,
-    overflow: 'hidden',
   },
   paymentMethodActive: {
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
   paymentMethodContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
+    borderRadius: 14,
   },
   paymentMethodLeft: {
     flexDirection: 'row',
@@ -426,8 +471,56 @@ const styles = StyleSheet.create({
   },
   phonePrefix: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     marginRight: 4,
+  },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 12,
+    borderRightWidth: 1,
+    marginRight: 4,
+  },
+  countryFlag: {
+    fontSize: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    maxHeight: '70%',
+    borderWidth: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  countryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  countryName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  countryCodeText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   securityNotice: {
     flexDirection: 'row',

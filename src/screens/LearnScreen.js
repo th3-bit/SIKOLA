@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { 
   Play, 
   BookOpen, 
@@ -40,6 +39,7 @@ export default function LearnScreen({ navigation }) {
   const [activePathSubject, setActivePathSubject] = useState(null);
   const [learningPath, setLearningPath] = useState([]);
   const [loadingPath, setLoadingPath] = useState(false);
+  const [allSubjects, setAllSubjects] = useState([]);
 
   // Calculate Level (Every 1000 XP = 1 Level)
   const currentLevel = Math.floor((userStats?.total_xp || 0) / 1000) + 1;
@@ -74,6 +74,11 @@ export default function LearnScreen({ navigation }) {
         const h = new Date(s.started_at).getHours();
         return h >= 5 && h < 9;
       }), 
+      current: sessions?.some(s => {
+        const h = new Date(s.started_at).getHours();
+        return h >= 5 && h < 9;
+      }) ? 1 : 0,
+      total: 1,
       desc: 'Complete a lesson before 9AM' 
     },
     { 
@@ -82,6 +87,8 @@ export default function LearnScreen({ navigation }) {
       icon: FlameIcon, 
       color: '#FF453A', 
       unlocked: (userStats?.current_streak || 0) >= 7, 
+      current: userStats?.current_streak || 0,
+      total: 7,
       desc: 'Study for 7 days in a row' 
     },
     { 
@@ -90,6 +97,8 @@ export default function LearnScreen({ navigation }) {
       icon: Star, 
       color: '#8B5CF6', 
       unlocked: recentLessons?.filter(l => l.progress === 100).length >= 3, 
+      current: recentLessons?.filter(l => l.progress === 100).length || 0,
+      total: 3,
       desc: 'Score 100% on 3 quizzes' 
     },
     { 
@@ -98,6 +107,8 @@ export default function LearnScreen({ navigation }) {
       icon: BookOpen, 
       color: '#10B981', 
       unlocked: (userStats?.total_lessons_completed || 0) >= 5, 
+      current: userStats?.total_lessons_completed || 0,
+      total: 5,
       desc: 'Complete 5 lessons' 
     },
   ];
@@ -121,46 +132,73 @@ export default function LearnScreen({ navigation }) {
 
   // Determine which subject path to show
   useEffect(() => {
+    fetchSubjects();
     loadActivePath();
   }, [recentLessons, continueLearning]);
 
-  const loadActivePath = async () => {
+  const fetchSubjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subjects')
+        .select('*');
+      if (!error && data) {
+        setAllSubjects(data);
+      }
+    } catch (e) {
+      console.error('Error fetching subjects:', e);
+    }
+  };
+
+  const loadActivePath = async (manualSubjectId = null) => {
     // 1. Find a target topic ID to trace back to a subject
     let targetTopicId = null;
+    let targetSubjectId = manualSubjectId;
     
-    if (recentLessons?.length > 0) {
-      targetTopicId = recentLessons[0].topic_id;
-    } else if (continueLearning?.length > 0) {
-      targetTopicId = continueLearning[0].id;
+    if (!targetSubjectId) {
+      if (recentLessons?.length > 0) {
+        targetTopicId = recentLessons[0].topic_id;
+      } else if (continueLearning?.length > 0) {
+        targetTopicId = continueLearning[0].id;
+      }
     }
 
-    if (!targetTopicId) {
-      // Fallback: If no activity, try to fetch the first available subject's topics? 
-      // Or just leave empty.
-      return;
+    if (!targetTopicId && !targetSubjectId) {
+      if (allSubjects.length > 0 && !activePathSubject) {
+        targetSubjectId = allSubjects[0].id;
+      } else {
+        return;
+      }
     }
 
     try {
       setLoadingPath(true);
       
-      // 2. Fetch Subject details using the topic
-      const { data: topicData, error } = await supabase
-        .from('topics')
-        .select(`
-          subject_id,
-          subjects (
-            id,
-            name,
-            color,
-            icon
-          )
-        `)
-        .eq('id', targetTopicId)
-        .single();
-        
-      if (error || !topicData?.subjects) return;
+      let subject = null;
 
-      const subject = Array.isArray(topicData.subjects) ? topicData.subjects[0] : topicData.subjects;
+      if (targetSubjectId) {
+        const { data: sData } = await supabase.from('subjects').select('*').eq('id', targetSubjectId).single();
+        subject = sData;
+      } else {
+        // 2. Fetch Subject details using the topic
+        const { data: topicData, error } = await supabase
+          .from('topics')
+          .select(`
+            subject_id,
+            subjects (
+              id,
+              name,
+              color,
+              icon
+            )
+          `)
+          .eq('id', targetTopicId)
+          .single();
+          
+        if (error || !topicData?.subjects) return;
+        subject = Array.isArray(topicData.subjects) ? topicData.subjects[0] : topicData.subjects;
+      }
+
+      if (!subject) return;
       setActivePathSubject(subject);
 
       // 3. Fetch all topics for this subject to build the path
@@ -254,7 +292,7 @@ export default function LearnScreen({ navigation }) {
           </View>
 
           <TouchableOpacity 
-            activeOpacity={0.8}
+            activeOpacity={1}
             disabled={isLocked}
             onPress={() => {
               if (activePathSubject) {
@@ -267,7 +305,10 @@ export default function LearnScreen({ navigation }) {
               { opacity: isLocked ? 0.5 : 1 }
             ]}
           >
-            <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.stepCard, { borderColor: theme.colors.glassBorder }]}>
+            <View style={[styles.stepCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
               <View style={styles.stepInfo}>
                 <Text style={[styles.stepTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                   {step.title}
@@ -281,7 +322,7 @@ export default function LearnScreen({ navigation }) {
                 </View>
               </View>
               {!isLocked && <ChevronRight size={20} color={theme.colors.textSecondary} />}
-            </BlurView>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -304,7 +345,10 @@ export default function LearnScreen({ navigation }) {
         >
           {/* Hero Overall Stats */}
           <View style={styles.statsOverview}>
-             <BlurView intensity={25} tint={isDark ? "dark" : "light"} style={[styles.statsBlur, { borderColor: theme.colors.glassBorder }]}>
+             <View style={[styles.statsBlur, { 
+                backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+             }]}>
                 <View style={styles.statsHeader}>
                    <View>
                       <Text style={[styles.statsWelcome, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Overall Mastery</Text>
@@ -331,7 +375,7 @@ export default function LearnScreen({ navigation }) {
                      {xpIntoLevel}/{xpTarget} to next level
                    </Text>
                 </View>
-             </BlurView>
+             </View>
           </View>
 
           {/* Continue Learning Section */}
@@ -339,7 +383,6 @@ export default function LearnScreen({ navigation }) {
             <>
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Keep Going</Text>
-                <TouchableOpacity><Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>See Favorites</Text></TouchableOpacity>
               </View>
 
               <ScrollView 
@@ -350,7 +393,7 @@ export default function LearnScreen({ navigation }) {
                 {continueLearning.map((item) => (
                   <TouchableOpacity 
                     key={item.id}
-                    activeOpacity={0.9} 
+                    activeOpacity={1} 
                     style={[styles.continueCardWrapper, { shadowColor: item.color || theme.colors.secondary, marginRight: 20 }]}
                     onPress={() => {
                          navigation.navigate('SubjectDetail', { 
@@ -358,11 +401,10 @@ export default function LearnScreen({ navigation }) {
                          });
                     }}
                   >
-                    <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.continueCard, { borderColor: theme.colors.glassBorder }]}>
-                      <LinearGradient
-                        colors={[`${item.color || '#8B5CF6'}40`, 'transparent']}
-                        style={StyleSheet.absoluteFill}
-                      />
+                    <View style={[styles.continueCard, { 
+                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+                    }]}>
                       <View style={styles.continueCardLeft}>
                         <View style={[styles.subBadge, { backgroundColor: `${item.color || '#8B5CF6'}20` }]}>
                           <Text style={[styles.subBadgeText, { color: item.color || '#8B5CF6', fontFamily: theme.typography.fontFamily }]}>{item.category}</Text>
@@ -383,7 +425,7 @@ export default function LearnScreen({ navigation }) {
                       <View style={styles.cardProgressLine}>
                         <View style={[styles.cardProgressFill, { width: `${item.progress}%`, backgroundColor: item.color || '#8B5CF6' }]} />
                       </View>
-                    </BlurView>
+                    </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -397,26 +439,92 @@ export default function LearnScreen({ navigation }) {
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesList}>
-            {achievements.map((badge) => (
-              <View key={badge.id} style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.6 }]}>
-                 <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.badgeInner, { borderColor: badge.unlocked ? badge.color : theme.colors.glassBorder, backgroundColor: badge.unlocked ? `${badge.color}10` : 'transparent' }]}>
-                    <View style={[styles.badgeIconBg, { backgroundColor: badge.unlocked ? `${badge.color}20` : 'rgba(255,255,255,0.05)' }]}>
-                       <badge.icon size={24} color={badge.unlocked ? badge.color : theme.colors.textSecondary} />
-                    </View>
-                    <Text style={[styles.badgeTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>{badge.title}</Text>
-                    {badge.unlocked && (
-                      <View style={[styles.glowDot, { backgroundColor: badge.color, shadowColor: badge.color }]} />
-                    )}
-                 </BlurView>
-              </View>
-            ))}
+            {achievements.map((badge) => {
+              const progress = Math.min(badge.current / badge.total, 1);
+              return (
+                <View key={badge.id} style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.8 }]}>
+                   <View style={[styles.badgeInner, { 
+                      borderColor: badge.unlocked ? `${badge.color}50` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'), 
+                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
+                   }]}>
+                      {badge.unlocked && (
+                        <LinearGradient
+                          colors={[`${badge.color}15`, 'transparent']}
+                          style={StyleSheet.absoluteFill}
+                        />
+                      )}
+                      
+                      <View style={[styles.badgeIconBg, { 
+                        backgroundColor: badge.unlocked ? `${badge.color}20` : 'rgba(255,255,255,0.05)',
+                        borderColor: badge.unlocked ? badge.color : 'transparent',
+                        borderWidth: badge.unlocked ? 1 : 0
+                      }]}>
+                        {React.createElement(badge.icon, { 
+                          size: 24, 
+                          color: badge.unlocked ? badge.color : theme.colors.textSecondary,
+                          strokeWidth: 2.5
+                        })}
+                      </View>
+                      
+                      <Text style={[styles.badgeTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>
+                        {badge.title}
+                      </Text>
+
+                      {!badge.unlocked ? (
+                        <View style={styles.badgeProgressContainer}>
+                           <View style={styles.badgeProgressBarBg}>
+                              <View style={[styles.badgeProgressBarFill, { width: `${progress * 100}%`, backgroundColor: badge.color }]} />
+                           </View>
+                           <Text style={[styles.badgeProgressText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                              {badge.current}/{badge.total}
+                           </Text>
+                        </View>
+                      ) : (
+                        <View style={[styles.unlockedTag, { backgroundColor: `${badge.color}20` }]}>
+                           <Text style={[styles.unlockedTagText, { color: badge.color, fontFamily: theme.typography.fontFamily }]}>UNLOCKED</Text>
+                        </View>
+                      )}
+                   </View>
+                </View>
+              );
+            })}
           </ScrollView>
 
           {/* Learning Path */}
+          <View style={[styles.sectionHeader, { marginTop: 30 }]}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subject</Text>
+          </View>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectSelectorList}>
+            {allSubjects.map((s) => (
+              <TouchableOpacity 
+                key={s.id} 
+                onPress={() => loadActivePath(s.id)}
+                style={[
+                  styles.subjectChip, 
+                  { 
+                    backgroundColor: activePathSubject?.id === s.id ? `${s.color || theme.colors.secondary}20` : 'transparent',
+                    borderColor: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
+                  }
+                ]}
+              >
+                <Text style={[
+                  styles.subjectChipText, 
+                  { color: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : theme.colors.textSecondary }
+                ]}>
+                  {s.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           {activePathSubject && (
             <>
-              <View style={[styles.sectionHeader, { marginTop: 30 }]}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activePathSubject.name} Path</Text>
+              <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={[styles.activeSubjectIndicator, { backgroundColor: activePathSubject.color }]} />
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activePathSubject.name} Path</Text>
+                </View>
                 <View style={[styles.smallBadge, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
                   <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>{learningPath.length} Steps</Text>
                 </View>
@@ -448,9 +556,12 @@ export default function LearnScreen({ navigation }) {
             {recentActivity.map((activity, index) => (
               <View key={activity.id} style={styles.activityItemWrapper}>
                  {index !== recentActivity.length - 1 && (
-                    <View style={[styles.activityLine, { backgroundColor: theme.colors.glassBorder }]} />
+                    <View style={[styles.activityLine, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
                  )}
-                 <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.activityCard, { borderColor: theme.colors.glassBorder }]}>
+                 <View style={[styles.activityCard, { 
+                   backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                   borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+                 }]}>
                     <View style={[styles.activityIconBox, { backgroundColor: `${activity.color}20` }]}>
                        {activity.type === 'quiz' ? <Trophy size={18} color={activity.color} /> : <CheckCircle2 size={18} color={activity.color} />}
                     </View>
@@ -460,7 +571,7 @@ export default function LearnScreen({ navigation }) {
                          {activity.time} • <Text style={{ color: activity.color }}>{activity.score}</Text>
                        </Text>
                     </View>
-                 </BlurView>
+                 </View>
               </View>
             ))}
           </View>
@@ -573,10 +684,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 24,
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 8,
     width: width * 0.8,
   },
   continueCard: {
@@ -648,40 +755,62 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   badgeCard: {
-    width: 100,
+    width: 130,
     marginBottom: 10,
   },
   badgeInner: {
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 20,
+    padding: 15,
+    borderRadius: 24,
     borderWidth: 1,
     overflow: 'hidden',
+    height: 160,
+    justifyContent: 'center',
   },
   badgeIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   badgeTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     textAlign: 'center',
+    marginBottom: 12,
   },
-  glowDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 5,
-    elevation: 5,
+  badgeProgressContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  badgeProgressBarBg: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 2,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  badgeProgressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  badgeProgressText: {
+    fontSize: 10,
+    fontWeight: '700',
+    opacity: 0.6,
+  },
+  unlockedTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  unlockedTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   pathGrid: {
     paddingLeft: 10,
@@ -747,6 +876,28 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
+  subjectSelectorList: {
+    paddingRight: 20,
+    gap: 10,
+    marginBottom: 10,
+  },
+  subjectChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subjectChipText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  activeSubjectIndicator: {
+    width: 4,
+    height: 16,
+    borderRadius: 2,
+  },
   activityContainer: {
     marginTop: 0,
     gap: 15,
@@ -770,7 +921,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'transparent',
   },
   activityIconBox: {
     width: 40,

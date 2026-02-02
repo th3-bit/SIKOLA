@@ -24,9 +24,18 @@ import { toast } from "sonner";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { ContentBuilder } from "@/components/ContentBuilder";
 
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { SUBJECT_COLORS } from "@/components/SubjectTopicForm";
+
 interface Subject {
   id: string;
   name: string;
+  color?: string;
 }
 
 interface Topic {
@@ -135,8 +144,23 @@ export const ContentManagement = () => {
     setShowTopicBuilder(true);
   };
 
+  const handleUpdateSubjectColor = async (id: string, color: string) => {
+    const { error } = await supabase
+      .from('subjects')
+      .update({ color })
+      .eq('id', id);
+
+    if (error) {
+      toast.error("Failed to update color");
+    } else {
+      setSubjects(subjects.map(s => s.id === id ? { ...s, color } : s));
+      toast.success("Color updated");
+    }
+  };
+
   const handleCreateSubject = async () => {
     if (!newSubjectName.trim()) return;
+    // @ts-ignore
     const { data, error } = await supabase.from('subjects').insert([{ name: newSubjectName, icon: 'BookOpen' }]).select();
     if (error) toast.error("Error creating subject");
     else {
@@ -255,14 +279,50 @@ export const ContentManagement = () => {
                   className={`group glass-panel p-3 cursor-pointer transition-all ${selectedSubjectId === s.id ? "bg-primary/20 border-primary/50" : "hover:bg-foreground/5"}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-medium truncate">{s.name}</span>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
-                      title="Delete subject"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color || '#3B82F6' }} />
+                      <span className="font-medium truncate">{s.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <Popover>
+                        <PopoverTrigger asChild>
+                          <button 
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-muted-foreground hover:text-foreground"
+                            title="Change color"
+                          >
+                            <div className="w-3 h-3 rounded-full border border-current" style={{ backgroundColor: s.color }} />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-3" align="end">
+                           <div className="text-xs font-medium text-muted-foreground mb-2">Subject Color</div>
+                           <div className="grid grid-cols-6 gap-2">
+                              {SUBJECT_COLORS.map((color) => (
+                                <button
+                                  key={color.value}
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateSubjectColor(s.id, color.value);
+                                  }}
+                                  className={cn(
+                                    "w-6 h-6 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary ring-offset-2 ring-offset-background",
+                                    s.color === color.value && "ring-2 ring-primary scale-110 shadow-lg"
+                                  )}
+                                  style={{ backgroundColor: color.value }}
+                                  title={color.name}
+                                />
+                              ))}
+                           </div>
+                        </PopoverContent>
+                      </Popover>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }}
+                        className="p-1.5 hover:text-destructive transition-colors"
+                        title="Delete subject"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

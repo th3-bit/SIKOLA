@@ -1,4 +1,6 @@
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { View, Text, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +15,9 @@ import LessonDetailScreen from './src/screens/LessonDetailScreen';
 import LessonOverviewScreen from './src/screens/LessonOverviewScreen';
 import ExamplesScreen from './src/screens/ExamplesScreen';
 import QuizScreen from './src/screens/QuizScreen';
+import MainTabNavigator from './src/navigation/MainTabNavigator';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ProgressProvider } from './src/context/ProgressContext';
 import LearningContentScreen from './src/screens/LearningContentScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
@@ -20,19 +25,14 @@ import PersonalInfoScreen from './src/screens/PersonalInfoScreen';
 import LearningProgressScreen from './src/screens/LearningProgressScreen';
 import CourseCompletionScreen from './src/screens/CourseCompletionScreen';
 import SearchScreen from './src/screens/SearchScreen';
-import MainTabNavigator from './src/navigation/MainTabNavigator';
-import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { ProgressProvider } from './src/context/ProgressContext';
 
 const Stack = createNativeStackNavigator();
 
-import ErrorBoundary from './src/components/ErrorBoundary';
-
 function AppNavigator() {
   const { isDark } = useTheme();
-  
+
   return (
-    <ErrorBoundary>
+    <>
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Onboarding">
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -55,7 +55,7 @@ function AppNavigator() {
         <Stack.Screen name="CourseCompletion" component={CourseCompletionScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
       </Stack.Navigator>
-    </ErrorBoundary>
+    </>
   );
 }
 

@@ -83,8 +83,14 @@ const CustomTabBar = ({ state, descriptors, navigation }) => {
                 <View style={styles.iconContainer}>
                   {Icon && Icon({ 
                     color: isFocused ? (isDark ? '#000' : '#fff') : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'), 
-                    size: isCenter ? 28 : 24 
+                    size: isCenter ? 26 : 22 
                   })}
+                  <Text style={[
+                    styles.tabLabel, 
+                    { color: isFocused ? (isDark ? '#000' : '#fff') : (isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)') }
+                  ]}>
+                    {route.name}
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
@@ -152,8 +158,8 @@ const styles = StyleSheet.create({
   },
   tabBarWrapper: {
     width: '100%',
-    height: 70,
-    borderRadius: 35,
+    height: 85,
+    borderRadius: 40,
     overflow: 'hidden',
     borderWidth: 1,
   },
@@ -192,5 +198,11 @@ const styles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 4,
+    letterSpacing: 0.5,
   },
 });

@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, CheckCircle, X, Award, TrendingUp } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, X, Award, TrendingUp, Calculator } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
+import CalculatorModal from '../components/CalculatorModal';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function QuizScreen({ route, navigation }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [showResults, setShowResults] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
 
   // Use passed questions or empty array
   const questions = passedQuestions || [];
@@ -221,10 +223,19 @@ export default function QuizScreen({ route, navigation }) {
             </Text>
           </View>
 
-          <View style={[styles.progressCircle, { borderColor: primaryColor }]}>
-            <Text style={[styles.progressText, { color: primaryColor, fontFamily: theme.typography.fontFamily }]}>
-              {currentQuestion + 1}/{totalQuestions}
-            </Text>
+          <View style={styles.headerRight}>
+            <TouchableOpacity 
+              style={[styles.toolButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}
+              onPress={() => setShowCalculator(true)}
+            >
+              <Calculator color={theme.colors.secondary} size={20} />
+            </TouchableOpacity>
+
+            <View style={[styles.progressCircle, { borderColor: primaryColor }]}>
+              <Text style={[styles.progressText, { color: primaryColor, fontFamily: theme.typography.fontFamily }]}>
+                {currentQuestion + 1}/{totalQuestions}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -235,17 +246,11 @@ export default function QuizScreen({ route, navigation }) {
         >
           {/* Question Card */}
           <View style={[styles.questionCardWrapper, { shadowColor: primaryColor }]}>
-            <BlurView intensity={isDark ? 20 : 30} tint={isDark ? "dark" : "light"} style={[styles.questionCard, { borderColor: theme.colors.glassBorder }]}>
-              <LinearGradient
-                colors={isDark 
-                  ? [`${primaryColor}30`, `${primaryColor}10`, 'transparent'] 
-                  : [`${primaryColor}20`, `${primaryColor}10`, `${primaryColor}05`]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-
+            <View style={[styles.questionCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
+              
               <Text style={[styles.question, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                 {currentQuestionData.question}
               </Text>
@@ -301,7 +306,7 @@ export default function QuizScreen({ route, navigation }) {
                   </Text>
                 </View>
               )}
-            </BlurView>
+            </View>
           </View>
 
           <View style={{ height: 120 }} />
@@ -332,6 +337,11 @@ export default function QuizScreen({ route, navigation }) {
           </View>
         )}
       </SafeAreaView>
+
+      <CalculatorModal 
+        visible={showCalculator} 
+        onClose={() => setShowCalculator(false)} 
+      />
     </View>
   );
 }
@@ -372,6 +382,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toolButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   progressCircle: {
     width: 50,
     height: 50,
@@ -391,7 +414,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   questionCardWrapper: {
-    borderRadius: 28,
+    borderRadius: 32,
     overflow: 'visible',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
@@ -399,16 +422,18 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   questionCard: {
-    padding: 24,
+    padding: 30,
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: 32,
     overflow: 'hidden',
+    minHeight: 450,
   },
   question: {
     fontSize: 22,
     fontWeight: '800',
     marginBottom: 24,
     lineHeight: 32,
+
   },
   optionsContainer: {
     gap: 12,

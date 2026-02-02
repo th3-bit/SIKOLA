@@ -94,11 +94,13 @@ export default function DailyProgressCard() {
 
   return (
     <View style={[styles.cardWrapper, { shadowColor: theme.colors.secondary }]}>
-      <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={[styles.card, { borderColor: theme.colors.glassBorder }]}>
-        <LinearGradient
-          colors={isDark ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.01)'] : ['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
-          style={StyleSheet.absoluteFill}
-        />
+      <View style={[
+        styles.card, 
+        { 
+          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+        }
+      ]}>
         
         <View style={styles.header}>
           <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
@@ -199,7 +201,7 @@ export default function DailyProgressCard() {
             View Detailed Analytics
           </Text>
         </TouchableOpacity>
-      </BlurView>
+      </View>
     </View>
   );
 }
@@ -215,10 +217,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'visible',
     marginBottom: 20,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 8,
   },
   card: {
     padding: 20,

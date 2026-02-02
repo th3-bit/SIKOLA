@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import {
   Check,
   Clock,
@@ -128,10 +127,11 @@ export default function SubscriptionScreen({ navigation }) {
           }
         ]}
       >
-        <BlurView
-          intensity={isDark ? 20 : 40}
-          tint={isDark ? 'dark' : 'light'}
-          style={styles.planCard}
+        <View
+          style={[styles.planCard, { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isExpanded ? color : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')
+          }]}
         >
           {/* Header: Clickable to Toggle Expand */}
           <TouchableOpacity 
@@ -204,7 +204,7 @@ export default function SubscriptionScreen({ navigation }) {
                 </TouchableOpacity>
             </View>
           )}
-        </BlurView>
+        </View>
       </View>
     );
 
@@ -301,12 +301,12 @@ const styles = StyleSheet.create({
   planCardWrapper: {
     marginBottom: 16,
     borderRadius: 16,
-    backgroundColor: 'transparent',
   },
   planCard: {
     borderRadius: 16,
     overflow: 'hidden',
     padding: 0, 
+    borderWidth: 1,
   },
   cardHeader: {
     flexDirection: 'row',

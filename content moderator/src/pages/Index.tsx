@@ -82,12 +82,19 @@ const Index = () => {
                 
                 <SubjectTopicForm onSubmit={handleStart} />
 
-                <div className="w-full max-w-2xl mx-auto flex justify-center">
+                <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-4">
                    <button 
                      onClick={() => navigate('/content')}
                      className="text-primary hover:underline text-sm font-medium flex items-center gap-2"
                    >
                      View & Manage All Courses <ChevronRight className="w-4 h-4" />
+                   </button>
+                   
+                   <button 
+                     onClick={() => navigate('/crm')}
+                     className="bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-full text-xs font-bold transition-all flex items-center gap-2"
+                   >
+                     View More Detailed CRM & Analytics <ChevronRight className="w-3.5 h-3.5" />
                    </button>
                 </div>
 

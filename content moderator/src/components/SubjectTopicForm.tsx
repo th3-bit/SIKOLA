@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 interface Subject {
   id: string;
   name: string;
+  color?: string;
 }
 
 interface Topic {
@@ -33,6 +34,27 @@ interface SubjectTopicFormProps {
   onSubmit: (subjectData: { id: string; name: string }, topicData: { id: string; title: string }) => void;
 }
 
+export const SUBJECT_COLORS = [
+  { name: 'Red', value: '#EF4444' },
+  { name: 'Orange', value: '#F97316' },
+  { name: 'Amber', value: '#F59E0B' },
+  { name: 'Yellow', value: '#EAB308' },
+  { name: 'Lime', value: '#84CC16' },
+  { name: 'Green', value: '#22C55E' },
+  { name: 'Emerald', value: '#10B981' },
+  { name: 'Teal', value: '#14B8A6' },
+  { name: 'Cyan', value: '#06B6D4' },
+  { name: 'Sky', value: '#0EA5E9' },
+  { name: 'Blue', value: '#3B82F6' },
+  { name: 'Indigo', value: '#6366F1' },
+  { name: 'Violet', value: '#8B5CF6' },
+  { name: 'Purple', value: '#A855F7' },
+  { name: 'Fuchsia', value: '#D946EF' },
+  { name: 'Pink', value: '#EC4899' },
+  { name: 'Rose', value: '#F43F5E' },
+  { name: 'Slate', value: '#64748B' },
+];
+
 export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -40,6 +62,7 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
   
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [selectedColor, setSelectedColor] = useState(SUBJECT_COLORS[0].value);
   
   const [subjectOpen, setSubjectOpen] = useState(false);
   const [topicOpen, setTopicOpen] = useState(false);
@@ -52,7 +75,7 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
 
   const fetchSubjects = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('subjects').select('id, name').order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('subjects').select('id, name, color').order('created_at', { ascending: true });
     if (error) {
       toast.error("Failed to fetch subjects");
     } else {
@@ -111,7 +134,7 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
     
     const { data, error } = await supabase
       .from('subjects')
-      .insert([{ name: subjectSearch.trim() }])
+      .insert([{ name: subjectSearch.trim(), color: selectedColor }])
       .select()
       .single();
     
@@ -198,46 +221,69 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
                       !selectedSubject && "text-muted-foreground"
                     )}
                   >
-                    {selectedSubject ? selectedSubject.name : "Select or type a subject..."}
+                    <div className="flex items-center gap-2">
+                       {selectedSubject?.color && (
+                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedSubject.color }} />
+                       )}
+                       {selectedSubject ? selectedSubject.name : "Select subject..."}
+                    </div>
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput 
-                      placeholder="Search or type new subject..." 
-                      value={subjectSearch}
-                      onValueChange={setSubjectSearch}
-                    />
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search subject..." onValueChange={setSubjectSearch} />
                     <CommandList>
+                      <CommandGroup>
+                        {filteredSubjects.map((subject) => (
+                          <CommandItem
+                            key={subject.id}
+                            value={subject.name}
+                            onSelect={() => handleSubjectSelect(subject)}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedSubject?.id === subject.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: subject.color || '#3B82F6' }} />
+                            {subject.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
                       {isCustomSubject && (
                         <CommandGroup>
-                          <CommandItem
-                            onSelect={handleAddCustomSubject}
-                            className="text-primary"
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add "{subjectSearch}" as new subject
-                          </CommandItem>
-                        </CommandGroup>
-                      )}
-                      {filteredSubjects.length > 0 && (
-                        <CommandGroup heading="Available Subjects">
-                          {filteredSubjects.map((subj) => (
+                          <div className="p-2 border-t border-border">
+                            <div className="mb-2 px-2 text-xs font-medium text-muted-foreground">Select Color for "{subjectSearch}"</div>
+                            <div className="grid grid-cols-6 gap-2 mb-2 px-1">
+                              {SUBJECT_COLORS.map((color) => (
+                                <button
+                                  key={color.value}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedColor(color.value);
+                                  }}
+                                  className={cn(
+                                    "w-6 h-6 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary ring-offset-2 ring-offset-background",
+                                    selectedColor === color.value && "ring-2 ring-primary scale-110 shadow-lg"
+                                  )}
+                                  style={{ backgroundColor: color.value }}
+                                  title={color.name}
+                                />
+                              ))}
+                            </div>
                             <CommandItem
-                              key={subj.id}
-                              value={subj.name}
-                              onSelect={() => handleSubjectSelect(subj)}
+                              value={subjectSearch}
+                              onSelect={handleAddCustomSubject}
+                              className="cursor-pointer bg-primary/10 text-primary font-medium rounded-lg justify-center"
                             >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedSubject?.id === subj.id ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              {subj.name}
+                              <Plus className="mr-2 h-4 w-4" />
+                              Create "{subjectSearch}"
                             </CommandItem>
-                          ))}
+                          </div>
                         </CommandGroup>
                       )}
                       {!isCustomSubject && filteredSubjects.length === 0 && (
@@ -260,10 +306,11 @@ export const SubjectTopicForm = ({ onSubmit }: SubjectTopicFormProps) => {
               <Popover open={topicOpen} onOpenChange={(open) => {
                 setTopicOpen(open);
                 if (!open) setTopicSearch("");
-              }} disabled={!selectedSubject}>
+              }}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
+                    disabled={!selectedSubject}
                     role="combobox"
                     aria-expanded={topicOpen}
                     className={cn(

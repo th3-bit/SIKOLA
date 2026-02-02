@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { 
   ArrowLeft, 
   Play, 
@@ -94,11 +93,14 @@ export default function LessonDetailScreen({ route, navigation }) {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
-            style={[styles.backButton, { borderColor: theme.colors.glassBorder }]}
+            style={[styles.backButton, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+            }]}
           >
-            <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={styles.backButtonBlur}>
+            <View style={styles.backButtonBlur}>
               <ArrowLeft color={theme.colors.textPrimary} size={22} />
-            </BlurView>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -108,8 +110,11 @@ export default function LessonDetailScreen({ route, navigation }) {
         >
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }}>
             {/* Hero Section */}
-            <View style={[styles.heroSection, { shadowColor: primaryColor }]}>
-               <BlurView intensity={30} tint={isDark ? "dark" : "light"} style={[styles.heroCard, { borderColor: theme.colors.glassBorder }]}>
+            <View style={[styles.heroSection]}>
+               <View style={[styles.heroCard, { 
+                 backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                 borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+               }]}>
                   <View style={[styles.typeBadge, { backgroundColor: `${primaryColor}20` }]}>
                     <Text style={[styles.typeText, { color: primaryColor }]}>COURSE</Text>
                   </View>
@@ -145,7 +150,7 @@ export default function LessonDetailScreen({ route, navigation }) {
                         <View style={[styles.progressBarFill, { width: `${currentProgress}%`, backgroundColor: primaryColor }]} />
                      </View>
                   </View>
-               </BlurView>
+               </View>
             </View>
 
             {/* About Section */}
@@ -154,11 +159,14 @@ export default function LessonDetailScreen({ route, navigation }) {
                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>About Course</Text>
             </View>
             
-            <BlurView intensity={10} tint={isDark ? "dark" : "light"} style={[styles.descriptionCard, { borderColor: theme.colors.glassBorder }]}>
+            <View style={[styles.descriptionCard, { 
+              backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+            }]}>
               <Text style={[styles.descriptionText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                 {lessonContent.description}
               </Text>
-            </BlurView>
+            </View>
 
             {/* Curriculum Section */}
             <View style={styles.sectionHeader}>
@@ -188,7 +196,11 @@ export default function LessonDetailScreen({ route, navigation }) {
                        disabled={isLocked}
                        onPress={() => navigation.navigate('LearningContent', { lesson: lessonItem, subject, topic })}
                      >
-                        <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicCard, { borderColor: theme.colors.glassBorder, opacity: isLocked ? 0.6 : 1 }]}>
+                        <View style={[styles.topicCard, { 
+                          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', 
+                          opacity: isLocked ? 0.6 : 1 
+                        }]}>
                            <View style={[styles.topicNumber, { backgroundColor: isCompleted ? '#10B981' : (isLocked ? theme.colors.glassBorder : `${primaryColor}20`) }]}>
                               {isCompleted ? (
                                 <CheckCircle size={14} color="#FFF" />
@@ -213,7 +225,7 @@ export default function LessonDetailScreen({ route, navigation }) {
                            ) : (
                              <ChevronRight size={18} color={isLocked ? theme.colors.textSecondary : theme.colors.textPrimary} opacity={isLocked ? 0.5 : 1} />
                            )}
-                        </BlurView>
+                        </View>
                      </TouchableOpacity>
                    );
                  })}
@@ -229,7 +241,7 @@ export default function LessonDetailScreen({ route, navigation }) {
           <View style={styles.footer}>
              <TouchableOpacity 
                activeOpacity={0.9}
-               style={[styles.startButton, { shadowColor: primaryColor }]}
+               style={[styles.startButton]}
                onPress={() => {
                  // Start first uncompleted lesson
                  const firstUnfinished = lessons.find(l => !isTopicCompleted(topic.id, l.id)) || lessons[0];

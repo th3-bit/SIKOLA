@@ -25,7 +25,7 @@ const PlaceholderScreen = ({ name }) => {
         style={StyleSheet.absoluteFill}
       />
       <SafeAreaView style={{ flex: 1 }}>
-        <GlassHeader showSearch={name === 'Subjects'} />
+        <GlassHeader showSearch={name === 'Topics'} />
         
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ opacity: 0.15 }}>
@@ -117,7 +117,7 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen 
-        name="Subjects" 
+        name="Topics" 
         component={SubjectsScreen}
         options={{
           tabBarIcon: ({ color, size }) => <Library color={color} size={size} />,

@@ -46,25 +46,85 @@ export default function CalculatorModal({ visible, onClose }) {
 
     if (val === '=') {
       try {
-        // Simple evaluation logic (safer than eval for a basic calculator)
-        const result = eval(equation.replace('×', '*').replace('÷', '/'));
-        setDisplay(String(result));
-        setEquation(String(result));
+        let mathEq = equation
+          .replace(/×/g, '*')
+          .replace(/÷/g, '/')
+          .replace(/sin\(/g, 'Math.sin(Math.PI/180*')
+          .replace(/cos\(/g, 'Math.cos(Math.PI/180*')
+          .replace(/log\(/g, 'Math.log10(');
+        
+        // Basic check for matching parentheses
+        const open = (mathEq.match(/\(/g) || []).length;
+        const close = (mathEq.match(/\)/g) || []).length;
+        if (open > close) {
+          mathEq += ')'.repeat(open - close);
+        }
+
+        const result = eval(mathEq);
+        const formattedResult = Number.isInteger(result) ? String(result) : result.toFixed(4);
+        setDisplay(formattedResult);
+        setEquation(equation + ' =');
       } catch (e) {
         setDisplay('Error');
       }
       return;
     }
 
-    if (['+', '-', '×', '÷'].includes(val)) {
-      setEquation(equation + val);
-      setDisplay('0');
+    if (val === '+/-') {
+      if (display !== '0' && !isNaN(display)) {
+        const flipped = display.startsWith('-') ? display.slice(1) : '-' + display;
+        setDisplay(flipped);
+        const parts = equation.split(/([+\-×÷()])/);
+        parts[parts.length - 1] = flipped;
+        setEquation(parts.join(''));
+      }
       return;
     }
 
-    const newDisplay = display === '0' ? val : display + val;
+    if (val === '%') {
+      const num = parseFloat(display);
+      if (!isNaN(num)) {
+        const result = num / 100;
+        setDisplay(String(result));
+        const parts = equation.split(/([+\-×÷()])/);
+        parts[parts.length - 1] = String(result);
+        setEquation(parts.join(''));
+      }
+      return;
+    }
+
+    if (['sin', 'cos', 'log'].includes(val)) {
+      const func = val + '(';
+      if (equation.includes('=')) {
+        setEquation(func);
+      } else {
+        setEquation(equation + func);
+      }
+      setDisplay(func);
+      return;
+    }
+
+    if (['+', '-', '×', '÷', '(', ')'].includes(val)) {
+      if (equation.includes('=')) {
+        setEquation(display + val);
+      } else {
+        setEquation(equation + val);
+      }
+      if (val !== '(' && val !== ')') setDisplay('0');
+      else setDisplay(val);
+      return;
+    }
+
+    // Numbers and dot
+    let newDisplay;
+    if (equation.includes('=')) {
+      newDisplay = val;
+      setEquation(val);
+    } else {
+      newDisplay = (display === '0' || ['(', ')', 'sin(', 'cos(', 'log('].includes(display)) ? val : display + val;
+      setEquation(equation + val);
+    }
     setDisplay(newDisplay);
-    setEquation(equation + val);
   };
 
   return (
@@ -82,11 +142,20 @@ export default function CalculatorModal({ visible, onClose }) {
           </View>
 
           <View style={styles.displayArea}>
-            <Text style={[styles.equationText, { color: theme.colors.textSecondary }]}>{equation || ' '}</Text>
-            <Text style={[styles.displayText, { color: theme.colors.textPrimary }]}>{display}</Text>
+            <Text numberOfLines={1} style={[styles.equationText, { color: theme.colors.textSecondary }]}>{equation || ' '}</Text>
+            <Text numberOfLines={1} style={[styles.displayText, { color: theme.colors.textPrimary }]}>{display}</Text>
           </View>
 
           <View style={styles.pad}>
+            {/* Scientific Row */}
+            <View style={styles.row}>
+              <CalcButton label="sin" type="operator" theme={theme} isDark={isDark} onPress={handlePress} />
+              <CalcButton label="cos" type="operator" theme={theme} isDark={isDark} onPress={handlePress} />
+              <CalcButton label="log" type="operator" theme={theme} isDark={isDark} onPress={handlePress} />
+              <CalcButton label="(" type="operator" theme={theme} isDark={isDark} onPress={handlePress} />
+              <CalcButton label=")" type="operator" theme={theme} isDark={isDark} onPress={handlePress} />
+            </View>
+            
             <View style={styles.row}>
               <CalcButton label="C" type="action" theme={theme} isDark={isDark} onPress={handlePress} />
               <CalcButton label="+/-" type="action" theme={theme} isDark={isDark} onPress={handlePress} />
@@ -132,7 +201,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '100%',
@@ -141,6 +210,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     paddingHorizontal: 20,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)', // Subtle base for glass
   },
   header: {
     flexDirection: 'row',
@@ -167,6 +237,7 @@ const styles = StyleSheet.create({
   },
   equationText: {
     fontSize: 18,
+    fontWeight: '600',
     opacity: 0.6,
     marginBottom: 5,
   },

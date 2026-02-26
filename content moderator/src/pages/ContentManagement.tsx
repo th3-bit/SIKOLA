@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { GlassButton } from "@/components/ui/GlassButton";
 import { FloatingOrbs } from "@/components/FloatingOrbs";
@@ -12,17 +12,21 @@ import {
   Edit2, 
   Loader2, 
   ChevronRight,
-  Search,
   Plus,
   Wand2,
-  X,
-  Save,
-  Clock
+  ArrowUp,
+  ArrowDown,
+  Copy,
+  ClipboardCheck,
+  Lock,
+  Search
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { GlassInput } from "@/components/ui/GlassInput";
 import { ContentBuilder } from "@/components/ContentBuilder";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 import { 
   Popover,
@@ -31,17 +35,38 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { SUBJECT_COLORS } from "@/components/SubjectTopicForm";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Subject {
   id: string;
   name: string;
   color?: string;
+  order_index?: number;
 }
 
 interface Topic {
   id: string;
   title: string;
   subject_id: string;
+  order_index?: number;
 }
 
 interface Lesson {
@@ -49,16 +74,24 @@ interface Lesson {
   title: string;
   topic_id: string;
   duration?: number;
+  order_index?: number;
+  content?: any;
+  video_url?: string;
 }
 
 export const ContentManagement = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
+
+  // Helper to get active subject color
+  const activeSubjectColor = subjects.find(s => s.id === selectedSubjectId)?.color || '#3B82F6';
 
   // Creation State
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -66,29 +99,85 @@ export const ContentManagement = () => {
   const [showTopicBuilder, setShowTopicBuilder] = useState(false);
 
   const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectColor, setNewSubjectColor] = useState(SUBJECT_COLORS[0].value);
   const [newCourseTitle, setNewCourseTitle] = useState("");
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
+
+  // Renaming State
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [editingCourse, setEditingCourse] = useState<Topic | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("");
+
+  // Clipboard State
+  const [clipboard, setClipboard] = useState<{ 
+    type: 'course' | 'topic', 
+    id: string, 
+    name: string 
+  } | null>(null);
+
+  const [isPasting, setIsPasting] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
   }, []);
 
+  // Handle Deep Linking from Global Search
+  useEffect(() => {
+    const handleNavigation = async () => {
+      const subjectId = searchParams.get('subjectId');
+      const courseId = searchParams.get('courseId');
+      const lessonId = searchParams.get('lessonId');
+
+      if (subjectId) {
+        setSelectedSubjectId(subjectId);
+        await fetchTopics(subjectId);
+        
+        if (courseId) {
+          setSelectedTopicId(courseId);
+          await fetchLessons(courseId);
+          
+          if (lessonId) {
+            setTimeout(() => {
+              const element = document.getElementById(`lesson-${lessonId}`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('bg-primary/20', 'ring-2', 'ring-primary');
+                setTimeout(() => element.classList.remove('bg-primary/20', 'ring-2', 'ring-primary'), 3000);
+              }
+            }, 500);
+          } else {
+             setTimeout(() => {
+              document.getElementById(`course-${courseId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+          }
+        } else {
+          setTimeout(() => {
+            document.getElementById(`subject-${subjectId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+      }
+    };
+
+    handleNavigation();
+  }, [searchParams]);
+
   const fetchInitialData = async () => {
     setLoading(true);
-    const { data: subjectData } = await supabase.from('subjects').select('*').order('created_at', { ascending: true });
+    const { data: subjectData } = await supabase.from('subjects').select('*').order('order_index', { ascending: true });
     setSubjects(subjectData || []);
     setLoading(false);
   };
 
   const fetchTopics = async (subjId: string) => {
-    const { data } = await supabase.from('topics').select('*').eq('subject_id', subjId).order('created_at', { ascending: true });
+    const { data } = await supabase.from('topics').select('*').eq('subject_id', subjId).order('order_index', { ascending: true });
     setTopics(data || []);
     setLessons([]);
     setSelectedTopicId(null);
   };
 
   const fetchLessons = async (topId: string) => {
-    const { data } = await supabase.from('lessons').select('*').eq('topic_id', topId).order('created_at', { ascending: true });
+    const { data } = await supabase.from('lessons').select('*').eq('topic_id', topId).order('order_index', { ascending: true });
     setLessons(data || []);
   };
 
@@ -120,52 +209,215 @@ export const ContentManagement = () => {
 
   const handleDeleteLesson = async (id: string) => {
     const { error } = await supabase.from('lessons').delete().eq('id', id);
-    if (error) toast.error("Failed to delete topic");
+    if (error) toast.error("Failed to delete lesson");
     else {
       setLessons(lessons.filter(l => l.id !== id));
-      toast.success("Topic deleted");
+      toast.success("Lesson deleted");
     }
   };
 
-  const handleEditLesson = async (lesson: Lesson) => {
-    // Fetch complete lesson data including content, video_url, and duration
-    const { data, error } = await supabase
-      .from('lessons')
-      .select('*')
-      .eq('id', lesson.id)
-      .single();
-    
-    if (error) {
-      toast.error("Failed to load lesson data");
-      return;
-    }
-    
-    setEditingLesson(data);
-    setShowTopicBuilder(true);
-  };
-
-  const handleUpdateSubjectColor = async (id: string, color: string) => {
+  const handleUpdateSubject = async () => {
+    if (!editingSubject || !editName.trim()) return;
     const { error } = await supabase
       .from('subjects')
-      .update({ color })
-      .eq('id', id);
+      .update({ 
+        name: editName.trim(),
+        color: editColor 
+      })
+      .eq('id', editingSubject.id);
 
-    if (error) {
-      toast.error("Failed to update color");
-    } else {
-      setSubjects(subjects.map(s => s.id === id ? { ...s, color } : s));
-      toast.success("Color updated");
+    if (error) toast.error("Failed to update subject");
+    else {
+      setSubjects(subjects.map(s => s.id === editingSubject.id ? { ...s, name: editName.trim(), color: editColor } : s));
+      setEditingSubject(null);
+      setEditName("");
+      setEditColor("");
+      toast.success("Subject updated");
+    }
+  };
+
+  const handleRenameCourse = async () => {
+    if (!editingCourse || !editName.trim()) return;
+    const { error } = await supabase
+      .from('topics')
+      .update({ title: editName.trim() })
+      .eq('id', editingCourse.id);
+
+    if (error) toast.error("Failed to rename course");
+    else {
+      setTopics(topics.map(t => t.id === editingCourse.id ? { ...t, title: editName.trim() } : t));
+      setEditingCourse(null);
+      setEditName("");
+      toast.success("Course renamed");
+    }
+  };
+
+  const handleCopyCourse = (course: Topic) => {
+    setClipboard({ type: 'course', id: course.id, name: course.title });
+    toast.success(`Copied course: ${course.title}`);
+  };
+
+  const handleCopyTopic = (topic: Lesson) => {
+    setClipboard({ type: 'topic', id: topic.id, name: topic.title });
+    toast.success(`Copied topic: ${topic.title}`);
+  };
+
+  const handlePasteCourse = async () => {
+    if (!clipboard || clipboard.type !== 'course' || !selectedSubjectId || isPasting) return;
+    
+    setIsPasting(true);
+    const toastId = toast.loading("Duplicating course...");
+
+    try {
+      // 1. Fetch original course
+      const { data: originalCourse, error: courseFetchError } = await supabase
+        .from('topics')
+        .select('*')
+        .eq('id', clipboard.id)
+        .single();
+
+      if (courseFetchError) throw courseFetchError;
+
+      // 2. Create new course
+      const { data: newCourse, error: courseCreateError } = await supabase
+        .from('topics')
+        .insert([{ 
+          title: `${originalCourse.title} (Copy)`, 
+          subject_id: selectedSubjectId 
+        }])
+        .select()
+        .single();
+
+      if (courseCreateError) throw courseCreateError;
+
+      // 3. Fetch original lessons
+      const { data: originalLessons, error: lessonsFetchError } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('topic_id', clipboard.id);
+
+      if (lessonsFetchError) throw lessonsFetchError;
+
+      // 4. Duplicate lessons (Topics)
+      if (originalLessons && originalLessons.length > 0) {
+        const newLessons = originalLessons.map(l => ({
+          topic_id: newCourse.id,
+          title: l.title,
+          content: l.content,
+          video_url: l.video_url,
+          duration: l.duration
+        }));
+
+        const { error: lessonsCreateError } = await supabase
+          .from('lessons')
+          .insert(newLessons);
+
+        if (lessonsCreateError) throw lessonsCreateError;
+      }
+
+      await fetchTopics(selectedSubjectId);
+      toast.success("Course successfully duplicated", { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to duplicate course", { id: toastId });
+    } finally {
+      setIsPasting(false);
+    }
+  };
+
+  const handlePasteTopic = async () => {
+    if (!clipboard || clipboard.type !== 'topic' || !selectedTopicId || isPasting) return;
+
+    setIsPasting(true);
+    const toastId = toast.loading("Duplicating topic...");
+
+    try {
+      const { data: originalLesson, error: lessonFetchError } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('id', clipboard.id)
+        .single();
+
+      if (lessonFetchError) throw lessonFetchError;
+
+      const { error: lessonCreateError } = await supabase
+        .from('lessons')
+        .insert([{
+          topic_id: selectedTopicId,
+          title: `${originalLesson.title} (Copy)`,
+          content: originalLesson.content,
+          video_url: originalLesson.video_url,
+          duration: originalLesson.duration
+        }]);
+
+      if (lessonCreateError) throw lessonCreateError;
+
+      await fetchLessons(selectedTopicId);
+      toast.success("Topic successfully duplicated", { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to duplicate topic", { id: toastId });
+    } finally {
+      setIsPasting(false);
+    }
+  };
+
+  const reorderSubjects = async (direction: 'up' | 'down', subject: Subject) => {
+    const index = subjects.indexOf(subject);
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === subjects.length - 1)) return;
+
+    const newSubjects = [...subjects];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newSubjects[index], newSubjects[targetIndex]] = [newSubjects[targetIndex], newSubjects[index]];
+
+    setSubjects(newSubjects);
+
+    const updates = newSubjects.map((s, i) => ({ id: s.id, order_index: i }));
+    for (const update of updates) {
+        await supabase.from('subjects').update({ order_index: update.order_index }).eq('id', update.id);
+    }
+  };
+
+  const reorderTopics = async (direction: 'up' | 'down', topic: Topic) => {
+    const index = topics.indexOf(topic);
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === topics.length - 1)) return;
+
+    const newTopics = [...topics];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newTopics[index], newTopics[targetIndex]] = [newTopics[targetIndex], newTopics[index]];
+
+    setTopics(newTopics);
+
+    const updates = newTopics.map((t, i) => ({ id: t.id, order_index: i }));
+    for (const update of updates) {
+        await supabase.from('topics').update({ order_index: update.order_index }).eq('id', update.id);
+    }
+  };
+
+  const reorderLessons = async (direction: 'up' | 'down', lesson: Lesson) => {
+     const index = lessons.indexOf(lesson);
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === lessons.length - 1)) return;
+
+    const newLessons = [...lessons];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newLessons[index], newLessons[targetIndex]] = [newLessons[targetIndex], newLessons[index]];
+
+    setLessons(newLessons);
+
+    const updates = newLessons.map((l, i) => ({ id: l.id, order_index: i }));
+    for (const update of updates) {
+        await supabase.from('lessons').update({ order_index: update.order_index }).eq('id', update.id);
     }
   };
 
   const handleCreateSubject = async () => {
     if (!newSubjectName.trim()) return;
-    // @ts-ignore
-    const { data, error } = await supabase.from('subjects').insert([{ name: newSubjectName, icon: 'BookOpen' }]).select();
+    const { data, error } = await supabase.from('subjects').insert([{ name: newSubjectName, color: newSubjectColor }]).select();
     if (error) toast.error("Error creating subject");
     else {
         setSubjects([...subjects, data[0]]);
         setNewSubjectName("");
+        setNewSubjectColor(SUBJECT_COLORS[0].value);
         setShowSubjectModal(false);
         toast.success("Subject created");
     }
@@ -214,12 +466,12 @@ export const ContentManagement = () => {
       <FloatingOrbs />
       
       <div className="relative z-10 p-6 max-w-6xl mx-auto space-y-6">
-        <header className="animate-fade-up">
-          <div className="glass-panel-strong px-6 py-4">
+        <header className="relative z-50 animate-fade-up">
+          <div className="glass-panel-strong !overflow-visible px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <GlassButton variant="ghost" size="sm" onClick={() => navigate("/")}>
-                  <ArrowLeft className="w-4 h-4" />
+                   <ArrowLeft className="w-4 h-4" />
                 </GlassButton>
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm flex items-center justify-center shadow-lg">
@@ -233,221 +485,460 @@ export const ContentManagement = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <GlassButton variant="ghost" size="sm" onClick={() => navigate("/settings/ai")} title="AI Connection">
-                  <Wand2 className="w-5 h-5" />
-                </GlassButton>
-                <GlassButton onClick={() => navigate("/practice-modes")}>
-                  <div className="flex items-center gap-2">
-                     <div className="w-5 h-5 rounded-full bg-yellow-400/20 flex items-center justify-center">
-                       <span className="text-yellow-400 text-xs font-bold">★</span>
-                     </div>
-                     Practice Modes
-                  </div>
-                </GlassButton>
+              
+              <div className="flex items-center gap-3">
+                <GlobalSearch />
+                
+                <div className="flex items-center gap-2">
+                  <GlassButton variant="ghost" size="sm" onClick={() => navigate("/settings/ai")} title="AI Connection">
+                    <Wand2 className="w-5 h-5" />
+                  </GlassButton>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
-        <div className="grid lg:grid-cols-3 gap-6 animate-fade-up">
-          {/* Subjects Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold flex items-center gap-2"><BookMarked className="w-4 h-4 text-primary" /> Subjects</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-up animation-delay-100">
+          {/* Column 1: Subjects */}
+          <GlassCard className="flex flex-col h-[75vh]">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
               <div className="flex items-center gap-2">
-                 <span className="text-xs text-muted-foreground">{subjects.length} total</span>
-                 <button onClick={() => setShowSubjectModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Subject"><Plus className="w-4 h-4 text-primary" /></button>
+                <BookMarked className="w-5 h-5 text-primary" />
+                <h2 className="font-bold">Subjects</h2>
+              </div>
+              <GlassButton size="sm" onClick={() => setShowSubjectModal(true)}>
+                <Plus className="w-4 h-4" />
+              </GlassButton>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-[64px] w-full border-l-4 border-white/5" />
+                  ))}
+                </div>
+              ) : (
+                subjects.map((s) => (
+                  <div 
+                    key={s.id}
+                    id={`subject-${s.id}`}
+                    onClick={() => { setSelectedSubjectId(s.id); fetchTopics(s.id); }}
+                    className={cn(
+                      "group glass-panel p-3 cursor-pointer transition-all border-l-4",
+                      selectedSubjectId === s.id ? "ring-1 ring-primary-light shadow-lg" : "hover:bg-white/5"
+                    )}
+                    style={{ 
+                      borderLeftColor: s.color || '#3B82F6',
+                      backgroundColor: selectedSubjectId === s.id ? `${s.color || '#3B82F6'}25` : undefined,
+                      borderColor: selectedSubjectId === s.id ? `${s.color || '#3B82F6'}50` : undefined
+                    }}
+                  >
+                    <div className="relative flex items-center justify-between min-h-[40px]">
+                      <span className="font-medium text-sm truncate flex-1 pr-2" title={s.name}>{s.name}</span>
+                      
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-background/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-xl z-20">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); reorderSubjects('up', s); }} 
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Move Up"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); reorderSubjects('down', s); }} 
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Move Down"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <Popover onOpenChange={(open) => {
+                          if (open) {
+                            setEditName(s.name);
+                            setEditColor(s.color || '#3B82F6');
+                            setEditingSubject(s);
+                          }
+                        }}>
+                          <PopoverTrigger onClick={(e) => e.stopPropagation()}>
+                            <div className="p-1 hover:bg-white/10 rounded cursor-pointer transition-colors" title="Edit Subject">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 glass-panel-strong p-4" side="right" onClick={(e) => e.stopPropagation()}>
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-2">
+                                <h4 className="font-semibold text-sm">Edit Subject</h4>
+                                <div 
+                                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors"
+                                  style={{ backgroundColor: `${editColor}20`, color: editColor, border: `1px solid ${editColor}40` }}
+                                >
+                                  Preview
+                                </div>
+                              </div>
+
+                              <div 
+                                className="p-3 rounded-lg border border-white/10 bg-white/5 text-center transition-all duration-300"
+                                style={{ borderLeft: `4px solid ${editColor}` }}
+                              >
+                                <span className="font-bold text-lg" style={{ color: editColor }}>
+                                  {editName || s.name}
+                                </span>
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Name</label>
+                                <GlassInput 
+                                  value={editName} 
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  placeholder={s.name}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Color</label>
+                                <div className="grid grid-cols-6 gap-2">
+                                  {SUBJECT_COLORS.map((color) => (
+                                    <button
+                                      key={color.value}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditColor(color.value);
+                                      }}
+                                      className={cn(
+                                        "w-6 h-6 rounded-full transition-transform hover:scale-110",
+                                        editColor === color.value ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110" : "opacity-70 hover:opacity-100"
+                                      )}
+                                      style={{ backgroundColor: color.value }}
+                                      title={color.name}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              <GlassButton className="w-full" size="sm" onClick={handleUpdateSubject}>Save Changes</GlassButton>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <AlertDialog>
+                          <AlertDialogTrigger onClick={(e) => e.stopPropagation()}>
+                            <div className="p-1 hover:bg-destructive/20 text-destructive rounded transition-colors" title="Delete Subject">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </div>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="glass-panel-strong border-white/10">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete subject?</AlertDialogTitle>
+                              <AlertDialogDescription>This will permanently delete "{s.name}" and ALL courses/topics inside it.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteSubject(s.id)} className="bg-destructive hover:bg-destructive/80">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </GlassCard>
+
+          {/* Column 2: Courses */}
+          <GlassCard className="flex flex-col h-[75vh]">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-accent" />
+                <h2 className="font-bold">Courses</h2>
+              </div>
+              <div className="flex gap-1">
+                <GlassButton size="sm" onClick={handlePasteCourse} disabled={!clipboard || clipboard.type !== 'course' || !selectedSubjectId || isPasting} title="Paste Course">
+                  <ClipboardCheck className="w-4 h-4" />
+                </GlassButton>
+                <GlassButton size="sm" onClick={() => setShowCourseModal(true)} disabled={!selectedSubjectId}>
+                  <Plus className="w-4 h-4" />
+                </GlassButton>
               </div>
             </div>
             
-            {showSubjectModal && (
-                <div className="glass-panel p-3 mb-4 animate-fade-down">
-                    <GlassInput autoFocus placeholder="Subject Name..." value={newSubjectName} onChange={(e) => setNewSubjectName(e.target.value)} className="mb-2 text-sm" />
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setShowSubjectModal(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-                        <button onClick={handleCreateSubject} className="text-xs font-bold text-primary hover:text-primary/80">Create</button>
-                    </div>
-                </div>
-            )}
-
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-              {subjects.map((s) => (
-                <div 
-                  key={s.id}
-                  onClick={() => { setSelectedSubjectId(s.id); fetchTopics(s.id); }}
-                  className={`group glass-panel p-3 cursor-pointer transition-all ${selectedSubjectId === s.id ? "bg-primary/20 border-primary/50" : "hover:bg-foreground/5"}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color || '#3B82F6' }} />
-                      <span className="font-medium truncate">{s.name}</span>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                       <Popover>
-                        <PopoverTrigger asChild>
-                          <button 
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-muted-foreground hover:text-foreground"
-                            title="Change color"
-                          >
-                            <div className="w-3 h-3 rounded-full border border-current" style={{ backgroundColor: s.color }} />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 p-3" align="end">
-                           <div className="text-xs font-medium text-muted-foreground mb-2">Subject Color</div>
-                           <div className="grid grid-cols-6 gap-2">
-                              {SUBJECT_COLORS.map((color) => (
-                                <button
-                                  key={color.value}
-                                  onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateSubjectColor(s.id, color.value);
-                                  }}
-                                  className={cn(
-                                    "w-6 h-6 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary ring-offset-2 ring-offset-background",
-                                    s.color === color.value && "ring-2 ring-primary scale-110 shadow-lg"
-                                  )}
-                                  style={{ backgroundColor: color.value }}
-                                  title={color.name}
-                                />
-                              ))}
-                           </div>
-                        </PopoverContent>
-                      </Popover>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(s.id); }}
-                        className="p-1.5 hover:text-destructive transition-colors"
-                        title="Delete subject"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Topics Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold flex items-center gap-2"><Layers className="w-4 h-4 text-accent" /> Courses</h3>
-              <div className="flex items-center gap-2">
-                 <span className="text-xs text-muted-foreground">{topics.length} in subject</span>
-                 {selectedSubjectId && <button onClick={() => setShowCourseModal(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Course"><Plus className="w-4 h-4 text-accent" /></button>}
-              </div>
-            </div>
-
-            {showCourseModal && (
-                <div className="glass-panel p-3 mb-4 animate-fade-down">
-                    <GlassInput autoFocus placeholder="Course Title..." value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)} className="mb-2 text-sm" />
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setShowCourseModal(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-                        <button onClick={handleCreateCourse} className="text-xs font-bold text-accent hover:text-accent/80">Create</button>
-                    </div>
-                </div>
-            )}
-
-            <span className="text-xs text-muted-foreground hidden">Topics</span>
             {!selectedSubjectId ? (
-              <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                Select a subject to view topics
-              </div>
-            ) : topics.length === 0 ? (
-              <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                No courses in this subject
+              <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground group">
+                <div className="flex flex-col items-center gap-3 opacity-40 group-hover:opacity-60 transition-opacity">
+                  <Layers className="w-12 h-12 stroke-[1px]" />
+                  <p className="text-sm italic">Select a subject to view courses</p>
+                </div>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                {topics.map((t) => (
-                  <div 
-                    key={t.id}
-                    onClick={() => { setSelectedTopicId(t.id); fetchLessons(t.id); }}
-                    className={`group glass-panel p-3 cursor-pointer transition-all ${selectedTopicId === t.id ? "bg-accent/20 border-accent/50" : "hover:bg-foreground/5"}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium truncate">{t.title}</span>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
-                        title="Delete course"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                {loading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-[64px] w-full" />
+                    ))}
                   </div>
-                ))}
+                ) : topics.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40">
+                    <Plus className="w-8 h-8 mb-2" />
+                    <p className="text-xs italic">No courses yet</p>
+                  </div>
+                ) : (
+                  topics.map((t) => (
+                    <div 
+                      key={t.id}
+                      id={`course-${t.id}`}
+                      onClick={() => { setSelectedTopicId(t.id); fetchLessons(t.id); setSelectedLessonId(null); }}
+                      className={cn(
+                        "group glass-panel p-3 cursor-pointer transition-all",
+                        selectedTopicId === t.id ? "ring-1 ring-primary-light shadow-lg" : "hover:bg-white/5"
+                      )}
+                      style={{
+                        backgroundColor: selectedTopicId === t.id ? `${activeSubjectColor}25` : undefined,
+                        borderColor: selectedTopicId === t.id ? `${activeSubjectColor}50` : undefined,
+                        borderLeft: `3px solid ${activeSubjectColor}`
+                      }}
+                    >
+                       <div className="relative flex items-center justify-between min-h-[40px]">
+                        <span className="font-medium text-sm truncate flex-1 pr-2" title={t.title}>{t.title}</span>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-background/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-xl z-20">
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); reorderTopics('up', t); }} 
+                             className="p-1 hover:bg-white/10 rounded transition-colors"
+                             title="Move Up"
+                           >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); reorderTopics('down', t); }} 
+                            className="p-1 hover:bg-white/10 rounded transition-colors"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleCopyCourse(t); }} className="p-1 hover:bg-white/10 rounded transition-colors" title="Copy Course">
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <Popover>
+                            <PopoverTrigger onClick={(e) => e.stopPropagation()}>
+                              <div className="p-1 hover:bg-white/10 rounded cursor-pointer transition-colors" title="Rename Course">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 glass-panel-strong p-4" side="right" onClick={(e) => e.stopPropagation()}>
+                              <div className="space-y-3">
+                                <h4 className="font-semibold text-sm">Rename Course</h4>
+                                <div className="flex gap-2">
+                                  <GlassInput 
+                                    value={editName} 
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    placeholder={t.title}
+                                  />
+                                  <GlassButton size="sm" onClick={() => { setEditingCourse(t); handleRenameCourse(); }}>Save</GlassButton>
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          <AlertDialog>
+                            <AlertDialogTrigger onClick={(e) => e.stopPropagation()}>
+                              <div className="p-1 hover:bg-destructive/20 text-destructive rounded transition-colors" title="Delete Course">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </div>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="glass-panel-strong border-white/10">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete course?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete "{t.title}" and ALL topics inside it.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteTopic(t.id)} className="bg-destructive hover:bg-destructive/80">Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
-          </div>
+          </GlassCard>
 
-          {/* Lessons Column */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <h3 className="font-bold flex items-center gap-2"><BookOpen className="w-4 h-4 text-secondary" /> Topics</h3>
+          {/* Column 3: Topics (Lessons) */}
+          <GlassCard className="flex flex-col h-[75vh]">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
               <div className="flex items-center gap-2">
-                 {lessons.length > 0 && selectedTopicId && (
-                     <div className="flex items-center gap-1.5 bg-secondary/10 px-2 py-1 rounded-md border border-secondary/20">
-                        <Clock className="w-3 h-3 text-secondary" />
-                        <span className="text-xs font-mono text-secondary font-bold">
-                          {Math.floor(lessons.reduce((acc, l) => acc + (l.duration || 10), 0) / 60)}h {lessons.reduce((acc, l) => acc + (l.duration || 10), 0) % 60}m
-                        </span>
-                     </div>
-                 )}
-                 <span className="text-xs text-muted-foreground">{lessons.length} in course</span>
-                 {selectedTopicId && (
-                     <button onClick={() => setShowTopicBuilder(true)} className="p-1 hover:bg-white/10 rounded-full transition-colors" title="Add Topic">
-                         <Plus className="w-4 h-4 text-secondary" />
-                     </button>
-                 )}
+                <BookOpen className="w-5 h-5 text-secondary" />
+                <h2 className="font-bold">Topics</h2>
+              </div>
+              <div className="flex gap-1">
+                <GlassButton size="sm" onClick={handlePasteTopic} disabled={!clipboard || clipboard.type !== 'topic' || !selectedTopicId || isPasting} title="Paste Topic">
+                  <ClipboardCheck className="w-4 h-4" />
+                </GlassButton>
+                <GlassButton size="sm" onClick={() => setShowTopicBuilder(true)} disabled={!selectedTopicId}>
+                  <Plus className="w-4 h-4" />
+                </GlassButton>
               </div>
             </div>
+            
             {!selectedTopicId ? (
-              <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                Select a course to view topics
-              </div>
-            ) : lessons.length === 0 ? (
-              <div className="glass-panel p-8 text-center text-muted-foreground text-sm rounded-2xl italic">
-                No topics here. Add one to start building content!
+              <div className="flex-1 flex items-center justify-center p-8 text-center text-muted-foreground group">
+                <div className="flex flex-col items-center gap-3 opacity-40 group-hover:opacity-60 transition-opacity">
+                  <BookOpen className="w-12 h-12 stroke-[1px]" />
+                  <p className="text-sm italic">Select a course to view topics</p>
+                </div>
               </div>
             ) : (
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                {lessons.map((l) => (
-                  <div 
-                    key={l.id}
-                    className="group glass-panel p-3 hover:bg-foreground/5 transition-all"
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                {loading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-[50px] w-full" />
+                    ))}
+                  </div>
+                ) : lessons.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40">
+                    <Plus className="w-8 h-8 mb-2" />
+                    <p className="text-xs italic">No topics yet</p>
+                  </div>
+                ) : (
+                  lessons.map((l) => (
+                    <div 
+                      key={l.id}
+                    id={`lesson-${l.id}`}
+                    onClick={() => setSelectedLessonId(l.id)}
+                    className={cn(
+                        "group glass-panel p-3 hover:bg-foreground/5 transition-all relative flex flex-col justify-center min-h-[50px] cursor-pointer",
+                        selectedLessonId === l.id && "ring-1 ring-primary-light shadow-lg"
+                    )}
+                    style={{
+                        backgroundColor: selectedLessonId === l.id ? `${activeSubjectColor}25` : undefined,
+                        borderColor: selectedLessonId === l.id ? `${activeSubjectColor}50` : undefined,
+                        borderLeft: `3px solid ${activeSubjectColor}`
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-1 min-w-0">
-                          <span className="font-medium truncate">{l.title}</span>
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-secondary/70" /> {l.duration || 10} mins
-                          </span>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex-1 min-w-0 pr-2">
+                      <span className="font-medium text-sm truncate block" title={l.title}>{l.title}</span>
+                      {l.duration && (
+                        <span className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" /> {l.duration} min content
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 bg-background/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-xl z-20">
                         <button 
-                          onClick={() => handleEditLesson(l)}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-accent transition-all"
-                          title="Edit topic"
+                          onClick={(e) => { e.stopPropagation(); reorderLessons('up', l); }} 
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Move Up"
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <ArrowUp className="w-3.5 h-3.5" />
                         </button>
                         <button 
-                          onClick={() => handleDeleteLesson(l.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
-                          title="Delete topic"
+                          onClick={(e) => { e.stopPropagation(); reorderLessons('down', l); }} 
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Move Down"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <ArrowDown className="w-3.5 h-3.5" />
                         </button>
-                      </div>
+                        <button onClick={(e) => { e.stopPropagation(); handleCopyTopic(l); }} className="p-1 hover:bg-white/10 rounded transition-colors" title="Copy Topic">
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => { setEditingLesson(l); setShowTopicBuilder(true); }}
+                          className="p-1 hover:bg-white/10 rounded transition-colors"
+                          title="Edit Topic"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <AlertDialog>
+                          <AlertDialogTrigger onClick={(e) => e.stopPropagation()}>
+                            <div className="p-1 hover:bg-destructive/20 text-destructive rounded transition-colors" title="Delete Topic">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </div>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="glass-panel-strong border-white/10">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete topic?</AlertDialogTitle>
+                              <AlertDialogDescription>Are you sure you want to delete "{l.title}"? This cannot be undone.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteLesson(l.id)} className="bg-destructive hover:bg-destructive/80">Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
-          </div>
+          </GlassCard>
         </div>
+
+        {/* Modals */}
+        <Dialog open={showSubjectModal} onOpenChange={setShowSubjectModal}>
+          <DialogContent className="glass-panel-strong border-white/10">
+            <DialogHeader>
+              <DialogTitle>Add New Subject</DialogTitle>
+              <DialogDescription>Create a top-level education category.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Subject Name</label>
+                <GlassInput 
+                  placeholder="e.g., Mathematics" 
+                  value={newSubjectName}
+                  onChange={(e) => setNewSubjectName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Pick a Color</label>
+                <div className="grid grid-cols-6 gap-2">
+                  {SUBJECT_COLORS.map((color) => (
+                    <button
+                      key={color.value}
+                      onClick={() => setNewSubjectColor(color.value)}
+                      className={cn(
+                        "w-8 h-8 rounded-full transition-all",
+                        newSubjectColor === color.value ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110 shadow-lg" : "opacity-60 hover:opacity-100 hover:scale-105"
+                      )}
+                      style={{ backgroundColor: color.value }}
+                      title={color.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <GlassButton variant="ghost" onClick={() => setShowSubjectModal(false)}>Cancel</GlassButton>
+              <GlassButton onClick={handleCreateSubject}>Create Subject</GlassButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showCourseModal} onOpenChange={setShowCourseModal}>
+          <DialogContent className="glass-panel-strong border-white/10">
+            <DialogHeader>
+              <DialogTitle>Add New Course</DialogTitle>
+              <DialogDescription>Add a course to {subjects.find(s => s.id === selectedSubjectId)?.name}.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <GlassInput 
+                placeholder="Course Title (e.g., Algebra I)" 
+                value={newCourseTitle}
+                onChange={(e) => setNewCourseTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <GlassButton variant="ghost" onClick={() => setShowCourseModal(false)}>Cancel</GlassButton>
+              <GlassButton onClick={handleCreateCourse}>Create Course</GlassButton>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

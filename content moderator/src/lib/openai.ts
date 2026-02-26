@@ -20,20 +20,32 @@ export const saveOpenAIConfig = (config: OpenAIConfig) => {
   localStorage.setItem(OPENAI_CONFIG_KEY, JSON.stringify(config));
 };
 
-export const generateLessonContent = async (topicTitle: string, config: OpenAIConfig) => {
+export const generateLessonContent = async (topicTitle: string, config: OpenAIConfig, customPrompt?: string) => {
   if (!config.apiKey) throw new Error("API Key is missing. Please set it in AI Settings.");
 
   const prompt = `Topic: ${topicTitle}
-Generate a comprehensive lesson for this topic. Return the data ONLY as a valid JSON object with this structure:
+${customPrompt ? `Additional Instructions: ${customPrompt}` : ""}
+
+Generate a comprehensive educational lesson. The content must be structured to fit a slide-based mobile learning app.
+Return the data ONLY as a valid JSON object with this exact structure:
 {
-  "title": "Topic Name",
-  "intro": "Short lesson goal",
-  "coreContent": "Detailed explanation using markdown",
+  "title": "Clear Topic Title",
+  "intro": "A concise introduction of what the student will learn (the goal).",
+  "coreContent": "Detailed core explanation using markdown. Break it into readable paragraphs.",
   "examples": [
-    {"title": "Example 1", "problem": "...", "solution": "...", "keyTakeaway": "..."}
+    {
+      "title": "Example Title",
+      "problem": "The problem or scenario to solve",
+      "solution": "Step-by-step resolution",
+      "keyTakeaway": "What is the single most important lesson from this example?"
+    }
   ],
   "questions": [
-    {"question": "...", "answers": ["A", "B", "C", "D"], "correctAnswerIndex": 0}
+    {
+      "question": "A multiple choice question testing the core concept",
+      "answers": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswerIndex": 0
+    }
   ]
 }`;
 
@@ -46,7 +58,7 @@ Generate a comprehensive lesson for this topic. Return the data ONLY as a valid 
     body: JSON.stringify({
       model: config.model || "gpt-3.5-turbo",
       messages: [
-        { role: "system", content: config.systemPrompt },
+        { role: "system", content: config.systemPrompt + " Always return valid JSON matching the requested schema." },
         { role: "user", content: prompt }
       ],
       response_format: { type: "json_object" },
@@ -60,5 +72,10 @@ Generate a comprehensive lesson for this topic. Return the data ONLY as a valid 
   }
 
   const result = await response.json();
-  return JSON.parse(result.choices[0].message.content);
+  try {
+    return JSON.parse(result.choices[0].message.content);
+  } catch (e) {
+    console.error("Failed to parse OpenAI response:", result.choices[0].message.content);
+    throw new Error("AI returned invalid data format. Please try again.");
+  }
 };

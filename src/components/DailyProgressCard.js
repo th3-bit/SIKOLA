@@ -40,16 +40,16 @@ export default function DailyProgressCard() {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const monthlySessions = sessions.filter(s => new Date(s.started_at) >= startOfMonth);
 
-      const total = monthlySessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
-      setTotalMinutes(total);
-      if (total === 0) {
+      const total = monthlySessions.reduce((acc, curr) => acc + (Number(curr.duration_minutes) || 0), 0);
+      setTotalMinutes(Math.round(total)); // Ensure integer
+      if (total <= 0) {
         // Default empty state or mock-like but zeroed
         setCategories(subjects.slice(0, 6).map(s => {
           const style = getSubjectStyle(s.name);
           return {
             name: s.name,
             percentage: 0,
-            color: style.color
+            color: s.color || style.color
           };
         }));
       } else {
@@ -58,13 +58,14 @@ export default function DailyProgressCard() {
           const style = getSubjectStyle(s.name);
           const subjectTime = monthlySessions
             .filter(ses => ses.subject_id === s.id)
-            .reduce((acc, curr) => acc + curr.duration_minutes, 0);
+            .reduce((acc, curr) => acc + (Number(curr.duration_minutes) || 0), 0);
           
           return {
             name: s.name,
-            color: style.color,
+            color: s.color || style.color,
             minutes: subjectTime,
-            percentage: Math.round((subjectTime / total) * 100)
+            // Guard against NaN
+            percentage: total > 0 ? Math.round((subjectTime / total) * 100) : 0
           };
         })
         .filter(c => c.minutes > 0)

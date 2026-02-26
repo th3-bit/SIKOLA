@@ -6,6 +6,7 @@ import { Lock, ChevronLeft, ArrowRight, CheckCircle, Eye, EyeOff } from 'lucide-
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { Alert, ActivityIndicator } from 'react-native';
+import StatusModal from '../components/StatusModal';
 
 export default function ResetPasswordScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -15,24 +16,41 @@ export default function ResetPasswordScreen({ navigation }) {
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isConfirmFocused, setIsConfirmFocused] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ type: 'success', title: '', message: '', actionText: 'Continue' });
 
   const handleResetPassword = async () => {
     if (!password || !confirmPassword) {
-      if (Platform.OS === 'web') alert('Please fill in all fields');
-      else Alert.alert('Error', 'Please fill in all fields');
+      setModalConfig({
+        type: 'error',
+        title: 'Missing Info',
+        message: 'Please fill in both password fields to continue.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
     if (password !== confirmPassword) {
-      if (Platform.OS === 'web') alert('Passwords do not match');
-      else Alert.alert('Error', 'Passwords do not match');
+      setModalConfig({
+        type: 'error',
+        title: 'Password Mismatch',
+        message: 'The passwords you entered do not match. Please try again.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
     if (password.length < 6) {
-      const minMsg = 'Password must be at least 6 characters long';
-      if (Platform.OS === 'web') alert(minMsg);
-      else Alert.alert('Error', minMsg);
+      setModalConfig({
+        type: 'error',
+        title: 'Weak Password',
+        message: 'Your password must be at least 6 characters long for security.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
@@ -44,31 +62,22 @@ export default function ResetPasswordScreen({ navigation }) {
 
       if (error) throw error;
 
-      const successMsg = 'Your password has been reset successfully!';
-      if (Platform.OS === 'web') {
-        alert(successMsg);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
-      } else {
-        Alert.alert(
-          'Success',
-          successMsg,
-          [{ 
-            text: 'Login', 
-            onPress: () => navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            })
-          }]
-        );
-      }
+      setModalConfig({
+        type: 'success',
+        title: 'Success!',
+        message: 'Your password has been reset successfully. You can now log in with your new credentials.',
+        actionText: 'Back to Login'
+      });
+      setShowModal(true);
     } catch (error) {
       console.error('Password reset error:', error);
-      const errMsg = error.message || 'Failed to reset password';
-      if (Platform.OS === 'web') alert(errMsg);
-      else Alert.alert('Error', errMsg);
+      setModalConfig({
+        type: 'error',
+        title: 'Reset Failed',
+        message: error.message || 'We could not reset your password. Please try again.',
+        actionText: 'Try Again'
+      });
+      setShowModal(true);
     } finally {
       setLoading(false);
     }
@@ -133,8 +142,12 @@ export default function ResetPasswordScreen({ navigation }) {
 
                {/* Confirm Password Input */}
                <View style={styles.inputWrapper}>
-                <View style={[styles.inputContainer, { backgroundColor: theme.colors.inputBg, borderColor: theme.colors.inputBorder, borderRadius: theme.borderRadius.m }]}>
-                  <CheckCircle color={theme.colors.textSecondary} size={20} style={styles.icon} />
+                <View style={[styles.inputContainer, { backgroundColor: theme.colors.inputBg, borderColor: theme.colors.inputBorder, borderRadius: theme.borderRadius.m }, isConfirmFocused && { borderColor: theme.colors.secondary }]}>
+                  <CheckCircle 
+                    color={confirmPassword.length > 0 ? (password === confirmPassword ? '#10B981' : '#EF4444') : (isConfirmFocused ? theme.colors.secondary : theme.colors.textSecondary)} 
+                    size={20} 
+                    style={styles.icon} 
+                  />
                   <TextInput
                     style={[styles.input, { color: theme.colors.textPrimary }]}
                     placeholder="Confirm New Password"
@@ -142,6 +155,8 @@ export default function ResetPasswordScreen({ navigation }) {
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     secureTextEntry={!showConfirmPassword}
+                    onFocus={() => setIsConfirmFocused(true)}
+                    onBlur={() => setIsConfirmFocused(false)}
                   />
                   <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                     {showConfirmPassword ? (
@@ -180,6 +195,25 @@ export default function ResetPasswordScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Status Modal */}
+      <StatusModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        onAction={() => {
+          setShowModal(false);
+          if (modalConfig.type === 'success') {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
+          }
+        }}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        actionText={modalConfig.actionText}
+      />
     </View>
   );
 }

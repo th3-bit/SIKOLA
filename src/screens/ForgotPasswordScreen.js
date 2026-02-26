@@ -2,21 +2,30 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, ChevronLeft, ArrowRight, KeyRound } from 'lucide-react-native';
+import { Mail, ChevronLeft, ArrowRight, KeyRound, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
+import StatusModal from '../components/StatusModal';
 
 const { width } = Dimensions.get('window');
 
 export default function ForgotPasswordScreen({ navigation }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ type: 'success', title: '', message: '', actionText: 'Continue' });
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert('Error', 'Please enter your email address');
+      setModalConfig({
+        type: 'error',
+        title: 'Missing Email',
+        message: 'Please enter your email address to continue.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
@@ -28,21 +37,24 @@ export default function ForgotPasswordScreen({ navigation }) {
 
       setOtpSent(true);
       
-      const message = 'A 6-digit verification code has been sent to your email (' + email + ').';
+      const message = `A verification code has been sent to ${email}. Please check your inbox and enter the code to reset your password.`;
       
-      if (Platform.OS === 'web') {
-        alert(message);
-        navigation.navigate('VerifyEmail', { email: email, type: 'recovery' });
-      } else {
-        Alert.alert(
-          'OTP Sent',
-          message,
-          [{ text: 'Enter Code', onPress: () => navigation.navigate('VerifyEmail', { email: email, type: 'recovery' }) }]
-        );
-      }
+      setModalConfig({
+        type: 'success',
+        title: 'OTP Sent Successfully',
+        message: message,
+        actionText: 'Enter Code'
+      });
+      setShowModal(true);
     } catch (error) {
       console.error('Password reset error:', error);
-      Alert.alert('Error', error.message || 'Failed to send OTP');
+      setModalConfig({
+        type: 'error',
+        title: 'Failed to Send OTP',
+        message: error.message || 'Unable to send verification code. Please try again.',
+        actionText: 'Try Again'
+      });
+      setShowModal(true);
     } finally {
       setLoading(false);
     }
@@ -59,7 +71,15 @@ export default function ForgotPasswordScreen({ navigation }) {
         <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                 <ChevronLeft color={theme.colors.textPrimary} size={28} />
-                <Text style={[styles.backText, { color: theme.colors.textPrimary }]}>Back to login</Text>
+                <Text style={[styles.backText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Back to login</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.themeToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]} 
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+            >
+              {isDark ? <Sun size={20} color="#FCE72D" /> : <Moon size={20} color={theme.colors.textPrimary} />}
             </TouchableOpacity>
         </View>
 
@@ -137,6 +157,22 @@ export default function ForgotPasswordScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Status Modal */}
+      <StatusModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        onAction={() => {
+          setShowModal(false);
+          if (modalConfig.type === 'success') {
+            navigation.navigate('VerifyEmail', { email: email, type: 'recovery' });
+          }
+        }}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        actionText={modalConfig.actionText}
+      />
     </View>
   );
 }
@@ -165,7 +201,14 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       marginTop: 10,
       width: '100%',
-      justifyContent: 'flex-start',
+      justifyContent: 'space-between',
+  },
+  themeToggle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
       flexDirection: 'row',

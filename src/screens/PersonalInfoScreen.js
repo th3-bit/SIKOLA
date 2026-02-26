@@ -25,13 +25,19 @@ import {
   CheckCircle,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
+import StatusModal from '../components/StatusModal';
 
 export default function PersonalInfoScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { refreshStats } = useProgress();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  
+  const [showStatus, setShowStatus] = useState(false);
+  const [statusConfig, setStatusConfig] = useState({ type: 'success', title: '', message: '' });
   
   const [userData, setUserData] = useState({
     id: '',
@@ -60,8 +66,12 @@ export default function PersonalInfoScreen({ navigation }) {
       if (userError) throw userError;
 
       if (!user) {
-        Alert.alert('Error', 'Please login to continue');
-        navigation.navigate('Login');
+        setStatusConfig({
+          type: 'error',
+          title: 'Not Authenticated',
+          message: 'Please login to continue managing your profile.'
+        });
+        setShowStatus(true);
         return;
       }
 
@@ -92,7 +102,12 @@ export default function PersonalInfoScreen({ navigation }) {
       });
     } catch (error) {
       console.error('Error fetching user data:', error);
-      Alert.alert('Error', 'Failed to load user information');
+      setStatusConfig({
+        type: 'error',
+        title: 'Fetch Failed',
+        message: 'We couldn\'t load your profile information. Please check your connection.'
+      });
+      setShowStatus(true);
     } finally {
       setLoading(false);
     }
@@ -100,7 +115,12 @@ export default function PersonalInfoScreen({ navigation }) {
 
   const handleSave = async () => {
     if (!editData.full_name.trim()) {
-      Alert.alert('Validation Error', 'Full name cannot be empty');
+      setStatusConfig({
+        type: 'error',
+        title: 'Missing Name',
+        message: 'Please enter your full name to update your profile.'
+      });
+      setShowStatus(true);
       return;
     }
 
@@ -122,6 +142,11 @@ export default function PersonalInfoScreen({ navigation }) {
 
       if (updateError) throw updateError;
 
+      // Ensure global state is updated
+      if (refreshStats) {
+        await refreshStats();
+      }
+
       // Update local state
       setUserData({
         ...userData,
@@ -130,10 +155,20 @@ export default function PersonalInfoScreen({ navigation }) {
       });
 
       setEditing(false);
-      Alert.alert('Success', 'Profile updated successfully!');
+      setStatusConfig({
+        type: 'success',
+        title: 'Profile Updated',
+        message: 'Your personal information has been successfully saved.'
+      });
+      setShowStatus(true);
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      setStatusConfig({
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Something went wrong while saving your profile. Please try again.'
+      });
+      setShowStatus(true);
     } finally {
       setSaving(false);
     }
@@ -328,6 +363,22 @@ export default function PersonalInfoScreen({ navigation }) {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      <StatusModal
+        visible={showStatus}
+        onClose={() => setShowStatus(false)}
+        type={statusConfig.type}
+        title={statusConfig.title}
+        message={statusConfig.message}
+        onAction={() => {
+          setShowStatus(false);
+          if (statusConfig.type === 'success') {
+            navigation.goBack();
+          } else if (statusConfig.title === 'Not Authenticated') {
+            navigation.navigate('Login');
+          }
+        }}
+      />
     </View>
   );
 }

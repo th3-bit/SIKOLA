@@ -2,18 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Animated, Easing, Image, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GraduationCap, Facebook, Apple, Chrome, ArrowRight, Eye, EyeOff } from 'lucide-react-native';
+import { GraduationCap, Facebook, Apple, Chrome, ArrowRight, Eye, EyeOff, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
+
 import { supabase } from '../lib/supabase';
+import LoginValidationModal from '../components/LoginValidationModal';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
+  const { refreshStats } = useProgress();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [validationError, setValidationError] = useState({ title: '', message: '' });
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Focus States
   const [isEmailFocused, setIsEmailFocused] = useState(false);
@@ -41,7 +47,8 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setValidationError({ title: 'Missing Info', message: 'Please fill in all fields' });
+      setShowValidationModal(true);
       return;
     }
 
@@ -55,11 +62,16 @@ export default function LoginScreen({ navigation }) {
       if (error) throw error;
 
       if (data.user) {
+        // Refresh context data manually before navigation
+        if (refreshStats) {
+           await refreshStats();
+        }
         navigation.replace('MainApp');
       }
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Login Failed', error.message || 'Please check your credentials');
+      setValidationError({ title: 'Login Failed', message: error.message || 'Please check your credentials' });
+      setShowValidationModal(true);
     } finally {
       setLoading(false);
     }
@@ -73,6 +85,14 @@ export default function LoginScreen({ navigation }) {
       />
       
       <SafeAreaView style={styles.topSection}>
+        <TouchableOpacity 
+          style={[styles.themeToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]} 
+          onPress={toggleTheme}
+          activeOpacity={0.7}
+        >
+          {isDark ? <Sun size={20} color="#FCE72D" /> : <Moon size={20} color={theme.colors.textPrimary} />}
+        </TouchableOpacity>
+
         <View style={styles.brandContainer}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={[styles.welcomeText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola+</Text>
@@ -94,11 +114,13 @@ export default function LoginScreen({ navigation }) {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <ScrollView 
             contentContainerStyle={styles.scrollContent} 
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            bounces={false}
           >
             
             <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Login</Text>
@@ -214,6 +236,13 @@ export default function LoginScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      <LoginValidationModal 
+        visible={showValidationModal}
+        onClose={() => setShowValidationModal(false)}
+        title={validationError.title}
+        message={validationError.message}
+      />
     </View>
   );
 }
@@ -234,6 +263,18 @@ const styles = StyleSheet.create({
     height: '32%', 
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  themeToggle: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   brandContainer: {
     alignItems: 'center',

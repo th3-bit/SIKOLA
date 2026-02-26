@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import React, { useState, useEffect, useRef, createElement } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, Animated, Easing, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, ChevronRight, CheckCircle, X, Trophy, Star, Zap, FileText, Calculator, Lightbulb } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,13 +16,52 @@ import NotesModal from '../components/NotesModal';
 const { width } = Dimensions.get('window');
 
 export default function LearningContentScreen({ route, navigation }) {
-  const { lesson, topic, subject } = route.params;
+  const { lesson, topic, subject, isExam = false, isFree = false } = route.params;
   const { theme, isDark } = useTheme();
-  const { completeTopic } = useProgress();
+  const { completeTopic, subscriptions } = useProgress();
   const primaryColor = subject?.color || theme.colors.primary;
 
-  // content parsing
-  const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+  // content parsing with safety check
+  let slides = [];
+  try {
+    slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+  } catch (e) {
+    console.error("LearningContentScreen: Failed to parse lesson content", e);
+    // slides remains empty, which triggers the fallback UI below
+  }
+
+  React.useEffect(() => {
+    if (isExam) {
+      // FIX: Strictly verify targeted access for Exams
+      // Even if checkAccess was called previously, we double check here with specific IDs
+      const hasTargetedAccess = subscriptions && subscriptions.length > 0 && subscriptions.some(s => {
+        // 1a. All Access
+        if (!s.topic_id && !s.subject_id) return true;
+        // 1b. Targeted Access (Course/Topic or Subject)
+        if (s.topic_id && s.topic_id === topic?.id) return true;
+        if (s.subject_id && s.subject_id === subject?.id) return true;
+        return false;
+      });
+
+      if (!hasTargetedAccess) {
+         console.log("LearningContentScreen: Access DENIED for Premium Exam (No targeted subscription)");
+         // Using timeout to ensure navigation mount
+         const timer = setTimeout(() => {
+            Alert.alert(
+              "Premium Feature", 
+              "Final Exams are exclusive to Premium members. Please subscribe to unlock and earn your certificate.",
+              [
+                { text: "View Plans", onPress: () => navigation.replace('Subscription') },
+                { text: "Cancel", onPress: () => navigation.goBack() }
+              ]
+            );
+         }, 100);
+         return () => clearTimeout(timer);
+      } else {
+        console.log("LearningContentScreen: Access GRANTED for Exam");
+      }
+    }
+  }, [isExam, subscriptions, topic?.id, subject?.id]);
 
   // Safety check for empty slides
   if (!slides || !Array.isArray(slides) || slides.length === 0) {
@@ -42,8 +82,6 @@ export default function LearningContentScreen({ route, navigation }) {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
-  const [showXPModal, setShowXPModal] = useState(false);
-  const [xpScale] = useState(new Animated.Value(0));
   const [retryModalVisible, setRetryModalVisible] = useState(false);
   const [testScore, setTestScore] = useState(0);
   const [testPercentage, setTestPercentage] = useState(0);
@@ -62,6 +100,26 @@ export default function LearningContentScreen({ route, navigation }) {
   const slideAnim = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef(null);
 
+  useEffect(() => {
+    // Log start of session for "Recent Activity"
+    const logStart = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        await supabase.from('learning_sessions').insert([{
+          user_id: user.id,
+          subject_id: subject?.id,
+          duration_minutes: 0,
+          started_at: new Date().toISOString()
+        }]);
+      } catch (err) {
+        console.error('Error logging lesson start:', err);
+      }
+    };
+    logStart();
+  }, []);
+
   // Aggregated Study Notes for the Modal
   const aggregatedNotes = React.useMemo(() => {
     // 1. Explanation Section (includes all core content)
@@ -73,34 +131,59 @@ export default function LearningContentScreen({ route, navigation }) {
       .map(s => (s.title === 'Explanation' || s.title === topic?.title) ? s.content : `## ${s.title}\n${s.content}`)
       .join('\n\n');
       
-    // 2. Examples Section
+    // 2. Examples & Takeaways Section
     const exampleSlides = (slides || [])
       .filter(s => s.isExample || (s.title && s.title.toLowerCase().includes('example')));
     
-    // Regex for grabbing "Key Takeaway" or "Key Takeaways" with various prefixes and symbols
-    const takeawayRegex = /\n?\s*(?:💡\s*)?(?:Key\s*)?Takeaways?[:\-]\s*/i;
-    
     const examplesText = exampleSlides
-      .map(s => {
-        // Split and take the part BEFORE the takeaway
-        const body = s.content.split(takeawayRegex)[0].split('💡')[0].trim();
-        return body ? `## ${s.title}\n${body}` : null;
+      .map((s, index) => {
+        const hasSolutionMarker = s.content.toLowerCase().includes('solution:');
+        const hasTakeawayMarker = s.content.toLowerCase().includes('takeaway:');
+        
+        let problem = s.content;
+        let solution = null;
+        let takeaway = null;
+        let why = null;
+
+        if (hasTakeawayMarker) {
+          const parts = s.content.split(/takeaway:/i);
+          const beforeTakeaway = parts[0];
+          const afterTakeaway = parts[1];
+          
+          if (beforeTakeaway.toLowerCase().includes('solution:')) {
+            const subParts = beforeTakeaway.split(/solution:/i);
+            problem = subParts[0].replace(/problem:/i, '').trim();
+            solution = subParts[1].trim();
+          } else {
+            problem = beforeTakeaway.replace(/problem:/i, '').trim();
+          }
+
+          if (afterTakeaway.toLowerCase().includes('why:')) {
+            const subParts = afterTakeaway.split(/why:/i);
+            takeaway = subParts[0].replace(/what:/i, '').trim();
+            why = subParts[1].trim();
+          } else {
+            takeaway = afterTakeaway.replace(/what:/i, '').trim();
+          }
+        } else if (hasSolutionMarker) {
+          const parts = s.content.split(/solution:/i);
+          problem = parts[0].replace(/problem:/i, '').trim();
+          solution = parts[1].trim();
+        }
+
+        let block = `## Example ${index + 1}: ${s.title}\n\nPROBLEM: ${problem}`;
+        if (solution) {
+          block += `\n\nSOLUTION: ${solution}`;
+        }
+        if (takeaway) {
+          // Format for NotesModal (use single \n to stay in same card)
+          const takeawayContent = why ? `WHAT: ${takeaway}\nWHY: ${why}` : takeaway;
+          block += `\n\n[||TAKEAWAY||]${takeawayContent}`;
+        }
+        return block;
       })
       .filter(Boolean)
       .join('\n\n');
-      
-    // 3. Key Takeaways Section
-    const takeaways = exampleSlides
-      .map(s => {
-        const parts = s.content.split(takeawayRegex);
-        if (parts.length > 1) {
-          // Take the part AFTER the takeaway label
-          return parts[1].split('💡')[0].replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
-        }
-        return null;
-      })
-      .filter(t => t)
-      .join('[||CARD_BREAK||]');
       
     let total = '';
     if (explanationContent) {
@@ -110,11 +193,6 @@ export default function LearningContentScreen({ route, navigation }) {
     if (examplesText) {
       if (total) total += `───────────────────\n\n`;
       total += `EXAMPLES\n\n${examplesText}\n\n`;
-    }
-
-    if (takeaways) {
-      if (total) total += `───────────────────\n\n`;
-      total += `KEY TAKEAWAYS\n\n${takeaways}`;
     }
     
     return total || "No detailed notes provided for this lesson yet.";
@@ -185,20 +263,12 @@ export default function LearningContentScreen({ route, navigation }) {
     setTestPercentage(percentage);
 
     if (percentage >= 70) {
-      setShowXPModal(true);
-      
       // Calculate actual duration
       const durationNum = Math.max(1, Math.round((Date.now() - startTime) / 60000));
       
-      // completeTopic now handles session logging internally
-      completeTopic(subject.id, lesson.id, percentage, durationNum);
-      
-      Animated.spring(xpScale, {
-        toValue: 1,
-        friction: 4,
-        tension: 40,
-        useNativeDriver: true
-      }).start();
+      // completeTopic now handles session logging and reward feedback internally
+      // Pass goBack as onAction to trigger when the reward modal is collected
+      completeTopic(subject.id, lesson.id, percentage, durationNum, 'lesson', () => navigation.goBack());
     } else {
       setRetryModalVisible(true);
     }
@@ -223,7 +293,10 @@ export default function LearningContentScreen({ route, navigation }) {
     };
 
     const videoSource = isYouTube 
-      ? { uri: `https://www.youtube.com/embed/${getYoutubeId(currentSlideData.videoUrl)}?playsinline=1` }
+      ? { 
+          uri: `https://www.youtube.com/embed/${getYoutubeId(currentSlideData.videoUrl)}?rel=0&autoplay=0&showinfo=0&controls=1&playsinline=1`,
+          headers: { 'Referer': 'https://www.youtube.com' }
+        }
       : { uri: currentSlideData.videoUrl };
 
     const renderWebYoutube = () => {
@@ -250,15 +323,52 @@ export default function LearningContentScreen({ route, navigation }) {
             borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
           }]}>
             {isYouTube ? (
-               Platform.OS === 'web' ? renderWebYoutube() : (
-                  <WebView
-                    style={styles.video}
-                    source={videoSource}
-                    allowsFullscreenVideo
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                  />
-               )
+                Platform.OS === 'web' ? renderWebYoutube() : (() => {
+                  const youtubeId = getYoutubeId(currentSlideData.videoUrl);
+                  const htmlContent = `
+                    <!DOCTYPE html>
+                    <html>
+                      <head>
+                        <meta charset="utf-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                        <style>
+                          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+                          .video-container { position: relative; width: 100%; height: 100%; background: #000; }
+                          iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+                        </style>
+                      </head>
+                      <body>
+                        <div class="video-container">
+                          <iframe 
+                            src="https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&autoplay=0&showinfo=0&controls=1&playsinline=1&enablejsapi=1&origin=https://sikola.org"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                          </iframe>
+                        </div>
+                      </body>
+                    </html>
+                  `;
+
+                  return (
+                    <WebView
+                      style={styles.video}
+                      source={{ html: htmlContent, baseUrl: 'https://sikola.org' }}
+                      allowsFullscreenVideo
+                      javaScriptEnabled={true}
+                      domStorageEnabled={true}
+                      allowsInlineMediaPlayback={true}
+                      mediaPlaybackRequiresUserAction={false}
+                      originWhitelist={['*']}
+                      userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+                      startInLoadingState={true}
+                      renderLoading={() => (
+                        <View style={styles.videoLoading}>
+                          <ActivityIndicator size="large" color={primaryColor} />
+                        </View>
+                      )}
+                    />
+                  );
+                })()
             ) : (
               <>
                 {isVideoLoading && (
@@ -290,7 +400,257 @@ export default function LearningContentScreen({ route, navigation }) {
 
   const renderTextContent = () => {
     const isIntro = currentSlideData.type === 'intro';
+    const isGoals = currentSlideData.title?.toLowerCase().includes('what you will learn') || 
+                   currentSlideData.title?.toLowerCase().includes('learning objectives');
+    const isExample = currentSlideData.isExample === true || 
+                     currentSlideData.isExample === 'true' || 
+                     (currentSlideData.title && currentSlideData.title.toLowerCase().includes('example'));
     
+    // 1. Premium Intro Slide Redesign
+    if (isIntro) {
+      return (
+        <View style={[styles.contentSlide, { justifyContent: 'center', alignItems: 'center', minHeight: 450, paddingHorizontal: 10 }]}>
+          {/* TOPIC Badge - Centered */}
+          <View style={{ 
+            backgroundColor: `${primaryColor}10`, 
+            paddingHorizontal: 20, 
+            paddingVertical: 10, 
+            borderRadius: 14, 
+            marginBottom: 30,
+            borderWidth: 1,
+            borderColor: `${primaryColor}20`
+          }}>
+            <Text style={{ 
+              color: primaryColor, 
+              fontSize: 14, 
+              fontWeight: '900', 
+              letterSpacing: 2,
+              fontFamily: theme.typography.fontFamily 
+            }}>
+              TOPIC
+            </Text>
+          </View>
+
+          {/* Topic Name Row */}
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={{ 
+              color: primaryColor, 
+              fontSize: 32, 
+              fontWeight: '900', 
+              textAlign: 'center',
+              lineHeight: 40,
+              fontFamily: theme.typography.fontFamily 
+            }}>
+              {currentSlideData.title}
+            </Text>
+          </View>
+
+          <View style={{ width: 80, height: 2, backgroundColor: primaryColor, opacity: 0.3, marginBottom: 40, alignSelf: 'center' }} />
+
+          {/* Section Header */}
+          <View style={{ width: '100%', marginBottom: 20 }}>
+            <Text style={{ 
+              color: theme.colors.textSecondary, 
+              fontSize: 14, 
+              fontWeight: '700', 
+              opacity: 0.6,
+              letterSpacing: 0.5,
+              fontFamily: theme.typography.fontFamily 
+            }}>
+              SECTION HIGHLIGHTS
+            </Text>
+          </View>
+
+          {/* Intro Content with Left Alignment */}
+          <Text style={[
+            styles.slideContent, 
+            { 
+              color: theme.colors.textSecondary, 
+              fontFamily: theme.typography.fontFamily,
+              textAlign: 'left', 
+              fontSize: 17, 
+              opacity: 0.8,
+              lineHeight: 28,
+              width: '100%'
+            }
+          ]}>
+            {currentSlideData.content || 'Welcome to this lesson! Tap next to begin.'}
+          </Text>
+        </View>
+      );
+    }
+
+    // 2. "What you will learn" Goals Redesign
+    if (isGoals) {
+      // Split content into clean list items
+      const goalLines = currentSlideData.content
+        .split(/[•\n]/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+      return (
+        <View style={[styles.contentSlide, { paddingHorizontal: 10 }]}>
+           {/* TOPIC Badge - Centered for Goals too as per design */}
+           <View style={{ alignItems: 'center', marginBottom: 30 }}>
+            <View style={{ 
+              backgroundColor: `${primaryColor}10`, 
+              paddingHorizontal: 20, 
+              paddingVertical: 10, 
+              borderRadius: 14, 
+              borderWidth: 1,
+              borderColor: `${primaryColor}20`
+            }}>
+              <Text style={{ 
+                color: primaryColor, 
+                fontSize: 14, 
+                fontWeight: '900', 
+                letterSpacing: 2,
+                fontFamily: theme.typography.fontFamily 
+              }}>
+                TOPIC
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ width: '100%', alignItems: 'center', marginBottom: 10 }}>
+            <Text style={{ 
+              color: primaryColor, 
+              fontSize: 32, 
+              fontWeight: '900', 
+              textAlign: 'center',
+              lineHeight: 40,
+              fontFamily: theme.typography.fontFamily 
+            }}>
+              {currentSlideData.title}
+            </Text>
+          </View>
+
+          <View style={{ width: 80, height: 2, backgroundColor: primaryColor, opacity: 0.3, marginBottom: 40, alignSelf: 'center' }} />
+
+          <View style={{ width: '100%', marginBottom: 24 }}>
+             <Text style={{ color: theme.colors.textSecondary, fontSize: 13, fontWeight: '700', opacity: 0.6, letterSpacing: 0.5, marginBottom: 8, fontFamily: theme.typography.fontFamily }}>
+               WHAT YOU WILL LEARN (GOAL/INTRO)
+             </Text>
+          </View>
+
+          <View style={{ width: '100%' }}>
+             {goalLines.map((goal, idx) => (
+               <View key={idx} style={{ flexDirection: 'row', marginBottom: 16, alignItems: 'flex-start' }}>
+                  <Text style={{ fontSize: 18, color: theme.colors.textSecondary, marginRight: 12, opacity: 0.8 }}>•</Text>
+                  <Text style={{ 
+                    flex: 1, 
+                    fontSize: 16, 
+                    color: theme.colors.textSecondary, 
+                    fontWeight: '500', 
+                    lineHeight: 24,
+                    opacity: 0.8,
+                    fontFamily: theme.typography.fontFamily 
+                  }}>
+                    {goal}
+                  </Text>
+               </View>
+             ))}
+          </View>
+        </View>
+      );
+    }
+
+    // 3. Example Slide Redesign (Already Implemented, preserved here)
+    if (isExample) {
+      // Parsing logic for Problem, Solution, Takeaway
+      const hasSolutionMarker = currentSlideData.content.toLowerCase().includes('solution:');
+      const hasTakeawayMarker = currentSlideData.content.toLowerCase().includes('takeaway:');
+      const hasWhyMarker = currentSlideData.content.toLowerCase().includes('why:');
+
+      let problem = currentSlideData.content;
+      let solution = null;
+      let takeaway = null;
+      let why = null;
+
+      if (hasTakeawayMarker) {
+        const parts = currentSlideData.content.split(/takeaway:/i);
+        const beforeTakeaway = parts[0];
+        const afterTakeaway = parts[1];
+        
+        if (beforeTakeaway.toLowerCase().includes('solution:')) {
+          const subParts = beforeTakeaway.split(/solution:/i);
+          problem = subParts[0].replace(/problem:/i, '').trim();
+          solution = subParts[1].trim();
+        } else {
+          problem = beforeTakeaway.replace(/problem:/i, '').trim();
+        }
+
+        if (afterTakeaway.toLowerCase().includes('why:')) {
+          const subParts = afterTakeaway.split(/why:/i);
+          takeaway = subParts[0].replace(/what:/i, '').trim();
+          why = subParts[1].trim();
+        } else {
+          takeaway = afterTakeaway.replace(/what:/i, '').trim();
+        }
+      } else if (hasSolutionMarker) {
+        const parts = currentSlideData.content.split(/solution:/i);
+        problem = parts[0].replace(/problem:/i, '').trim();
+        solution = parts[1].trim();
+      }
+
+      return (
+        <View style={styles.contentSlide}>
+          {/* Title: Selective Underline */}
+          <View style={{ alignSelf: 'flex-start', marginBottom: 20 }}>
+            <Text style={[styles.slideTitle, { fontSize: 22, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+              Example Title: <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>{currentSlideData.title.replace(/example/i, '').replace(/^[:\s-]+/, '').trim() || currentSlideData.title}</Text>
+            </Text>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Problem: Red */}
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#EF4444', marginBottom: 8, fontFamily: theme.typography.fontFamily }}>
+              Problem: <Text style={{ color: theme.colors.textPrimary, fontWeight: '400' }}>{problem}</Text>
+            </Text>
+
+            {/* Solution: Green */}
+            {solution && (
+              <View style={{ marginTop: 15, marginBottom: takeaway ? 25 : 10 }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#10B981', marginBottom: 10, fontFamily: theme.typography.fontFamily }}>
+                  Solution:
+                </Text>
+                <View style={{ padding: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 16, borderWidth: 1, borderColor: theme.colors.glassBorder }}>
+                  <Text style={{ fontSize: 16, color: theme.colors.textPrimary, lineHeight: 26, fontFamily: theme.typography.fontFamily }}>
+                    {solution}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Key Takeaway Card */}
+            {takeaway && (
+              <View style={{ marginTop: 10, borderRadius: 24, overflow: 'hidden' }}>
+                <View style={{ flexDirection: 'row', padding: 20, borderRadius: 24, backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2', alignItems: 'center' }}>
+                  <View style={{ position: 'absolute', left: 0, top: 20, bottom: 20, width: 6, backgroundColor: '#EF4444', borderTopRightRadius: 4, borderBottomRightRadius: 4 }} />
+                  <View style={{ marginRight: 16, marginLeft: 8 }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FFF', justifyContent: 'center', alignItems: 'center' }}>
+                      <Zap color="#EF4444" size={18} fill="#EF4444" />
+                    </View>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '900', letterSpacing: 1, marginBottom: 4, fontFamily: theme.typography.fontFamily }}>KEY TAKEAWAY</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', lineHeight: 24, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }}>
+                      WHAT: {takeaway}
+                    </Text>
+                    {why && (
+                      <Text style={{ fontSize: 16, fontWeight: '600', lineHeight: 24, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, marginTop: 10 }}>
+                        WHY: {why}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.contentSlide, isIntro && { justifyContent: 'center', alignItems: 'center', minHeight: 400 }]}>
         <Text style={[
@@ -488,48 +848,7 @@ export default function LearningContentScreen({ route, navigation }) {
         </View>
       </SafeAreaView>
 
-      {/* Completion/XP Modal */}
-      <Modal visible={showXPModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.7)' }]} />
-           <Animated.View style={[styles.xpCard, { transform: [{ scale: xpScale }] }]}>
-              <LinearGradient
-                colors={['#8B5CF6', '#EC4899']}
-                style={styles.xpGradient}
-              >
-                 <Trophy size={60} color="#FFF" style={styles.trophyIcon} />
-                 <Text style={styles.xpTitle}>Mastery Achieved!</Text>
-                 <Text style={styles.xpSubtitle}>You've completed {lesson.title}</Text>
-                 
-                 <Text style={{ fontSize: 36, fontWeight: '900', color: '#FFF', marginVertical: 10 }}>
-                   {testPercentage}%
-                 </Text>
-                 <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', marginBottom: 20, fontWeight: '600' }}>
-                   SCORE
-                 </Text>
-
-                 <View style={styles.xpBonus}>
-                    <Zap size={24} color="#FACC15" fill="#FACC15" />
-                    <Text style={styles.xpAmount}>+150 XP</Text>
-                 </View>
-
-                 <View style={styles.starsRow}>
-                    {[1, 2, 3].map(i => <Star key={i} size={30} color="#FACC15" fill="#FACC15" />)}
-                 </View>
-
-                 <TouchableOpacity 
-                   style={styles.collectButton}
-                   onPress={() => {
-                     setShowXPModal(false);
-                     navigation.goBack();
-                   }}
-                 >
-                    <Text style={styles.collectText}>CONTINUE JOURNEY</Text>
-                 </TouchableOpacity>
-              </LinearGradient>
-           </Animated.View>
-        </View>
-      </Modal>
+      {/* Completion feedback is now handled globally via ProgressContext's RewardModal */}
 
       {/* Retry Modal */}
       <Modal visible={retryModalVisible} transparent animationType="fade">
@@ -587,7 +906,11 @@ export default function LearningContentScreen({ route, navigation }) {
       {/* Examples Modal */}
       <Modal visible={showExamples} animationType="slide" transparent>
         <View style={[styles.container, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)' }]} />
+          <BlurView 
+            intensity={100} 
+            tint={isDark ? "dark" : "light"} 
+            style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.45)' }]} 
+          />
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.header}>
                <View style={[styles.toolButton, { backgroundColor: `${primaryColor}20`, borderColor: primaryColor }]}>
@@ -603,24 +926,108 @@ export default function LearningContentScreen({ route, navigation }) {
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-               {slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).length > 0 ? (
-                 slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).map((ex, idx) => (
-                   <View key={idx} style={[styles.contentCardWrapper, { marginBottom: 20, shadowColor: primaryColor }]}>
-                     <View style={[styles.contentCard, { 
-                      minHeight: 0, 
-                      padding: 24, 
-                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 25, 0.9)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
-                    }]}>
-                        <Text style={[styles.slideTitle, { fontSize: 20, color: primaryColor, marginBottom: 12, fontFamily: theme.typography.fontFamily }]}>
-                          {ex.title}
-                        </Text>
-                        <Text style={[styles.slideContent, { fontSize: 15, color: theme.colors.textPrimary, lineHeight: 24, fontFamily: theme.typography.fontFamily }]}>
-                          {ex.content}
-                        </Text>
+                {slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).length > 0 ? (
+                 slides.filter(s => s.isExample === true || s.isExample === 'true' || (s.title && s.title.toLowerCase().includes('example'))).map((ex, idx) => {
+                   // Split content into problem, solution, and takeaway components
+                   const hasSolutionMarker = ex.content.toLowerCase().includes('solution:');
+                   const hasTakeawayMarker = ex.content.toLowerCase().includes('takeaway:');
+                   const hasWhyMarker = ex.content.toLowerCase().includes('why:');
+
+                   let problem = ex.content;
+                   let solution = null;
+                   let takeaway = null;
+                   let why = null;
+
+                   if (hasTakeawayMarker) {
+                     const parts = ex.content.split(/takeaway:/i);
+                     const beforeTakeaway = parts[0];
+                     const afterTakeaway = parts[1];
+                     
+                     // Parse problem and solution from before takeaway
+                     if (beforeTakeaway.toLowerCase().includes('solution:')) {
+                       const subParts = beforeTakeaway.split(/solution:/i);
+                       problem = subParts[0].replace(/problem:/i, '').trim();
+                       solution = subParts[1].trim();
+                     } else {
+                       problem = beforeTakeaway.replace(/problem:/i, '').trim();
+                     }
+
+                     // Parse WHAT/WHY from after takeaway
+                     if (afterTakeaway.toLowerCase().includes('why:')) {
+                       const subParts = afterTakeaway.split(/why:/i);
+                       takeaway = subParts[0].replace(/what:/i, '').trim();
+                       why = subParts[1].trim();
+                     } else {
+                       takeaway = afterTakeaway.replace(/what:/i, '').trim();
+                     }
+                   } else if (hasSolutionMarker) {
+                     const parts = ex.content.split(/solution:/i);
+                     problem = parts[0].replace(/problem:/i, '').trim();
+                     solution = parts[1].trim();
+                   }
+
+                   return (
+                     <View key={idx} style={[styles.contentCardWrapper, { marginBottom: 20, shadowColor: primaryColor }]}>
+                       <View style={[styles.contentCard, { 
+                        minHeight: 0, 
+                        padding: 24, 
+                        backgroundColor: isDark ? 'rgba(25, 25, 25, 0.7)' : 'rgba(255, 255, 255, 0.7)',
+                        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' 
+                      }]}>
+                          {/* Title: Bold with Underlined Contents */}
+                          <View style={{ alignSelf: 'flex-start', marginBottom: 20 }}>
+                            <Text style={[styles.slideTitle, { fontSize: 20, color: isDark ? '#FFF' : '#000', marginBottom: 4, fontFamily: theme.typography.fontFamily }]}>
+                              Example Title: <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>{ex.title}</Text>
+                            </Text>
+                          </View>
+                          
+                          {/* Problem: Red */}
+                          <Text style={{ fontSize: 18, fontWeight: '800', color: '#EF4444', marginBottom: 8, fontFamily: theme.typography.fontFamily }}>
+                            Problem: <Text style={{ color: theme.colors.textPrimary, fontWeight: '400' }}>{problem}</Text>
+                          </Text>
+
+                          {/* Solution: Green */}
+                          {solution && (
+                            <View style={{ marginTop: 12, marginBottom: takeaway ? 20 : 0 }}>
+                              <Text style={{ fontSize: 18, fontWeight: '800', color: '#10B981', marginBottom: 8, fontFamily: theme.typography.fontFamily }}>
+                                Solution:
+                              </Text>
+                              <View style={{ padding: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 16, borderWidth: 1, borderColor: theme.colors.glassBorder }}>
+                                <Text style={{ fontSize: 15, color: theme.colors.textPrimary, lineHeight: 24, fontFamily: theme.typography.fontFamily }}>
+                                  {solution}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
+
+                          {/* Key Takeaway: Pixel-Perfect Mirror */}
+                          {takeaway && (
+                            <View style={{ marginTop: 10, borderRadius: 24, overflow: 'hidden' }}>
+                              <View style={{ flexDirection: 'row', padding: 20, borderRadius: 24, backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2', alignItems: 'center' }}>
+                                <View style={{ position: 'absolute', left: 0, top: 20, bottom: 20, width: 6, backgroundColor: '#EF4444', borderTopRightRadius: 4, borderBottomRightRadius: 4 }} />
+                                <View style={{ marginRight: 16, marginLeft: 8 }}>
+                                  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FFF', justifyContent: 'center', alignItems: 'center' }}>
+                                    <Zap color="#EF4444" size={18} fill="#EF4444" />
+                                  </View>
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '900', letterSpacing: 1, marginBottom: 4, fontFamily: theme.typography.fontFamily }}>KEY TAKEAWAY</Text>
+                                  <Text style={{ fontSize: 16, fontWeight: '600', lineHeight: 24, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }}>
+                                    WHAT: {takeaway}
+                                  </Text>
+                                  {why && (
+                                    <Text style={{ fontSize: 16, fontWeight: '600', lineHeight: 24, color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, marginTop: 10 }}>
+                                      WHY: {why}
+                                    </Text>
+                                  )}
+                                </View>
+                              </View>
+                            </View>
+                          )}
+                       </View>
                      </View>
-                   </View>
-                 ))
+                   );
+                 })
                ) : (
                  <View style={{ alignItems: 'center', marginTop: 100 }}>
                     <Lightbulb size={60} color={theme.colors.textSecondary} style={{ opacity: 0.3, marginBottom: 20 }} />

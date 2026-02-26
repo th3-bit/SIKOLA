@@ -10,7 +10,7 @@ const { width } = Dimensions.get('window');
 /**
  * StreakCard component updated to match PracticeScreen design
  */
-export default function StreakCard() {
+export default function StreakCard({ mode = 'weekly', showHeader = true }) {
   const { theme, isDark } = useTheme();
   const { userStats, weeklyActivity } = useProgress();
   
@@ -62,36 +62,38 @@ export default function StreakCard() {
           </View>
         </View>
         
-        {/* Progress Days Chips */}
-        <View style={styles.streakDaysContainer}>
-          {dayData.map((day, index) => (
-            <View 
-              key={index} 
-              style={[
-                styles.dayChip,
-                { 
-                  backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
-                  borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
-                }
-              ]}
-            >
-              <Zap 
-                size={14} 
-                color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
-                fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
-              />
-              <Text style={[
-                styles.dayChipText, 
-                { 
-                  color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
-                  fontFamily: theme.typography.fontFamily 
-                }
-              ]}>
-                {day.label[0]}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {/* Progress Days Chips - only in weekly mode */}
+        {mode === 'weekly' && (
+          <View style={styles.streakDaysContainer}>
+            {dayData.map((day, index) => (
+              <View 
+                key={index} 
+                style={[
+                  styles.dayChip,
+                  { 
+                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                  }
+                ]}
+              >
+                <Zap 
+                  size={14} 
+                  color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
+                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
+                />
+                <Text style={[
+                  styles.dayChipText, 
+                  { 
+                    color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
+                    fontFamily: theme.typography.fontFamily 
+                  }
+                ]}>
+                  {day.label[0]}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -100,7 +102,6 @@ export default function StreakCard() {
 const styles = StyleSheet.create({
   streakCardWrapper: {
     width: '100%',
-    height: 160,
     borderRadius: 28,
     overflow: 'hidden',
     marginBottom: 20,

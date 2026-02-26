@@ -1,9 +1,10 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { View, Text, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
@@ -25,8 +26,12 @@ import PersonalInfoScreen from './src/screens/PersonalInfoScreen';
 import LearningProgressScreen from './src/screens/LearningProgressScreen';
 import CourseCompletionScreen from './src/screens/CourseCompletionScreen';
 import SearchScreen from './src/screens/SearchScreen';
+import NotificationTestScreen from './src/screens/NotificationTestScreen';
+import NotificationService from './src/services/NotificationService';
+import * as Notifications from 'expo-notifications';
 
 const Stack = createNativeStackNavigator();
+export const navigationRef = createNavigationContainerRef();
 
 function AppNavigator() {
   const { isDark } = useTheme();
@@ -54,18 +59,47 @@ function AppNavigator() {
         <Stack.Screen name="LearningProgress" component={LearningProgressScreen} />
         <Stack.Screen name="CourseCompletion" component={CourseCompletionScreen} />
         <Stack.Screen name="Search" component={SearchScreen} />
+        <Stack.Screen name="NotificationTest" component={NotificationTestScreen} />
       </Stack.Navigator>
     </>
   );
 }
 
 export default function App() {
+  React.useEffect(() => {
+    // 1. Initialize Notification Service
+    NotificationService.initialize();
+
+    // 4. Setup Response Listener (Handles clicks on notifications)
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification clicked:', JSON.stringify(response, null, 2));
+      
+      const { data } = response.notification.request.content;
+      if (data?.screen) {
+        console.log(`Deep linking to screen: ${data.screen}`, data.params || '');
+        
+        // Wait for navigation container to be ready
+        if (navigationRef.isReady()) {
+          navigationRef.navigate(data.screen, data.params);
+        } else {
+          console.warn('Navigation not ready, deep link delayed');
+        }
+      }
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <ProgressProvider>
-          <NavigationContainer>
-            <AppNavigator />
+          <NavigationContainer ref={navigationRef}>
+            <ErrorBoundary>
+              <AppNavigator />
+            </ErrorBoundary>
           </NavigationContainer>
         </ProgressProvider>
       </ThemeProvider>

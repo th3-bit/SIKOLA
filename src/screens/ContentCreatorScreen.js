@@ -283,7 +283,7 @@ export default function ContentCreatorScreen({ navigation }) {
   const renderTopicForm = () => (
     <Animated.View style={styles.formContainer}>
       <GlassPicker 
-        label="Select Subject" 
+        label="Select Topic" 
         items={subjectsList} 
         value={selectedSubject} 
         onValueChange={(val) => {
@@ -292,10 +292,10 @@ export default function ContentCreatorScreen({ navigation }) {
         }} 
         theme={theme} 
         isDark={isDark} 
-        placeholder="Choose Father Subject"
+        placeholder="Choose Parent Topic"
       />
       <GlassInput 
-        label="Course Title" 
+        label="Module Title" 
         placeholder="e.g. Differentiation Rules" 
         value={topicTitle}
         onChangeText={setTopicTitle}
@@ -309,7 +309,7 @@ export default function ContentCreatorScreen({ navigation }) {
   const renderLessonForm = () => (
     <Animated.View style={styles.formContainer}>
       <GlassPicker 
-        label="Select Subject" 
+        label="Select Topic" 
         items={subjectsList} 
         value={selectedSubject} 
         onValueChange={(val) => {
@@ -318,10 +318,10 @@ export default function ContentCreatorScreen({ navigation }) {
         }} 
         theme={theme} 
         isDark={isDark} 
-        placeholder="Pick Subject"
+        placeholder="Pick Topic"
       />
       <GlassPicker 
-        label="Select Course" 
+        label="Select Module" 
         items={topicsList} 
         value={selectedTopic} 
         onValueChange={(val) => {
@@ -330,7 +330,7 @@ export default function ContentCreatorScreen({ navigation }) {
         }} 
         theme={theme} 
         isDark={isDark} 
-        placeholder="Pick Course"
+        placeholder="Pick Module"
       />
       <GlassInput 
         label="Lesson Title" 
@@ -541,8 +541,8 @@ export default function ContentCreatorScreen({ navigation }) {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             {/* Tab Swiper */}
             <View style={styles.tabContainer}>
-               <TabButton active={activeTab === 'subject'} label="Sub" icon={Layout} theme={theme} onPress={() => setActiveTab('subject')} />
-               <TabButton active={activeTab === 'topic'} label="Course" icon={Tag} theme={theme} onPress={() => setActiveTab('topic')} />
+               <TabButton active={activeTab === 'subject'} label="Topic" icon={Layout} theme={theme} onPress={() => setActiveTab('subject')} />
+               <TabButton active={activeTab === 'topic'} label="Module" icon={Tag} theme={theme} onPress={() => setActiveTab('topic')} />
                <TabButton active={activeTab === 'lesson'} label="Lesson" icon={BookOpen} theme={theme} onPress={() => setActiveTab('lesson')} />
                <TabButton active={activeTab === 'example'} label="Ex" icon={Lightbulb} theme={theme} onPress={() => setActiveTab('example')} />
                <TabButton active={activeTab === 'quiz'} label="Quiz" icon={HelpCircle} theme={theme} onPress={() => setActiveTab('quiz')} />
@@ -552,7 +552,7 @@ export default function ContentCreatorScreen({ navigation }) {
             {activeTab === 'subject' && (
               <Animated.View style={styles.formContainer}>
                 <GlassInput 
-                  label="Subject Name" 
+                  label="Topic Name" 
                   placeholder="e.g. Advanced Mathematics" 
                   value={subjectTitle}
                   onChangeText={setSubjectTitle}

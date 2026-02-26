@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import GlassHeader from '../components/GlassHeader';
 import { supabase } from '../lib/supabase';
 import { BookOpen, Hash, FileText, ChevronRight } from 'lucide-react-native';
+import { useProgress } from '../context/ProgressContext';
+import LockStatusModal from '../components/LockStatusModal';
 
 export default function SearchScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -16,6 +18,10 @@ export default function SearchScreen({ navigation }) {
   const [results, setResults] = useState({ subjects: [], topics: [], lessons: [] });
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  
+  const { checkAccess, checkLessonAccess, subscriptions } = useProgress();
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockConfig, setLockConfig] = useState({ type: 'subscription', title: '', message: '', onAction: null });
 
   // Debounce search
   useEffect(() => {
@@ -38,9 +44,9 @@ export default function SearchScreen({ navigation }) {
     
     try {
       const [subjectsRes, topicsRes, lessonsRes] = await Promise.all([
-        supabase.from('subjects').select('*').ilike('name', searchTerm).limit(5),
-        supabase.from('topics').select('*, subjects(name, color)').ilike('title', searchTerm).limit(5),
-        supabase.from('lessons').select('*, topics(title, subjects(name, color))').ilike('title', searchTerm).limit(10)
+        supabase.from('subjects').select('*').ilike('name', searchTerm).order('order_index', { ascending: true }).limit(5),
+        supabase.from('topics').select('*, subjects(id, name, color)').ilike('title', searchTerm).order('order_index', { ascending: true }).limit(5),
+        supabase.from('lessons').select('*, topics(id, title, subjects(id, name, color))').ilike('title', searchTerm).order('order_index', { ascending: true }).limit(10)
       ]);
 
       setResults({
@@ -75,7 +81,7 @@ export default function SearchScreen({ navigation }) {
                 {type === 'subject' ? item.name : item.title}
               </Text>
               {(type === 'topic' || type === 'lesson') && (
-                <Text style={[styles.resultSubtitle, { color: theme.colors.textSecondary }]}>
+                <Text numberOfLines={1} style={[styles.resultSubtitle, { color: theme.colors.textSecondary }]}>
                   {type === 'topic' ? item.subjects?.name : `${item.topics?.subjects?.name} • ${item.topics?.title}`}
                 </Text>
               )}
@@ -92,20 +98,57 @@ export default function SearchScreen({ navigation }) {
       if (type === 'subject') {
         navigation.navigate('SubjectDetail', { subject: item });
       } else if (type === 'topic') {
-        navigation.navigate('LessonDetail', { 
-          lesson: { ...item, category: item.subjects?.name, color: item.subjects?.color },
-          subject: { name: item.subjects?.name, color: item.subjects?.color }
-        });
+        // For search results, we'll try to determine access. 
+        // If it's a newer course/topic, we might want to be strict.
+        const isAccessible = checkAccess(topicId, subjectId); 
+        
+        if (isAccessible) {
+          navigation.navigate('LessonDetail', { 
+            lesson: { ...item, category: item.subjects?.name, color: item.subjects?.color },
+            subject: { id: item.subjects?.id, name: item.subjects?.name, color: item.subjects?.color }
+          });
+        } else {
+          showLockedContent();
+        }
       } else if (type === 'lesson') {
-         navigation.navigate('LearningContent', {
-           lesson: item,
-           topic: item.topics,
-           subject: item.topics?.subjects
-         });
+         const subjectId = item.topics?.subjects?.id;
+         const topicId = item.topics?.id;
+         
+         const isAccessible = checkLessonAccess(0, topicId, subjectId); // Use 0 for lesson index if unknown
+         
+         if (isAccessible) {
+           navigation.navigate('LearningContent', {
+             lesson: item,
+             topic: item.topics,
+             subject: item.topics?.subjects
+           });
+         } else {
+           showLockedContent();
+         }
       }
     } catch (err) {
       console.error("Navigation error", err);
     }
+  };
+
+  const showLockedContent = () => {
+    const hasAnySub = subscriptions && subscriptions.length > 0;
+    if (hasAnySub) {
+      setLockConfig({
+        type: 'subscription',
+        title: "Course Not Included",
+        message: "This specific course is not part of your current plan. Purchase this course individually or upgrade to a Full Access plan to unlock all content.",
+        onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+      });
+    } else {
+      setLockConfig({
+        type: 'subscription',
+        title: "Unlock Premium Content",
+        message: "Get unlimited access to all topics, detailed notes, comprehensive tests, and more with SIKOLA Premium.",
+        onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+      });
+    }
+    setShowLockModal(true);
   };
 
   return (
@@ -130,8 +173,8 @@ export default function SearchScreen({ navigation }) {
               {hasSearched && !loading && 
                !results.subjects.length && !results.topics.length && !results.lessons.length && (
                 <View style={styles.emptyState}>
-                  <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                    No results found for "{query}"
+                  <Text style={[styles.emptyText, { color: theme.colors.textSecondary, textAlign: 'center' }]}>
+                    The content you are searching for is not available in our current curriculum.
                   </Text>
                 </View>
               )}
@@ -143,6 +186,15 @@ export default function SearchScreen({ navigation }) {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      <LockStatusModal 
+        visible={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        type={lockConfig.type}
+        title={lockConfig.title}
+        message={lockConfig.message}
+        onAction={lockConfig.onAction}
+      />
     </View>
   );
 }

@@ -7,20 +7,46 @@ import { ArrowLeft, CheckCircle, X, Award, TrendingUp, Calculator } from 'lucide
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import CalculatorModal from '../components/CalculatorModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
 export default function QuizScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { completeTopic } = useProgress();
+  // const { completeTopic } = useProgress(); // Removed duplicate
   // Safe params destructuring
   const { 
     lesson: initialLesson, 
     subject, 
     questions: passedQuestions, 
     topic, 
-    isComprehensive 
+    isComprehensive,
+    isFree // New param
   } = route.params || {};
+
+  const { completeTopic, subscriptions } = useProgress();
+
+  // BLOCK TEST ACCESS FOR FREE USERS
+  React.useEffect(() => {
+    const hasActiveSub = subscriptions && subscriptions.length > 0;
+    
+    // Allow if Subscribed OR if it's a Free Topic
+    if (!hasActiveSub && !isFree) {
+       // Alert and Redirect
+       // Using distinct Alert to avoid render loop issues
+       const timer = setTimeout(() => {
+         Alert.alert(
+           "Premium Feature", 
+           "Tests and Quizzes are exclusive to Premium members. Please subscribe to unlock.",
+           [
+             { text: "View Plans", onPress: () => navigation.replace('Subscription') },
+             { text: "Cancel", onPress: () => navigation.goBack() }
+           ]
+         );
+       }, 100);
+       return () => clearTimeout(timer);
+    }
+  }, [subscriptions, isFree]);
 
   // Comprehensive test might not have a single 'lesson', so we use topic/subject
   const lesson = initialLesson || topic || { name: 'Test', color: subject?.color || theme.colors.secondary };
@@ -86,16 +112,26 @@ export default function QuizScreen({ route, navigation }) {
 
   const handleContinue = async () => {
     const score = calculateScore();
-    if (isComprehensive) {
-      // Save the score for the topic
-      if (topic) {
-        await completeTopic(subject?.id, topic.id, score.percentage);
+    const navigationAction = () => {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('MainApp', { screen: 'Test' });
       }
-      // Go back to the test/practice list
-      navigation.navigate('MainApp', { screen: 'Test' });
+    };
+
+    if (isComprehensive) {
+      // Reward modal handles the success feedback and navigation
+      await completeTopic(subject?.id, topic?.id, score.percentage, 30, 'test', navigationAction);
     } else if (score.percentage >= 60) {
       // Pass - go to learning content (normal lesson quiz)
-      navigation.navigate('LearningContent', { lesson, subject });
+      if (topic) {
+        await completeTopic(subject?.id, topic.id, score.percentage, 15, 'lesson', () => {
+          navigation.navigate('LearningContent', { lesson, subject });
+        });
+      } else {
+        navigation.navigate('LearningContent', { lesson, subject });
+      }
     } else {
       // Fail - go back to lesson detail
       navigation.goBack();

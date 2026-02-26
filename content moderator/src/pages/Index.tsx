@@ -98,7 +98,7 @@ const Index = () => {
                    </button>
                 </div>
 
-                <RecentContent onEdit={handleEdit} />
+                <RecentContent onEdit={handleEdit} searchQuery={searchQuery} />
               </div>
             ) : (
               <ContentBuilder 

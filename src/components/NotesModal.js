@@ -87,35 +87,63 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
               }
 
               if (line === '───────────────────') {
-                currentSection = ''; // Reset section context after a divider
+                currentSection = ''; 
                 return <View key={idx} style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />;
               }
 
-              if (currentSection === 'KEY TAKEAWAYS') {
-                const subCards = line.split('[||CARD_BREAK||]');
-                return subCards.map((cardContent, cIdx) => {
-                  const cleaned = cardContent.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
-                  if (!cleaned) return null;
-                  
-                  return (
-                    <View key={`${idx}-${cIdx}`} style={styles.takeawayCard}>
-                      <View style={[styles.takeawayIcon, { backgroundColor: theme.colors.secondary + '20' }]}>
-                        <Zap size={16} color={theme.colors.secondary} />
-                      </View>
-                      <View style={styles.takeawayContent}>
-                         <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                           {cleaned}
-                         </Text>
-                      </View>
+              if (line.startsWith('[||TAKEAWAY||]')) {
+                const cleaned = line.replace('[||TAKEAWAY||]', '').trim();
+                return (
+                  <View key={idx} style={styles.takeawayCard}>
+                    <View style={[styles.takeawayIcon, { backgroundColor: '#FEE2E2' }]}>
+                      <Zap size={16} color="#EF4444" fill="#EF4444" />
                     </View>
-                  );
-                });
+                    <View style={styles.takeawayContent}>
+                       <Text style={{ fontSize: 10, fontWeight: '900', color: '#EF4444', marginBottom: 4, letterSpacing: 1 }}>KEY TAKEAWAY</Text>
+                        <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                          {cleaned.split('\n').map((line, lidx) => {
+                            if (line.startsWith('WHAT:')) {
+                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHAT: </Text>{line.replace('WHAT:', '').trim()}{"\n"}</Text>;
+                            }
+                            if (line.startsWith('WHY:')) {
+                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHY: </Text>{line.replace('WHY:', '').trim()}</Text>;
+                            }
+                            return <Text key={lidx}>{line}</Text>;
+                          })}
+                        </Text>
+                    </View>
+                  </View>
+                );
               }
 
               if (line.startsWith('## ')) {
+                const titleText = line.replace('## ', '');
+                const [label, title] = titleText.split(': ');
                 return (
-                  <Text key={idx} style={[styles.itemTitle, { color: theme.colors.textPrimary }]}>
-                    {line.replace('## ', '')}
+                  <View key={idx} style={styles.exampleHeader}>
+                    <Text style={[styles.itemTitle, { color: theme.colors.secondary }]}>
+                      {label}: <Text style={{ textDecorationLine: 'underline' }}>{title}</Text>
+                    </Text>
+                  </View>
+                );
+              }
+
+              if (line.startsWith('PROBLEM: ')) {
+                const content = line.replace('PROBLEM: ', '');
+                return (
+                  <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                    <Text style={{ fontWeight: '900', color: '#EF4444', textTransform: 'lowercase' }}>problem: </Text>
+                    {content}
+                  </Text>
+                );
+              }
+
+              if (line.startsWith('SOLUTION: ')) {
+                const content = line.replace('SOLUTION: ', '');
+                return (
+                  <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                    <Text style={{ fontWeight: '900', color: '#10B981', textTransform: 'lowercase' }}>solution: </Text>
+                    {content}
                   </Text>
                 );
               }
@@ -160,9 +188,9 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.overlay}>
         <BlurView 
-          intensity={Platform.OS === 'ios' ? 95 : 100} 
+          intensity={100} 
           tint={isDark ? "dark" : "light"} 
-          style={styles.container}
+          style={[styles.container, { backgroundColor: isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.45)' }]}
         >
           {viewPdf ? renderPdfViewer() : renderNotesContent()}
         </BlurView>
@@ -175,7 +203,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '100%',
@@ -266,11 +294,15 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     opacity: 0.8,
   },
+  exampleHeader: {
+    marginTop: 30,
+    marginBottom: 15,
+    paddingBottom: 4,
+  },
   itemTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginTop: 20,
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   notesText: {
     fontSize: 16,
@@ -286,14 +318,14 @@ const styles = StyleSheet.create({
   takeawayCard: {
     padding: 20,
     borderRadius: 24,
-    backgroundColor: 'rgba(124, 58, 237, 0.05)',
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
     borderLeftWidth: 4,
-    borderLeftColor: '#8B5CF6',
+    borderLeftColor: '#EF4444',
     marginBottom: 16,
     flexDirection: 'row',
     gap: 15,
     borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.1)',
+    borderColor: 'rgba(239, 68, 68, 0.1)',
   },
   takeawayIcon: {
     width: 36,

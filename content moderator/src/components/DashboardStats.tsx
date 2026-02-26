@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlassCard } from "./ui/GlassCard";
-import { BookOpen, BookMarked, HelpCircle, Users, Sparkles, Loader2 } from "lucide-react";
+import { BookOpen, BookMarked, Layers, Users, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface StatItemProps {
@@ -30,8 +30,8 @@ export const DashboardStats = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     subjects: 0,
-    lessons: 0,
-    quizzes: 0,
+    courses: 0,
+    topics: 0,
     students: 0
   });
   const [loading, setLoading] = useState(true);
@@ -43,14 +43,14 @@ export const DashboardStats = () => {
   const fetchStats = async () => {
     try {
       const { count: subjectCount } = await supabase.from('subjects').select('*', { count: 'exact', head: true });
+      const { count: topicCount } = await supabase.from('topics').select('*', { count: 'exact', head: true });
       const { count: lessonCount } = await supabase.from('lessons').select('*', { count: 'exact', head: true });
-      const { count: quizCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true });
       const { count: studentCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
 
       setStats({
         subjects: subjectCount || 0,
-        lessons: lessonCount || 0,
-        quizzes: quizCount || 0,
+        courses: topicCount || 0,
+        topics: lessonCount || 0,
         students: studentCount || 0
       });
     } catch (error) {
@@ -78,16 +78,16 @@ export const DashboardStats = () => {
         onClick={() => navigate('/content')}
       />
       <StatItem 
-        label="Lessons" 
-        value={stats.lessons} 
+        label="Courses" 
+        value={stats.courses} 
         icon={<BookOpen className="w-5 h-5 text-white" />} 
         color="from-purple-500 to-pink-500" 
         onClick={() => navigate('/content')}
       />
       <StatItem 
-        label="Quizzes" 
-        value={stats.quizzes} 
-        icon={<HelpCircle className="w-5 h-5 text-white" />} 
+        label="Topics" 
+        value={stats.topics} 
+        icon={<Layers className="w-5 h-5 text-white" />} 
         color="from-orange-500 to-red-500" 
         onClick={() => navigate('/content')}
       />

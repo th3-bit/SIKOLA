@@ -3,7 +3,7 @@ import { GlassCard } from "./ui/GlassCard";
 import { GlassInput } from "./ui/GlassInput";
 import { GlassTextarea } from "./ui/GlassTextarea";
 import { GlassButton } from "./ui/GlassButton";
-import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2, Wand2, Clock } from "lucide-react";
+import { BookOpen, Lightbulb, HelpCircle, Plus, Sparkles, Check, ArrowRight, Save, Video, Loader2, Wand2, Clock, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { generateLessonContent, getOpenAIConfig } from "@/lib/openai";
@@ -42,6 +42,8 @@ interface ContentBuilderProps {
 export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, onComplete }: ContentBuilderProps) => {
   const [loading, setLoading] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiDirectSave, setAiDirectSave] = useState(false);
   
   // Wizard flow state
   // 1. info: Title, Intro ("What you will learn"), Core Content
@@ -131,14 +133,16 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
 
     setAiGenerating(true);
     try {
-      const data = await generateLessonContent(topic.title || "Course Topic", config);
+      const data = await generateLessonContent(topic.title || "Course Topic", config, aiPrompt);
       
+      // Update local state with generated data
       if (data.title) setTitle(data.title);
       if (data.intro) setIntro(data.intro);
       if (data.coreContent) setCoreContent(data.coreContent);
       
+      let mappedExamples: ContentEntry[] = [];
       if (data.examples && Array.isArray(data.examples)) {
-        const mappedExamples = data.examples.map((ex: any, idx: number) => ({
+        mappedExamples = data.examples.map((ex: any, idx: number) => ({
           id: `ai-ex-${Date.now()}-${idx}`,
           type: "example",
           title: ex.title,
@@ -148,8 +152,9 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
         setExamples(mappedExamples);
       }
 
+      let mappedQuestions: ContentEntry[] = [];
       if (data.questions && Array.isArray(data.questions)) {
-        const mappedQuestions = data.questions.map((q: any, idx: number) => ({
+        mappedQuestions = data.questions.map((q: any, idx: number) => ({
           id: `ai-q-${Date.now()}-${idx}`,
           type: "quiz",
           title: "Quick Quiz",
@@ -160,6 +165,20 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
       }
 
       toast.success("AI Content Generated Successfully!");
+
+      // If direct save is enabled, perform the save operation
+      if (aiDirectSave) {
+        toast.info("Saving content to database...");
+        await performSaveLesson({
+          title: data.title || title,
+          intro: data.intro || intro,
+          coreContent: data.coreContent || coreContent,
+          examples: mappedExamples,
+          questions: mappedQuestions,
+          videoUrl: videoLink,
+          duration: duration
+        });
+      }
     } catch (error: any) {
       toast.error(`AI Error: ${error.message}`);
     } finally {
@@ -167,10 +186,99 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
     }
   };
 
+  const performSaveLesson = async (dataOverride?: any) => {
+    const sTitle = dataOverride?.title || title;
+    const sIntro = dataOverride?.intro || intro;
+    const sCore = dataOverride?.coreContent || coreContent;
+    const sExamples = dataOverride?.examples || examples;
+    const sQuestions = dataOverride?.questions || questions;
+    const sVideo = dataOverride?.videoUrl !== undefined ? dataOverride.videoUrl : videoLink;
+    const sDuration = dataOverride?.duration || duration;
+
+    // Construct the slide deck array for the mobile app
+    const slides = [];
+
+    // 1. Overview Section
+    slides.push({
+      type: "intro",
+      title: sTitle,
+      content: sIntro || "Tap next to start this lesson!"
+    });
+
+    // Slide 3: Core Concept
+    slides.push({
+      type: "content",
+      title: "Explanation",
+      content: sCore
+    });
+
+    // 2. Video Slide (if exists)
+    if (sVideo.trim()) {
+      slides.push({
+        type: "video",
+        title: "Video Tutorial",
+        videoUrl: sVideo,
+        content: "Watch this walkthrough for a deeper understanding."
+      });
+    }
+
+    // 3. Examples Section
+    sExamples.forEach((ex: any) => {
+      slides.push({
+        type: "content", 
+        isExample: true,
+        title: ex.title,
+        content: `${ex.exampleData?.problem}\n\nSolution:\n${ex.exampleData?.solution}\n\nKey Takeaway: ${ex.exampleData?.keyTakeaway}\n\n💡 Access more examples via the bulb icon.`
+      });
+    });
+
+    // 4. Questions (Quiz at the end)
+    sQuestions.forEach((q: any) => {
+      slides.push({
+        type: "quiz",
+        question: q.questionData?.question,
+        options: q.questionData?.answers,
+        correctAnswer: q.questionData?.correctAnswerIndex
+      });
+    });
+
+    const lessonData = {
+      topic_id: topic.id,
+      title: sTitle,
+      content: JSON.stringify(slides),
+      video_url: sVideo,
+      duration: sDuration
+    };
+
+    let error;
+    if (initialData?.id) {
+       const result = await supabase.from('lessons').update(lessonData).eq('id', initialData.id);
+       error = result.error;
+    } else {
+       const result = await supabase.from('lessons').insert([lessonData]);
+       error = result.error;
+    }
+
+    if (error) throw error;
+    setWizardStep("complete");
+    return true;
+  };
+
+  const handleSaveLesson = async () => {
+    setLoading(true);
+    try {
+      await performSaveLesson();
+      toast.success(initialData?.id ? "Topic updated successfully!" : "Topic saved successfully!");
+    } catch (error: any) {
+      toast.error(`Error saving: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // State for editing examples
   const [editingExampleId, setEditingExampleId] = useState<string | null>(null);
 
-  // ... (keep handleNextStep same) ...
   const handleNextStep = () => {
     if (wizardStep === "info") {
       if (!title.trim() || !intro.trim() || !coreContent.trim()) {
@@ -244,7 +352,6 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
     setExProblem(ex.exampleData?.problem || ex.content || "");
     setExSolution(ex.exampleData?.solution || "");
     setExTakeaway(ex.exampleData?.keyTakeaway || "");
-    // Scroll to top of form if needed, or just focus title
   };
 
   const handleDeleteExample = (id: string) => {
@@ -333,100 +440,6 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
     setQCorrectIndex(null);
   };
 
-  const handleSaveLesson = async () => {
-    setLoading(true);
-    try {
-      // Construct the slide deck array for the mobile app
-      const slides = [];
-
-      // 1. Overview Section (3 Slides)
-      // Slide 1: Big Title
-      slides.push({
-        type: "intro",
-        title: title,
-        content: intro || "Tap next to start this lesson!"
-      });
-
-      /* Removed Lesson Goal slide as per user request
-      slides.push({
-        type: "content",
-        title: "Lesson Goal",
-        content: intro
-      });
-      */
-
-      // Slide 3: Core Concept
-      slides.push({
-        type: "content",
-        title: "Explanation",
-        content: coreContent
-      });
-
-      // 2. Video Slide (if exists)
-      if (videoLink.trim()) {
-        slides.push({
-          type: "video",
-          title: "Video Tutorial",
-          videoUrl: videoLink,
-          content: "Watch this walkthrough for a deeper understanding."
-        });
-      }
-
-      // 3. Examples Section
-      examples.forEach(ex => {
-        slides.push({
-          type: "content", 
-          isExample: true,
-          title: ex.title,
-          content: `${ex.exampleData?.problem}\n\nSolution:\n${ex.exampleData?.solution}\n\nKey Takeaway: ${ex.exampleData?.keyTakeaway}\n\n💡 Access more examples via the bulb icon.`
-        });
-      });
-
-      // 4. Questions (Quiz at the end)
-      questions.forEach(q => {
-        slides.push({
-          type: "quiz",
-          question: q.questionData?.question,
-          options: q.questionData?.answers,
-          correctAnswer: q.questionData?.correctAnswerIndex
-        });
-      });
-
-      const lessonData = {
-        topic_id: topic.id,
-        title: title,
-        content: JSON.stringify(slides),
-        video_url: videoLink,
-        duration: duration
-      };
-
-      let error;
-      if (initialData?.id) {
-         // Update
-         const result = await supabase
-           .from('lessons')
-           .update(lessonData)
-           .eq('id', initialData.id);
-         error = result.error;
-      } else {
-         // Insert
-         const result = await supabase
-           .from('lessons')
-           .insert([lessonData]);
-         error = result.error;
-      }
-
-      if (error) throw error;
-
-      setWizardStep("complete");
-      toast.success(initialData?.id ? "Topic updated successfully!" : "Topic saved successfully!");
-    } catch (error: any) {
-      toast.error(`Error saving: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleStartNew = () => {
     if (onComplete) {
        onComplete();
@@ -444,33 +457,53 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
 
   return (
     <div className="space-y-8 animate-fade-up-delay-2">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-            {initialData ? 'Edit Content' : 'Content Builder'}
-          </h2>
-          <p className="text-muted-foreground mt-1">
-            {initialData ? 'Editing content for ' : 'Build content for '} 
-            <span className="font-medium text-foreground">Course: {topic.title}</span>
-          </p>
+      <div className="glass-panel p-6 rounded-2xl border-primary/20 bg-primary/5 space-y-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 space-y-2">
+            <label className="text-sm font-medium text-primary flex items-center gap-2">
+              <MessageSquare className="w-4 h-4" /> What specifically do you want to generate?
+            </label>
+            <textarea
+              className="w-full bg-background/50 backdrop-blur-md border border-primary/20 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[80px] transition-all"
+              placeholder="e.g. Focus on practical double-entry examples for small businesses..."
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col justify-end gap-3 sm:min-w-[200px]">
+            <div className="flex items-center gap-3 px-2">
+              <input 
+                type="checkbox" 
+                id="direct-save" 
+                checked={aiDirectSave}
+                onChange={(e) => setAiDirectSave(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              <label htmlFor="direct-save" className="text-xs font-semibold cursor-pointer text-muted-foreground select-none">
+                Save Directly to Database
+              </label>
+            </div>
+            <GlassButton 
+              variant="accent" 
+              onClick={handleAiGenerate} 
+              disabled={aiGenerating}
+              className="group relative overflow-hidden w-full h-12"
+            >
+              {aiGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+              )}
+              {aiGenerating ? 'Generating...' : 'Generate & Save'}
+              {aiGenerating && (
+                <div className="absolute inset-0 bg-primary/20 animate-pulse" />
+              )}
+            </GlassButton>
+          </div>
         </div>
-        <GlassButton 
-          variant="accent" 
-          onClick={handleAiGenerate} 
-          disabled={aiGenerating}
-          className="group relative overflow-hidden"
-        >
-          {aiGenerating ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Wand2 className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
-          )}
-          {aiGenerating ? 'Generating...' : 'Generate with AI Magic'}
-          {aiGenerating && (
-            <div className="absolute inset-0 bg-primary/20 animate-pulse" />
-          )}
-        </GlassButton>
+        <p className="text-[10px] text-muted-foreground italic px-1">
+          Tip: You can specify the tone, difficulty level, or specific sub-topics you want the AI to include.
+        </p>
       </div>
 
       {/* Progress Steps */}
@@ -548,7 +581,12 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
                       No examples added yet. Add one on the left!
                     </div>
                   ) : (
-                    examples.map((ex) => (
+                    examples
+                      .filter(ex => 
+                        ex.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        ex.exampleData?.problem?.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((ex) => (
                       <div key={ex.id} className={`glass-panel p-3 relative group transition-all ${editingExampleId === ex.id ? 'border-primary/50 bg-primary/5' : ''}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -642,7 +680,11 @@ export const ContentBuilder = ({ subject, topic, searchQuery = "", initialData, 
                       No questions added yet. Add one on the left!
                     </div>
                   ) : (
-                    questions.map((q, idx) => (
+                    questions
+                      .filter(q => 
+                        q.questionData?.question?.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((q, idx) => (
                       <div key={q.id} className={`glass-panel p-3 relative group transition-all ${editingQuestionId === q.id ? 'border-primary/50 bg-primary/5' : ''}`}>
                         <div className="flex items-start justify-between gap-2">
                           <div>

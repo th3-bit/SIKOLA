@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://sikola.org/sitemap.xml
+
+# Disallow admin or private paths (if any in future)
+# Disallow: /admin/

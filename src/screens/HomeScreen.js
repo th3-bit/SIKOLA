@@ -1,59 +1,69 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calculator, Beaker, TrendingUp, Palette, Music, Code, Globe, Dumbbell, Crown, ChevronRight } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
-import GlassHeader from '../components/GlassHeader';
-import DailyProgressCard from '../components/DailyProgressCard';
-import StreakCard from '../components/StreakCard';
-import LessonCard from '../components/LessonCard';
-import CategoryCard from '../components/CategoryCard';
+import { Calculator, Beaker, TrendingUp, Palette, Music, Code, Globe, Dumbbell, Crown, ChevronRight, Lock } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
-
-const { width } = Dimensions.get('window');
+import GlassHeader from '../components/GlassHeader';
+import DailyProgressCard from '../components/DailyProgressCard';
+import CategoryCard from '../components/CategoryCard';
+import LessonCard from '../components/LessonCard';
+import TrialBanner from '../components/TrialBanner';
+import MarketingCarousel from '../components/MarketingCarousel';
 
 export default function HomeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { recentLessons, continueLearning, isLoading, courseProgress } = useProgress();
+  const { recentLessons, continueLearning, isLoading, courseProgress, checkSubjectAccess } = useProgress();
   
-  console.log('HomeScreen mounted. isLoading:', isLoading, 'Recent:', recentLessons?.length);
-
   // Fetch categories (subjects) dynamically
   const [categories, setCategories] = React.useState([]);
 
   React.useEffect(() => {
     fetchCategories();
-  }, [courseProgress]); // Re-fetch or re-calculate when progress changes
+  }, [courseProgress]);
 
   const fetchCategories = async () => {
     try {
-        const { data, error } = await supabase
-          .from('subjects')
-          .select(`
-            *,
-            topics (id)
-          `)
-          .order('created_at', { ascending: true });
-      
+      const { data, error } = await supabase
+        .from('subjects')
+        .select(`
+          *,
+          topics (
+            id,
+            lessons (id)
+          )
+        `)
+        .order('order_index', { ascending: true });
+    
       if (data) {
         const formatted = data.map(sub => {
           const style = getSubjectStyle(sub.name);
           
-          // Calculate realistic progress for this subject
-          const topicIds = sub.topics ? sub.topics.map(t => t.id) : [];
-          const completedCount = topicIds.filter(id => courseProgress[id]?.completed).length;
-          const progress = topicIds.length > 0 ? (completedCount / topicIds.length) * 100 : 0;
+          // Flatten all lesson IDs for this subject
+          const allLessonIds = [];
+          if (sub.topics) {
+            sub.topics.forEach(topic => {
+              if (topic.lessons) {
+                topic.lessons.forEach(lesson => {
+                  allLessonIds.push(lesson.id);
+                });
+              }
+            });
+          }
+
+          const completedCount = allLessonIds.filter(id => courseProgress?.[id]?.completed).length;
+          const progress = allLessonIds.length > 0 ? (completedCount / allLessonIds.length) * 100 : 0;
 
           return {
             id: sub.id,
             name: sub.name, 
             icon: style.icon,
-            color: sub.color || style.color, // Use DB color or fallback
-            topicCount: topicIds.length,
+            color: sub.color || style.color,
+            topicCount: sub.topics?.length || 0, // Number of study units (topics)
+            lessonCount: allLessonIds.length,
             progress: progress
           };
         });
@@ -64,10 +74,13 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  /* 
-  // Old Static Data
-  const categories = [ ... ]
-  */
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.colors.secondary} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -87,6 +100,8 @@ export default function HomeScreen({ navigation }) {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
+          <TrialBanner />
+          <MarketingCarousel navigation={navigation} />
 
           {/* Daily Progress */}
           <TouchableOpacity activeOpacity={0.9} onPress={() => navigation.navigate('LearningProgress')}>
@@ -140,8 +155,8 @@ export default function HomeScreen({ navigation }) {
                     lesson={topic} 
                     shadowColor={topic.color}
                     onPress={() => navigation.navigate('LessonDetail', { 
-                       lesson: topic, // Passing topic as lesson since LessonDetail expects topic object structure
-                       subject: { name: topic.category, color: topic.color } // Construct subject object
+                       lesson: topic,
+                       subject: { id: topic.subject_id, name: topic.category, color: topic.color }
                     })}
                   />
                 ))}
@@ -149,19 +164,38 @@ export default function HomeScreen({ navigation }) {
             </View>
           )}
 
-          {/* Explore Subjects */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
               Explore Subjects
             </Text>
             <View style={styles.categoriesGrid}>
-              {categories.map((category) => (
-                <CategoryCard 
-                  key={category.id} 
-                  category={category}
-                  onPress={() => navigation.navigate('SubjectDetail', { subject: category })}
-                />
-              ))}
+              {categories.map((category, index) => {
+                const isUnlocked = checkSubjectAccess(category.id, index);
+                
+                return (
+                  <View key={category.id} style={{ position: 'relative' }}>
+                    <CategoryCard 
+                      category={category}
+                      onPress={() => {
+                        if (isUnlocked) {
+                          navigation.navigate('SubjectDetail', { subject: category, subjectIndex: index });
+                        } else {
+                          // Locked - Go to Subscription with specific subject context if possible
+                          navigation.navigate('Subscription', { reason: 'Unlock Subject', subject: category });
+                        }
+                      }}
+                      style={{ opacity: isUnlocked ? 1 : 0.6 }}
+                    />
+                    {!isUnlocked && (
+                      <View style={[styles.lockOverlay, { backgroundColor: 'rgba(0,0,0,0.3)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', borderRadius: 20 }]}>
+                         <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 20 }}>
+                            <Lock size={24} color="#FFF" />
+                         </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           </View>
 
@@ -181,20 +215,39 @@ export default function HomeScreen({ navigation }) {
                     key={lesson.id} 
                     lesson={lesson} 
                     shadowColor={lesson.color}
-                    onPress={() => navigation.navigate('LearningContent', { 
-                      lesson: lesson,
-                      // We need to pass topic and subject if possible, or fetch them in LearningContent
-                      // For now, let's assume LearningContent can handle missing parents or we limit this
-                      // Since we didn't fetch full hierarchy in recentLessons properly, we might need a fetch or passed props
-                      // Edit: ProgressContext now fetches topic and subject!
-                      subject: { name: lesson.category, color: lesson.color },
-                      topic: { id: lesson.topic_id, title: lesson.topic_title } // Correctly mapping to Topic properties
+                    onPress={() => navigation.navigate('LessonDetail', { 
+                       lesson: { id: lesson.topic_id, title: lesson.topic_title, color: lesson.color },
+                       subject: { id: lesson.subject_id, name: lesson.category, color: lesson.color }
                     })}
                   />
                 ))}
               </ScrollView>
             </View>
           )}
+
+          {/* Elite Circle Call to Action */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Subscription')}
+            style={styles.ctaWrapper}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#6D28D9']}
+              style={styles.ctaCard}
+            >
+              <View style={styles.ctaContent}>
+                <Text style={styles.ctaTitle}>Become a Sikola Legend</Text>
+                <Text style={styles.ctaDesc}>Get unlimited access to everything and join the elite circle of learners.</Text>
+                <View style={[styles.ctaButton, { backgroundColor: '#FFF' }]}>
+                   <Text style={[styles.ctaButtonText, { color: '#8B5CF6' }]}>Join the Elite Circle</Text>
+                   <ChevronRight size={16} color="#8B5CF6" />
+                </View>
+              </View>
+              <View style={styles.ctaIconContainer}>
+                 <Crown size={80} color="rgba(255,255,255,0.15)" strokeWidth={1.5} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
           {/* Bottom padding for tab bar */}
           <View style={{ height: 100 }} />
@@ -291,5 +344,56 @@ const styles = StyleSheet.create({
   subscriptionSubtitle: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  ctaWrapper: {
+    marginTop: 10,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  ctaCard: {
+    padding: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  ctaContent: {
+    flex: 1,
+    zIndex: 1,
+  },
+  ctaTitle: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  ctaDesc: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  ctaButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  ctaButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  ctaIconContainer: {
+    position: 'absolute',
+    right: -20,
+    bottom: -10,
   },
 });

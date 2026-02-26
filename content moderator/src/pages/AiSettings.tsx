@@ -13,7 +13,7 @@ const AiSettings = () => {
   const navigate = useNavigate();
   const [config, setConfig] = useState<OpenAIConfig>({
     apiKey: "",
-    systemPrompt: "You are an expert educational content creator for the SIKOLA learning platform. Your task is to provide high-quality, engaging, and accurate lessons, practical examples, and quiz questions.",
+    systemPrompt: "You are an expert Senior Curriculum Developer for SIKOLA. Transform academic topics into interactive mobile lessons. REQUIRED: At least 3 Examples (Problem/Solution/Takeaway) and at least 7 Multiple Choice Questions. CRITICAL: Shuffle the correct answer indices (A, B, C, D) so they are not the same for all questions. Provide an estimated duration (5-60 mins). Return valid JSON.",
     model: "gpt-3.5-turbo-0125"
   });
 
@@ -88,9 +88,10 @@ const AiSettings = () => {
                     onChange={(e) => setConfig({ ...config, model: e.target.value })}
                     className="w-full bg-background/50 backdrop-blur-sm border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-foreground"
                   >
-                    <option value="gpt-3.5-turbo-0125">GPT-3.5 Turbo (Fast & Cheap)</option>
-                    <option value="gpt-4-turbo-preview">GPT-4 Turbo (Smartest)</option>
-                    <option value="gpt-4o">GPT-4o (Latest Flash)</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini (Recommended: Best Value)</option>
+                    <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                    <option value="gpt-3.5-turbo-0125">GPT-3.5 Turbo (Legacy Fast)</option>
+                    <option value="gpt-4-turbo-preview">GPT-4 Turbo (Legacy Smart)</option>
                   </select>
                 </div>
               </div>

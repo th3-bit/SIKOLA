@@ -18,9 +18,10 @@ interface RecentLesson {
 
 interface RecentContentProps {
   onEdit?: (lesson: RecentLesson) => void;
+  searchQuery?: string;
 }
 
-export const RecentContent = ({ onEdit }: RecentContentProps) => {
+export const RecentContent = ({ onEdit, searchQuery = "" }: RecentContentProps) => {
   const [lessons, setLessons] = useState<RecentLesson[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +68,15 @@ export const RecentContent = ({ onEdit }: RecentContentProps) => {
     }
   };
 
+  const filteredLessons = lessons.filter(lesson => {
+    const query = searchQuery.toLowerCase();
+    return (
+      lesson.title?.toLowerCase().includes(query) ||
+      lesson.topic?.title?.toLowerCase().includes(query) ||
+      lesson.topic?.subject?.name?.toLowerCase().includes(query)
+    );
+  });
+
   if (loading) return null;
   if (lessons.length === 0) return null;
 
@@ -79,7 +89,7 @@ export const RecentContent = ({ onEdit }: RecentContentProps) => {
       </div>
       
       <div className="space-y-3">
-        {lessons.map((lesson) => (
+        {filteredLessons.map((lesson) => (
           <GlassCard key={lesson.id} className="group p-4" hover={true}>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 flex-1">

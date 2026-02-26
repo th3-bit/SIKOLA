@@ -68,6 +68,7 @@ export default function SubjectsScreen({ navigation, route }) {
             id,
             title,
             subject_id,
+            created_at,
             lessons (id)
           )
         `)
@@ -103,7 +104,7 @@ export default function SubjectsScreen({ navigation, route }) {
                 count: `${lessonCount} Lessons`,
                 progress: progress
               };
-            }).sort((a, b) => a.title.localeCompare(b.title));
+            }).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
             if (subjectsMap.has(subject.name)) {
                const existing = subjectsMap.get(subject.name);
@@ -139,7 +140,7 @@ export default function SubjectsScreen({ navigation, route }) {
       activeOpacity={0.8}
       onPress={() => {
         if (selectingForSubscription) {
-          navigation.navigate('Payment', { plan, topic });
+          navigation.navigate('Payment', { plan, topic, subject: selectedSubject });
         } else {
           navigation.navigate('LessonDetail', { lesson: topic, subject: selectedSubject });
         }
@@ -192,13 +193,13 @@ export default function SubjectsScreen({ navigation, route }) {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.textPrimary} />
             <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-              Loading subjects...
+              Loading topics...
             </Text>
           </View>
         ) : subjects.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-              No subjects available yet.
+              No topics available yet.
             </Text>
           </View>
         ) : (
@@ -214,12 +215,12 @@ export default function SubjectsScreen({ navigation, route }) {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <View>
                   <Text style={[styles.mainTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                    {selectingForSubscription ? 'Select a Topic' : 'Subjects'}
+                    {selectingForSubscription ? 'Select a Topic' : 'Topics'}
                   </Text>
                   <Text style={[styles.subtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                     {selectingForSubscription 
                       ? 'Choose the topic you want to unlock' 
-                      : 'Choose a subject to see topics'}
+                      : 'Choose a Subjects to see Course '}
                   </Text>
                 </View>
                 {selectingForSubscription && (
@@ -275,7 +276,7 @@ export default function SubjectsScreen({ navigation, route }) {
               <>
                 <View style={styles.topicHeaderSection}>
                   <Text style={[styles.topicHeaderTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                    {selectedSubject.name} Topics
+                    {selectedSubject.name} Courses
                   </Text>
                   <View style={[styles.badge, { backgroundColor: `${selectedSubject.color}20` }]}>
                     <Text style={[styles.badgeText, { color: selectedSubject.color }]}>
@@ -292,7 +293,7 @@ export default function SubjectsScreen({ navigation, route }) {
                   ) : (
                     <View style={styles.emptyTopicsContainer}>
                       <Text style={[styles.emptyTopicsText, { color: theme.colors.textSecondary }]}>
-                        No topics available for {selectedSubject.name} yet.
+                        No courses available for {selectedSubject.name} yet.
                       </Text>
                     </View>
                   )}

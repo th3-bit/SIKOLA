@@ -186,7 +186,8 @@ const UserManagement = () => {
   const filteredUsers = profiles.filter((user) => {
     const matchesSearch =
       user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.phone?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSubscription = subscriptionFilter === "all" || user.subscription_type === subscriptionFilter;
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     return matchesSearch && matchesSubscription && matchesStatus;
@@ -391,7 +392,7 @@ const UserManagement = () => {
           </div>
         </header>
 
-        <div className="animate-fade-up" style={{ animationDelay: "100ms" }}>
+        <div className="animate-fade-up" data-delay="100ms">
           <GlassCard hover={false}>
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -410,6 +411,7 @@ const UserManagement = () => {
                     value={subscriptionFilter}
                     onChange={(e) => setSubscriptionFilter(e.target.value as any)}
                     className="glass-input text-sm"
+                    title="Filter by Subscription Plan"
                   >
                     <option value="all">All Plans</option>
                     {Object.entries(subscriptionLabels).map(([key, label]) => (
@@ -420,6 +422,7 @@ const UserManagement = () => {
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
                     className="glass-input text-sm"
+                    title="Filter by Status"
                   >
                     <option value="all">All Status</option>
                     <option value="active">Active</option>
@@ -446,6 +449,7 @@ const UserManagement = () => {
                             value={editFormData.subscription_type}
                             onChange={(e) => setEditFormData({ ...editFormData, subscription_type: e.target.value as SubscriptionType })}
                             className="glass-input"
+                            title="Edit Subscription Type"
                           >
                             {Object.entries(subscriptionLabels).map(([key, label]) => (
                               <option key={key} value={key}>{label}</option>

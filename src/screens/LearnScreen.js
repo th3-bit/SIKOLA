@@ -29,6 +29,8 @@ import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import GlassHeader from '../components/GlassHeader';
+import AchievementDetailModal from '../components/AchievementDetailModal';
+import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +42,8 @@ export default function LearnScreen({ navigation }) {
   const [learningPath, setLearningPath] = useState([]);
   const [loadingPath, setLoadingPath] = useState(false);
   const [allSubjects, setAllSubjects] = useState([]);
+  const [selectedAchievement, setSelectedAchievement] = useState(null);
+  const [achievementModalVisible, setAchievementModalVisible] = useState(false);
 
   // Calculate Level (Every 1000 XP = 1 Level)
   const currentLevel = Math.floor((userStats?.total_xp || 0) / 1000) + 1;
@@ -219,20 +223,7 @@ export default function LearnScreen({ navigation }) {
           const isCompleted = progressPercent === 100;
           
           // Determine status
-          let status = 'locked';
-          if (isCompleted) {
-            status = 'completed';
-          } else {
-            const prevTopic = index > 0 ? allTopics[index - 1] : null;
-            // Check previous topic completion (aggregate check)
-            const prevSubLessons = prevTopic?.lessons || [];
-            const prevCompletedCount = prevSubLessons.filter(l => courseProgress[l.id]?.completed).length;
-            const prevCompleted = prevSubLessons.length > 0 ? (prevCompletedCount === prevSubLessons.length) : true;
-
-            if (!prevTopic || prevCompleted) {
-              status = 'in-progress';
-            }
-          }
+          let status = isCompleted ? 'completed' : 'in-progress';
 
           // Calculate duration
           const durationMins = subLessons.reduce((sum, l) => sum + (l.duration || 15), 0) || 15;
@@ -395,11 +386,16 @@ export default function LearnScreen({ navigation }) {
                     key={item.id}
                     activeOpacity={1} 
                     style={[styles.continueCardWrapper, { shadowColor: item.color || theme.colors.secondary, marginRight: 20 }]}
-                    onPress={() => {
-                         navigation.navigate('SubjectDetail', { 
-                           subject: { name: item.category, color: item.color, id: item.id } 
-                         });
-                    }}
+                     onPress={() => {
+                          navigation.navigate('SubjectDetail', { 
+                            subject: { 
+                              name: item.category, 
+                              color: item.color, 
+                              id: item.subject_id,
+                              icon: item.icon 
+                            } 
+                          });
+                     }}
                   >
                     <View style={[styles.continueCard, { 
                       backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
@@ -442,7 +438,15 @@ export default function LearnScreen({ navigation }) {
             {achievements.map((badge) => {
               const progress = Math.min(badge.current / badge.total, 1);
               return (
-                <View key={badge.id} style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.8 }]}>
+                <TouchableOpacity 
+                  key={badge.id} 
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setSelectedAchievement(badge);
+                    setAchievementModalVisible(true);
+                  }}
+                  style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.8 }]}
+                >
                    <View style={[styles.badgeInner, { 
                       borderColor: badge.unlocked ? `${badge.color}50` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'), 
                       backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
@@ -485,14 +489,14 @@ export default function LearnScreen({ navigation }) {
                         </View>
                       )}
                    </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </ScrollView>
 
           {/* Learning Path */}
           <View style={[styles.sectionHeader, { marginTop: 30 }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subject</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subjects</Text>
           </View>
           
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectSelectorList}>
@@ -582,14 +586,20 @@ export default function LearnScreen({ navigation }) {
                 <Text style={{ color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }}>Start a lesson to see your path here!</Text>
                 <TouchableOpacity 
                    style={{ marginTop: 20, padding: 10, backgroundColor: theme.colors.secondary, borderRadius: 10 }}
-                   onPress={() => navigation.navigate('Subjects')}
+                   onPress={() => navigation.navigate('Topics')}
                 >
-                   <Text style={{ fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>Explore Subjects</Text>
+                   <Text style={{ fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>Explore Topics</Text>
                 </TouchableOpacity>
              </View>
           )}
 
           <View style={{ height: 120 }} />
+
+          <AchievementDetailModal
+            visible={achievementModalVisible}
+            onClose={() => setAchievementModalVisible(false)}
+            achievement={selectedAchievement}
+          />
         </ScrollView>
       </SafeAreaView>
     </View>

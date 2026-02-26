@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   ScrollView, 
   Dimensions, 
-  Image 
+  Image,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,12 +35,15 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import ThemeSwitch from '../components/ThemeSwitch';
+import AchievementDetailModal from '../components/AchievementDetailModal';
 
 const { width } = Dimensions.get('window');
 
 export default function AccountScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { userStats, levelInfo, weeklyActivity, sessions, isLoading } = useProgress();
+  const { userStats, levelInfo, weeklyActivity, sessions, isLoading, userProfile, subscriptionInfo } = useProgress();
+  const [selectedAchievement, setSelectedAchievement] = React.useState(null);
+  const [achievementModalVisible, setAchievementModalVisible] = React.useState(false);
   const currentRank = levelInfo?.current;
   
 
@@ -78,7 +82,15 @@ export default function AccountScreen({ navigation }) {
       <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Achievements</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.achievementsScroll}>
         {achievements.map((item) => (
-          <View key={item.id} style={[styles.achievementCard, { opacity: item.unlocked ? 1 : 0.6 }]}>
+          <TouchableOpacity 
+            key={item.id} 
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedAchievement(item);
+              setAchievementModalVisible(true);
+            }}
+            style={[styles.achievementCard, { opacity: item.unlocked ? 1 : 0.6 }]}
+          >
             <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.achievementContent, { borderColor: theme.colors.glassBorder, backgroundColor: item.unlocked ? theme.colors.glass : 'rgba(0,0,0,0.02)' }]}>
               <View style={[styles.achievementIcon, { backgroundColor: item.unlocked ? item.color + '20' : '#88888820' }]}>
                 <item.icon size={24} color={item.unlocked ? item.color : '#888'} />
@@ -86,7 +98,7 @@ export default function AccountScreen({ navigation }) {
               <Text style={[styles.achievementTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>{item.title}</Text>
               <Text style={[styles.achievementDesc, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]} numberOfLines={2}>{item.desc}</Text>
             </BlurView>
-          </View>
+          </TouchableOpacity>
         ))}
       </ScrollView>
     </View>
@@ -134,17 +146,22 @@ export default function AccountScreen({ navigation }) {
               <View style={[styles.avatarFrame, { backgroundColor: theme.colors.glass, borderColor: theme.colors.secondary }]}>
                 <User color={theme.colors.secondary} size={40} />
               </View>
-              <TouchableOpacity style={[styles.editAvatarBtn, { backgroundColor: theme.colors.secondary, borderColor: theme.colors.primary }]}>
+              <TouchableOpacity 
+                style={[styles.editAvatarBtn, { backgroundColor: theme.colors.secondary, borderColor: theme.colors.primary }]}
+                onPress={() => navigation.navigate('PersonalInfo')}
+              >
                  <PenTool color={theme.colors.textContrast} size={12} />
               </TouchableOpacity>
             </View>
             
-            <Text style={[styles.userName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola Student</Text>
+            <Text style={[styles.userName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{userProfile.name}</Text>
             
+            <Text style={[styles.userEmail, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily, marginTop: 4 }]}>{userProfile.email || 'Loading email...'}</Text>
             
-            <Text style={[styles.userEmail, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily, marginTop: 8 }]}>student@sikolaplus.com</Text>
-            
-            <TouchableOpacity style={[styles.editProfileBtn, { backgroundColor: isDark ? 'rgba(240, 236, 29, 0.1)' : 'rgba(37, 99, 235, 0.1)', borderColor: isDark ? 'rgba(240, 236, 29, 0.2)' : 'rgba(37, 99, 235, 0.2)' }]}>
+            <TouchableOpacity 
+              style={[styles.editProfileBtn, { backgroundColor: isDark ? 'rgba(240, 236, 29, 0.1)' : 'rgba(37, 99, 235, 0.1)', borderColor: isDark ? 'rgba(240, 236, 29, 0.2)' : 'rgba(37, 99, 235, 0.2)' }]}
+              onPress={() => navigation.navigate('PersonalInfo')}
+            >
                <Text style={[styles.editProfileText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Edit Profile</Text>
             </TouchableOpacity>
             
@@ -167,10 +184,10 @@ export default function AccountScreen({ navigation }) {
                   </View>
                   <View>
                     <Text style={[styles.subscriptionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                      Free Trial Active
+                      {subscriptionInfo.label}
                     </Text>
                     <Text style={[styles.subscriptionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                      2 days remaining • Tap to upgrade
+                      {subscriptionInfo.subLabel}
                     </Text>
                   </View>
                 </View>
@@ -190,7 +207,7 @@ export default function AccountScreen({ navigation }) {
             <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Account Settings</Text>
             <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.menuContainer, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
               <MenuOption icon={User} label="Personal Information" onPress={() => navigation.navigate('PersonalInfo')} />
-              <MenuOption icon={Bell} label="Notifications" onPress={() => {}} />
+              <MenuOption icon={Bell} label="Notifications" onPress={() => navigation.navigate('NotificationTest')} />
               <MenuOption icon={ShieldCheck} label="Security & Privacy" onPress={() => {}} isLast={true} />
             </BlurView>
           </View>
@@ -214,6 +231,12 @@ export default function AccountScreen({ navigation }) {
           
           {/* Extra padding for bottom tab bar */}
           <View style={{ height: 100 }} />
+          
+          <AchievementDetailModal
+            visible={achievementModalVisible}
+            onClose={() => setAchievementModalVisible(false)}
+            achievement={selectedAchievement}
+          />
         </ScrollView>
       </SafeAreaView>
     </View>

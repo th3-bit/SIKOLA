@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, ChevronRight, Lightbulb, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Zap, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
@@ -16,7 +16,7 @@ export default function ExamplesScreen({ route, navigation }) {
   // Mock examples data
   const examples = [
     {
-      title: 'Example 1: Basic Application',
+      title: 'Basic Application',
       problem: `Let's apply the fundamental concept of ${lesson.category} to a simple scenario.`,
       solution: `Step 1: Identify the key elements
 • First, we recognize the main components
@@ -30,9 +30,10 @@ Step 3: Verify the result
 • Check if our solution makes sense
 • Ensure all requirements are met`,
       keyTakeaway: 'Always break down complex problems into smaller, manageable steps.',
+      why: 'This systematic approach reduces cognitive load and prevents common errors in logic.',
     },
     {
-      title: 'Example 2: Real-World Scenario',
+      title: 'Real-World Scenario',
       problem: `How would professionals use ${lesson.category} in their daily work?`,
       solution: `Practical Application:
 • Industry experts use this concept regularly
@@ -45,9 +46,10 @@ Implementation Steps:
 3. Execute with precision
 4. Review and optimize`,
       keyTakeaway: 'Understanding theory enables practical problem-solving in real situations.',
+      why: 'Bridging the gap between abstract concepts and concrete needs is how value is created in industry.',
     },
     {
-      title: 'Example 3: Advanced Technique',
+      title: 'Advanced Technique',
       problem: `Let's explore a more complex application of what we've learned.`,
       solution: `Advanced Strategy:
 • Build upon the basics we covered
@@ -60,6 +62,7 @@ Process:
 → Integrate everything smoothly
 → Achieve optimal results`,
       keyTakeaway: 'Mastery comes from combining basic principles in creative ways.',
+      why: 'Complex problems rarely have a single-concept solution; integration is the key to advanced mastery.',
     },
   ];
 
@@ -134,28 +137,24 @@ Process:
                 style={StyleSheet.absoluteFill}
               />
 
-              {/* Example Badge */}
-              <View style={[styles.exampleBadge, { backgroundColor: `${lesson.color}20` }]}>
-                <Lightbulb color={lesson.color} size={20} />
-                <Text style={[styles.exampleBadgeText, { color: lesson.color, fontFamily: theme.typography.fontFamily }]}>
-                  {currentExampleData.title}
+              {/* Example Title */}
+              <View style={styles.titleContainer}>
+                <Text style={[styles.exampleTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                  Example Title: <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>{currentExampleData.title}</Text>
                 </Text>
               </View>
 
               {/* Problem Section */}
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                  Problem
-                </Text>
-                <Text style={[styles.sectionContent, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                  {currentExampleData.problem}
+                <Text style={[styles.sectionLabel, { color: '#EF4444', fontFamily: theme.typography.fontFamily }]}>
+                  Problem: <Text style={{ color: theme.colors.textSecondary, fontWeight: '400' }}>{currentExampleData.problem}</Text>
                 </Text>
               </View>
 
               {/* Solution Section */}
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                  Solution
+                <Text style={[styles.sectionLabel, { color: '#10B981', fontFamily: theme.typography.fontFamily }]}>
+                  Solution:
                 </Text>
                 <View style={[styles.solutionBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderColor: theme.colors.glassBorder }]}>
                   <Text style={[styles.sectionContent, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
@@ -164,17 +163,27 @@ Process:
                 </View>
               </View>
 
-              {/* Key Takeaway */}
-              <View style={[styles.takeawayCard, { backgroundColor: `${lesson.color}15`, borderColor: `${lesson.color}40` }]}>
-                <View style={styles.takeawayHeader}>
-                  <CheckCircle color={lesson.color} size={20} />
-                  <Text style={[styles.takeawayTitle, { color: lesson.color, fontFamily: theme.typography.fontFamily }]}>
-                    Key Takeaway
-                  </Text>
+              {/* Custom Key Takeaway */}
+              <View style={styles.takeawayWrapper}>
+                <View style={[styles.takeawayCard, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2' }]}>
+                  <View style={styles.takeawayAccent} />
+                  <View style={styles.takeawayIconContainer}>
+                    <View style={[styles.takeawayIconCircle, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FFF' }]}>
+                      <Zap color="#EF4444" size={18} fill="#EF4444" />
+                    </View>
+                  </View>
+                  <View style={styles.takeawayContent}>
+                    <Text style={[styles.takeawayHeader, { fontFamily: theme.typography.fontFamily }]}>KEY TAKEAWAY</Text>
+                    <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                      WHAT: {currentExampleData.keyTakeaway}
+                    </Text>
+                    {currentExampleData.why && (
+                      <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, marginTop: 10 }]}>
+                        WHY: {currentExampleData.why}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                  {currentExampleData.keyTakeaway}
-                </Text>
               </View>
             </BlurView>
           </View>
@@ -276,27 +285,22 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
   },
-  exampleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 16,
+  titleContainer: {
     marginBottom: 24,
-    gap: 8,
+    alignSelf: 'flex-start',
   },
-  exampleBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
+  exampleTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    paddingBottom: 4,
   },
   section: {
     marginBottom: 24,
   },
-  sectionTitle: {
+  sectionLabel: {
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sectionContent: {
     fontSize: 15,
@@ -307,23 +311,51 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
+  takeawayWrapper: {
+    marginTop: 10,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
   takeawayCard: {
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    flexDirection: 'row',
+    padding: 20,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  takeawayAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 20,
+    bottom: 20,
+    width: 6,
+    backgroundColor: '#EF4444',
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  takeawayIconContainer: {
+    marginRight: 16,
+    marginLeft: 8,
+  },
+  takeawayIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  takeawayContent: {
+    flex: 1,
   },
   takeawayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  takeawayTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginBottom: 4,
   },
   takeawayText: {
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '600',
     lineHeight: 24,
   },
   navigationContainer: {

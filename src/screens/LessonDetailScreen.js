@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   Dimensions, 
   Animated,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,23 +21,32 @@ import {
   Award, 
   Lock,
   ChevronRight,
-  Info
+  Info,
+  Sparkles
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
+import LockStatusModal from '../components/LockStatusModal';
+import MasteryModal from '../components/MasteryModal';
 
 const { width, height } = Dimensions.get('window');
 
 export default function LessonDetailScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { isTopicCompleted, isTopicLocked, getTopicScore } = useProgress();
-  const { lesson: topic, subject } = route.params; // Rename 'lesson' param to 'topic' for clarity
+  const { isTopicCompleted, getTopicScore, checkLessonAccess, subscriptions, isTrialExpired, subscriptionInfo, checkTrialLimit } = useProgress();
+  const { lesson: topic, subject, subjectIndex, topicIndex } = route.params; // Rename 'lesson' param to 'topic' for clarity
   const primaryColor = topic.color || subject?.color || theme.colors.secondary;
   const [fadeAnim] = useState(new Animated.Value(0));
   
+  const [selectedLesson, setSelectedLesson] = useState(null);
+  const [showMasteryModal, setShowMasteryModal] = useState(false);
+  const [masteryModalConfig, setMasteryModalConfig] = useState({ type: 'premium', title: '', message: '', onAction: null });
+  const [preparedQuestions, setPreparedQuestions] = useState([]);
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockConfig, setLockConfig] = useState(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -55,12 +65,128 @@ export default function LessonDetailScreen({ route, navigation }) {
         .from('lessons')
         .select('*')
         .eq('topic_id', topic.id)
-        .order('created_at', { ascending: true }); // Use created_at for accurate chronological order with UUIDs
+        .order('order_index', { ascending: true }); // Use order_index for custom manual order
 
       if (error) throw error;
       setLessons(data || []);
     } catch (err) {
       console.error('Error fetching lessons:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartCourseTest = async () => {
+    try {
+      // 0. Check Trial Limit
+      if (subscriptionInfo.type === 'trial' && !checkTrialLimit()) {
+        setMasteryModalConfig({
+          type: 'limit',
+          title: 'Daily Limit Reached',
+          message: "You've completed your free test for today. Upgrade to SIKOLA Premium for unlimited proficiency exams and master your subjects faster!",
+          onAction: () => { setShowMasteryModal(false); navigation.navigate('Subscription'); },
+          actionText: 'View Premium Plans'
+        });
+        setShowMasteryModal(true);
+        return;
+      }
+
+      setLoading(true);
+      
+      // 1. Fetch all lessons and their contents for this topic
+      const { data: lessonsData, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('topic_id', topic.id)
+        .order('order_index', { ascending: true });
+
+      if (error) throw error;
+      if (!lessonsData || lessonsData.length === 0) {
+        Alert.alert("Notice", "No questions available for this course yet.");
+        setLoading(false);
+        return;
+      }
+
+      let lessonsWithQuestions = [];
+      lessonsData.forEach(lesson => {
+        try {
+          const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+          const quizSlides = slides?.filter(s => s.type === 'quiz') || [];
+          
+          if (quizSlides.length > 0) {
+            lessonsWithQuestions.push({
+              lessonId: lesson.id,
+              questions: quizSlides.map(q => ({
+                ...q,
+                lesson_id: lesson.id,
+                subject_name: subject?.name || 'Course'
+              }))
+            });
+          }
+        } catch (parseErr) {
+          console.error(`LessonDetailScreen: Failed to parse content for lesson ${lesson.id}`, parseErr);
+          // Skip this lesson and continue with others
+        }
+      });
+
+      if (lessonsWithQuestions.length === 0) {
+        Alert.alert("Notice", "No questions found in this course's lessons.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Selection Logic (Similar to PracticeScreen: 5 questions per lesson)
+      let selectedQuestions = [];
+      lessonsWithQuestions.forEach(lwq => {
+        const shuffled = [...lwq.questions].sort(() => 0.5 - Math.random());
+        selectedQuestions.push(...shuffled.slice(0, 5));
+      });
+
+      // Final Shuffle
+      selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random());
+      setPreparedQuestions(selectedQuestions);
+      setLoading(false);
+
+      // 3. Show Premium Mastery Modal
+      if (subscriptionInfo.type === 'trial') {
+        setMasteryModalConfig({
+          type: 'trial',
+          title: 'Mastery Challenge',
+          message: `You are about to start the proficiency test for "${topic.title}". Prove your skills and earn extra XP!`,
+          onAction: () => {
+            setShowMasteryModal(false);
+            navigation.navigate('Quiz', { 
+              questions: selectedQuestions,
+              topic: topic,
+              subject: subject,
+              isComprehensive: true,
+              isFree: true 
+            });
+          }
+        });
+      } else {
+        setMasteryModalConfig({
+          type: 'premium',
+          title: 'Mastery Awaits',
+          message: `Show off what you've learned in "${topic.title}"! This exam covers all lessons in this course. Good luck!`,
+          onAction: () => {
+            setShowMasteryModal(false);
+            navigation.navigate('Quiz', { 
+              questions: selectedQuestions,
+              topic: topic,
+              subject: subject,
+              isComprehensive: true,
+              isFree: true 
+            });
+          },
+          actionText: 'Start Exam'
+        });
+      }
+      setShowMasteryModal(true);
+
+    } catch (err) {
+      console.error('Error starting course test:', err);
+      Alert.alert("Error", "Failed to load the course test.");
     } finally {
       setLoading(false);
     }
@@ -116,7 +242,7 @@ export default function LessonDetailScreen({ route, navigation }) {
                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
                }]}>
                   <View style={[styles.typeBadge, { backgroundColor: `${primaryColor}20` }]}>
-                    <Text style={[styles.typeText, { color: primaryColor }]}>COURSE</Text>
+                    <Text style={[styles.typeText, { color: primaryColor }]}>COURSE CONTENT</Text>
                   </View>
                   <Text style={[styles.lessonTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     {topic.title}
@@ -170,7 +296,7 @@ export default function LessonDetailScreen({ route, navigation }) {
 
             {/* Curriculum Section */}
             <View style={styles.sectionHeader}>
-               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Curriculum</Text>
+               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Detailed Curriculum</Text>
                <View style={[styles.countBadge, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
                   <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{lessons.length} topics</Text>
                </View>
@@ -184,17 +310,66 @@ export default function LessonDetailScreen({ route, navigation }) {
                </View>
             ) : (
               <View style={styles.topicsList}>
-                 {lessons.map((lessonItem, index) => {
-                   // Ensure backward compatibility or dynamic defaults
-                   const isCompleted = isTopicCompleted(topic.id, lessonItem.id);
-                   const isLocked = index > 0 && !isTopicCompleted(topic.id, lessons[index-1].id); // Simple sequential lock
-                   
-                   return (
+                  {lessons.map((lessonItem, index) => {
+                    // Check base Course-level access
+                    // FIX: Pass the actual topicIndex from route.params
+                    const actualTopicIndex = topicIndex ?? 0;
+                    const hasAccess = checkLessonAccess(index, topic.id, subject?.id, actualTopicIndex); 
+                    
+                    // Enforce sequential Topic locking (within Course)
+                    const isCompleted = isTopicCompleted(topic.id, lessonItem.id);
+                    const isSeqLocked = hasAccess && index > 0 && !isTopicCompleted(topic.id, lessons[index-1].id);
+                    
+                    const isLocked = !hasAccess || isSeqLocked;
+
+                    // Granular Subscription Badge logic
+                    let accessType = null;
+                    const hasActiveSub = subscriptions && subscriptions.length > 0;
+                    if (hasActiveSub && hasAccess) {
+                       const isAllAccess = subscriptions.some(s => !s.topic_id && !s.subject_id);
+                       const isSubjectAccess = subscriptions.some(s => s.subject_id === subject?.id);
+                       const isSpecificAccess = subscriptions.some(s => s.topic_id === topic.id);
+                       
+                       if (isAllAccess) accessType = 'ALL ACCESS';
+                       else if (isSubjectAccess) accessType = 'SUBSCRIBED';
+                       else if (isSpecificAccess) accessType = 'SUBSCRIBED';
+                    }
+                    
+                    return (
                      <TouchableOpacity 
                        key={lessonItem.id} 
-                       activeOpacity={isLocked ? 1 : 0.7}
-                       disabled={isLocked}
-                       onPress={() => navigation.navigate('LearningContent', { lesson: lessonItem, subject, topic })}
+                       activeOpacity={0.7}
+                       onPress={() => {
+                          if (!hasAccess) {
+                             const hasAnySub = subscriptions && subscriptions.length > 0;
+                             if (hasAnySub) {
+                                setLockConfig({
+                                 type: 'subscription',
+                                 title: 'Course Locked',
+                                 message: 'This course is not part of your current plan. Upgrade your subscription to unlock all courses in this subject.',
+                                 onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+                               });
+                             } else {
+                                setLockConfig({
+                                 type: 'subscription',
+                                 title: 'Premium Course',
+                                 message: 'Purchase this course or upgrade to Premium to unlock all topics.',
+                                 onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+                               });
+                             }
+                             setShowLockModal(true);
+                          } else if (isSeqLocked) {
+                             setLockConfig({
+                               type: 'sequential',
+                               title: 'Topic Locked',
+                               message: `Please complete "${lessons[index-1].title}" first to unlock this content and continue your learning journey.`,
+                               onAction: () => setShowLockModal(false)
+                             });
+                             setShowLockModal(true);
+                          } else {
+                            navigation.navigate('LearningContent', { lesson: lessonItem, subject, topic });
+                          }
+                       }}
                      >
                         <View style={[styles.topicCard, { 
                           backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
@@ -211,11 +386,26 @@ export default function LessonDetailScreen({ route, navigation }) {
                               )}
                            </View>
                            <View style={styles.topicInfo}>
-                              <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{lessonItem.title}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                <Text style={[styles.topicName, { color: theme.colors.textPrimary }]}>{lessonItem.title}</Text>
+                                
+                                {/* Access Badges */}
+                                {accessType ? (
+                                  <View style={[styles.badge, styles.subscribedBadge, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)' }]}>
+                                    <Sparkles size={10} color="#F59E0B" fill="#F59E0B" style={{ marginRight: 4 }} />
+                                    <Text style={styles.subscribedBadgeText}>{accessType}</Text>
+                                  </View>
+                                ) : !hasAccess ? (
+                                  <View style={[styles.badge, styles.premiumBadge, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }]}>
+                                    <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+
                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                   <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>Topic {index + 1}</Text>
                                   <Text style={[styles.topicSub, { color: theme.colors.textSecondary }]}>• {lessonItem.duration || 5} min</Text>
-                                 {isLocked && <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontStyle: 'italic' }}>Locked</Text>}
+                                 {isSeqLocked && <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontStyle: 'italic' }}>Locked</Text>}
                               </View>
                            </View>
                            {isCompleted ? (
@@ -227,8 +417,33 @@ export default function LessonDetailScreen({ route, navigation }) {
                            )}
                         </View>
                      </TouchableOpacity>
-                   );
-                 })}
+                    );
+                  })}
+
+                  {/* Course Mastery Test CTA (Integrated) */}
+                  <TouchableOpacity 
+                    style={[styles.courseTestCard, { shadowColor: primaryColor }]}
+                    activeOpacity={0.9}
+                    onPress={handleStartCourseTest}
+                  >
+                    <LinearGradient
+                      colors={[primaryColor, (primaryColor) + 'CC']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.courseTestGradient}
+                    >
+                      <View style={styles.courseTestLeft}>
+                        <View style={styles.testIconContainer}>
+                          <Award color="#FFF" size={24} />
+                        </View>
+                        <View>
+                          <Text style={styles.courseTestTitle}>Course Proficiency Test</Text>
+                          <Text style={styles.courseTestSubtitle}>Test your mastery of all topics</Text>
+                        </View>
+                      </View>
+                      <ChevronRight color="#FFF" size={20} />
+                    </LinearGradient>
+                  </TouchableOpacity>
               </View>
             )}
           </Animated.View>
@@ -261,6 +476,28 @@ export default function LessonDetailScreen({ route, navigation }) {
           </View>
         )}
       </SafeAreaView>
+
+      {lockConfig && (
+        <LockStatusModal
+          visible={showLockModal}
+          onClose={() => setShowLockModal(false)}
+          type={lockConfig.type}
+          title={lockConfig.title}
+          message={lockConfig.message}
+          onAction={lockConfig.onAction}
+          actionText={lockConfig.actionText}
+        />
+      )}
+
+      <MasteryModal
+        visible={showMasteryModal}
+        onClose={() => setShowMasteryModal(false)}
+        type={masteryModalConfig.type}
+        title={masteryModalConfig.title}
+        message={masteryModalConfig.message}
+        onAction={masteryModalConfig.onAction}
+        actionText={masteryModalConfig.actionText}
+      />
     </View>
   );
 }
@@ -471,5 +708,79 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 1,
+  },
+  courseTestCard: {
+    marginTop: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  courseTestGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+  },
+  courseTestLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  testIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  courseTestTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  courseTestSubtitle: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  freeBadge: {
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  freeBadgeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  subscribedBadge: {
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+  },
+  subscribedBadgeText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  premiumBadge: {
+    borderColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  premiumBadgeText: {
+    color: 'rgba(128, 128, 128, 0.8)',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,10 @@ import {
   TextInput,
   Alert,
   Modal,
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,36 +26,179 @@ import {
   Globe,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
+
+import CountrySelectorModal from '../components/CountrySelectorModal';
+import PaymentValidationModal from '../components/PaymentValidationModal';
+import StatusModal from '../components/StatusModal';
+import { COUNTRIES } from '../constants/CountryList';
 
 export default function PaymentScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { plan, topic } = route.params || {};
+  const { refreshData } = useProgress();
+  const { plan, topic, subject } = route.params || {};
   
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPending, setShowPending] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('momo'); // 'momo' or 'airtel'
-  const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [selectedCountry, setSelectedCountry] = useState({ name: 'Rwanda', code: '+250', flag: '🇷🇼' });
 
-  const countries = [
-    { name: 'Rwanda', code: '+250', flag: '🇷🇼' },
-    { name: 'Uganda', code: '+256', flag: '🇺🇬' },
-    { name: 'Kenya', code: '+254', flag: '🇰🇪' },
-    { name: 'Tanzania', code: '+255', flag: '🇹🇿' },
-    { name: 'Burundi', code: '+257', flag: '🇧🇮' },
-    { name: 'DR Congo', code: '+243', flag: '🇨🇩' },
-  ];
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
+  const [depositId, setDepositId] = useState(null);
+  
+  // Pending Modal Timer State
+  const [pendingTimer, setPendingTimer] = useState(60);
+  const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
+  // Status Modal State
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    type: 'success',
+    title: '',
+    message: '',
+    actionText: 'Continue',
+    onAction: null
+  });
+
+  // Helper to parse complex PawaPay/Edge Function errors into human-readable strings
+  const parsePaymentError = (error, currentMethod = paymentMethod, num = phoneNumber) => {
+    if (!error) return 'An unexpected error occurred. Please try again.';
+    
+    // 1. Handle string errors (some might be JSON strings)
+    let errorMessage = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
+
+    // Handle "Wrong Telco" or "Missing Wallet" errors with specific suggestions as requested by user
+    const isTelcoError = 
+      errorMessage.includes('does not have a mobile money wallet') || 
+      errorMessage.includes('does not belong to the telco') ||
+      errorMessage.includes('OTHER_ERROR'); // Custom handling if needed for unspecified telco errors
+
+    if (isTelcoError) {
+      const selectedTelco = currentMethod === 'momo' ? 'MTN' : 'Airtel';
+      const alternativeTelco = currentMethod === 'momo' ? 'Airtel' : 'MTN';
+      return `This phone number ${num} does not belong to ${selectedTelco} Money or does not have ${selectedTelco} Money wallet. Change from ${selectedTelco} to ${alternativeTelco} and try again to see if it can work.`;
+    }
+
+    try {
+      // 2. Attempt to parse as JSON if it looks like a PawaPay response
+      if (errorMessage.includes('{') && errorMessage.includes('}')) {
+        const parsed = JSON.parse(errorMessage);
+        
+        // PawaPay standard failure object
+        if (parsed.failureReason) {
+          const msg = parsed.failureReason.failureMessage || '';
+          if (msg.includes('does not have a mobile money wallet') || msg.includes('does not belong to the telco')) {
+             const selectedTelco = currentMethod === 'momo' ? 'MTN' : 'Airtel';
+             const alternativeTelco = currentMethod === 'momo' ? 'Airtel' : 'MTN';
+             return `This phone number ${num} does not belong to ${selectedTelco} Money or does not have ${selectedTelco} Money wallet. Change from ${selectedTelco} to ${alternativeTelco} and try again to see if it can work.`;
+          }
+          return msg || 'The transaction was declined by the provider.';
+        }
+        
+        // Custom error object from Edge Function
+        if (parsed.error) return parsed.error;
+      }
+    } catch (e) {
+      // Not JSON, continue with string processing
+      console.log('Error parsing JSON error message:', e);
+    }
+
+    // 3. Map common technical keywords to friendly language
+    const lowerError = errorMessage.toLowerCase();
+    
+    if (lowerError.includes('insufficient')) return 'Your mobile wallet has insufficient funds for this transaction.';
+    if (lowerError.includes('timeout') || lowerError.includes('expired')) return 'The payment request timed out. Please try again.';
+    if (lowerError.includes('cancelled') || lowerError.includes('canceled')) return 'You have cancelled the transaction on your phone.';
+    if (lowerError.includes('duplicate')) return 'A similar transaction is already in progress. Please wait a moment.';
+    if (lowerError.includes('network') || lowerError.includes('connectivity')) return 'Network error. Please ensure your phone has a stable signal and try again.';
+    if (lowerError.includes('blocked') || lowerError.includes('restricted')) return 'This transaction was blocked by the mobile provider.';
+
+    // Fallback to original if relatively short, otherwise a generic message
+    return errorMessage.length < 100 ? errorMessage : 'The payment failed due to a technical issue. Please try again or use a different number.';
+  };
+
+  // Listen for Payment Status Updates via Realtime
+  useEffect(() => {
+    if (!showPending || !depositId) return;
+
+    const channel = supabase
+      .channel('pawapay-status')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'pawapay_transactions',
+          filter: `external_id=eq.${depositId}`,
+        },
+        (payload) => {
+          const newStatus = payload.new.status;
+          console.log('Payment Status Update:', newStatus);
+
+          if (newStatus === 'COMPLETED') {
+            console.log('PaymentScreen: Payment COMPLETED, triggering refresh...');
+            refreshData(); // Refresh context to unlock courses immediately
+            setShowPending(false);
+            setModalConfig({
+              type: 'success',
+              title: 'Payment Successful',
+              message: `Your "${plan?.name}" plan is now active! Enjoy your learning journey with Sikola+.`,
+              actionText: 'Start Learning',
+              onAction: () => navigation.replace('MainApp')
+            });
+            setShowStatusModal(true);
+          } else if (newStatus === 'FAILED' || newStatus === 'CANCELLED' || newStatus === 'EXPIRED') {
+            setShowPending(false);
+            const userFriendlyError = parsePaymentError(payload.new.error_message);
+            setModalConfig({
+              type: 'error',
+              title: 'Payment Failed',
+              message: userFriendlyError,
+              actionText: 'Try Again',
+              onAction: () => setShowStatusModal(false)
+            });
+            setShowStatusModal(true);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [showPending, depositId, plan, navigation]);
+
+  // Pending Timer Logic
+  useEffect(() => {
+    let interval;
+    if (showPending && pendingTimer > 0) {
+      interval = setInterval(() => {
+        setPendingTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (pendingTimer === 0) {
+      setShowTroubleshoot(true);
+    }
+
+    if (!showPending) {
+      setPendingTimer(60);
+      setShowTroubleshoot(false);
+    }
+
+    return () => clearInterval(interval);
+  }, [showPending, pendingTimer]);
 
   const handlePayment = async () => {
-    if (!phoneNumber || phoneNumber.length < 9) {
-      Alert.alert('Invalid Phone', 'Please enter a valid phone number (9 digits)');
+    // Basic validation: enforce exactly 9 digits
+    if (!phoneNumber || phoneNumber.length !== 9) {
+      setShowValidationModal(true);
       return;
     }
 
     setLoading(true);
     try {
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert('Error', 'Please login to continue');
@@ -59,44 +206,104 @@ export default function PaymentScreen({ route, navigation }) {
         return;
       }
 
-      // Calculate expiration date
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + plan.duration_hours);
+      // Clean phone number (remove leading zeros)
+      const cleanPhone = phoneNumber.replace(/^0+/, '');
+      const fullPhoneNumber = `${selectedCountry.code}${cleanPhone}`.replace('+', ''); // PawaPay often prefers digits only
 
-      // Create subscription record
-      const { data, error } = await supabase
-        .from('user_subscriptions')
-        .insert([{
-          user_id: user.id,
-          plan_id: plan.id,
-          topic_id: topic?.id || null,
-          expires_at: expiresAt.toISOString(),
-          payment_reference: `${paymentMethod.toUpperCase()}-${Date.now()}`,
-          is_active: true,
-        }])
-        .select()
-        .single();
+      // Update user profile with latest phone number
+      await supabase
+        .from('profiles')
+        .update({ phone: `+${fullPhoneNumber}` })
+        .eq('id', user.id);
 
-      if (error) throw error;
+      // Call Edge Function to initiate PawaPay deposit
+      console.log('Initiating PawaPay deposit for:', fullPhoneNumber);
+      
+      const { data, error } = await supabase.functions.invoke('pawapay-deposit', {
+        body: {
+          planId: plan.id,
+          phoneNumber: fullPhoneNumber,
+          countryIso: selectedCountry.iso,
+          paymentMethod: paymentMethod,
+          topicId: topic?.id || null,
+          subjectId: subject?.id || topic?.subject_id || null,
+          amount: Math.ceil(plan.price * selectedCountry.rate),
+          currency: selectedCountry.currency,
+        }
+      });
+      if (error) {
+        // If Supabase returns an error physically (non-200), parse it
+        const errorDetail = error.context?.json?.error || error.message;
+        throw new Error(errorDetail);
+      }
 
-      // Show success message
-      Alert.alert(
-        'Payment Initiated',
-        `Please check your ${paymentMethod === 'momo' ? 'MTN Mobile Money' : 'Airtel Money'} phone (${selectedCountry.code} ${phoneNumber}) to complete the payment of ${plan.price.toLocaleString()} RWF.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('MainApp'),
-          },
-        ]
-      );
+      if (data?.success === false || data?.error) {
+        // If our function caught an error and returned it as 200 OK
+        throw new Error(data.error || 'The payment server returned an unspecified error.');
+      }
+
+      if (data?.depositId) {
+        setDepositId(data.depositId);
+        setLoading(false);
+        setShowPending(true);
+      } else {
+        throw new Error('No transaction ID received from server. Please try again.');
+      }
+
     } catch (error) {
-      console.error('Payment error:', error);
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    } finally {
+      console.error('---- PAYMENT INVOCATION ERROR ----');
+      console.error('Message:', error.message);
+      if (error.context) console.error('Context:', JSON.stringify(error.context));
+      console.error('-----------------------------------');
+      
+      
+      // Use StatusModal for a better error experience
+      const userFriendlyError = parsePaymentError(error);
+      setModalConfig({
+        type: 'error',
+        title: 'Payment Encountered an Issue',
+        message: userFriendlyError,
+        actionText: 'I Understand',
+        onAction: () => setShowStatusModal(false)
+      });
+      setShowStatusModal(true);
       setLoading(false);
     }
   };
+
+  // Pre-fill User Info
+  React.useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('phone')
+            .eq('id', user.id)
+            .single();
+
+           if (profile && profile.phone) {
+            // Parse Phone Number
+            // Identify country code from the start of the string
+            const foundCountry = COUNTRIES.find(c => profile.phone.startsWith(c.code));
+            
+            if (foundCountry) {
+              setSelectedCountry(foundCountry);
+              // Extract the number part
+              const numberPart = profile.phone.replace(foundCountry.code, '');
+              const cleanNumber = numberPart.trim(); // Ensure no leading spaces
+              setPhoneNumber(cleanNumber);
+            }
+          }
+        }
+      } catch (err) {
+        console.log("Error pre-filling phone:", err);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -124,10 +331,16 @@ export default function PaymentScreen({ route, navigation }) {
           </View>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
           {/* Plan Summary */}
           <View style={[styles.summaryCard, { 
             backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
@@ -168,7 +381,7 @@ export default function PaymentScreen({ route, navigation }) {
                 Total Amount
               </Text>
               <Text style={[styles.totalValue, { color: theme.colors.secondary }]}>
-                {plan?.price?.toLocaleString()} RWF
+                {selectedCountry.currency} {Math.ceil(plan?.price * selectedCountry.rate).toLocaleString()}
               </Text>
             </View>
           </View>
@@ -251,53 +464,83 @@ export default function PaymentScreen({ route, navigation }) {
                 style={[styles.countrySelector, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
                 onPress={() => setShowCountryPicker(true)}
               >
-                <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+                <Image 
+                  source={{ uri: `https://flagcdn.com/w40/${selectedCountry.iso}.png` }}
+                  style={{ width: 24, height: 16, borderRadius: 2 }} 
+                />
                 <Text style={[styles.phonePrefix, { color: theme.colors.textPrimary }]}>{selectedCountry.code}</Text>
                 <ChevronDown size={14} color={theme.colors.textSecondary} />
               </TouchableOpacity>
               <TextInput
                 style={[styles.input, { color: theme.colors.textPrimary }]}
-                placeholder="7X XXX XXXX"
+                placeholder="7X XXX XXX"
                 placeholderTextColor={theme.colors.textSecondary}
                 keyboardType="numeric"
                 value={phoneNumber}
                 onChangeText={(text) => setPhoneNumber(text.replace(/[^0-9]/g, ''))}
-                maxLength={10}
+                maxLength={9}
               />
             </View>
           </View>
 
           {/* Country Picker Modal */}
-          <Modal visible={showCountryPicker} transparent animationType="slide">
+          <CountrySelectorModal 
+                visible={showCountryPicker}
+                onClose={() => setShowCountryPicker(false)}
+                onSelect={setSelectedCountry}
+                selectedCountry={selectedCountry}
+          />
+
+          <PaymentValidationModal 
+                visible={showValidationModal}
+                onClose={() => setShowValidationModal(false)}
+          />
+
+          <StatusModal 
+            visible={showStatusModal}
+            onClose={() => setShowStatusModal(false)}
+            type={modalConfig.type}
+            title={modalConfig.title}
+            message={modalConfig.message}
+            actionText={modalConfig.actionText}
+            onAction={modalConfig.onAction}
+          />
+
+          {/* Pending Payment Modal */}
+           <Modal visible={showPending} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, { 
                 backgroundColor: isDark ? '#1A1A1A' : '#FFF',
-                borderColor: theme.colors.glassBorder 
+                borderColor: theme.colors.glassBorder,
+                alignItems: 'center',
+                paddingTop: 40,
+                paddingBottom: 40
               }]}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Select Country</Text>
-                  <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
-                    <Text style={{ color: theme.colors.secondary, fontWeight: '700' }}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView>
-                  {countries.map((c) => (
-                    <TouchableOpacity 
-                      key={c.code} 
-                      style={[styles.countryItem, { borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
-                      onPress={() => {
-                        setSelectedCountry(c);
-                        setShowCountryPicker(false);
-                      }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <Text style={{ fontSize: 24 }}>{c.flag}</Text>
-                        <Text style={[styles.countryName, { color: theme.colors.textPrimary }]}>{c.name}</Text>
-                      </View>
-                      <Text style={[styles.countryCodeText, { color: theme.colors.textSecondary }]}>{c.code}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                 <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginBottom: 20, transform: [{ scale: 1.5 }] }} />
+                 <Text style={[styles.modalTitle, { color: theme.colors.textPrimary, textAlign: 'center', marginBottom: 10, fontSize: 22 }]}>Payment in Progress</Text>
+                 <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', fontSize: 16, lineHeight: 24, paddingHorizontal: 20 }}>
+                   Please check your phone ({selectedCountry.code} {phoneNumber}) and authorize the transaction.
+                 </Text>
+                 
+                 {showTroubleshoot ? (
+                    <View style={styles.troubleshootContainer}>
+                       <Clock size={20} color="#FACC15" />
+                       <Text style={styles.troubleshootText}>
+                         Still waiting? Ensure your phone is nearby, has signal, and sufficient balance. You can also try again with a different number.
+                       </Text>
+                    </View>
+                 ) : (
+                    <View style={{ marginTop: 30, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: 'rgba(250, 204, 21, 0.1)', borderRadius: 12 }}>
+                       <Text style={{ color: '#FACC15', fontWeight: 'bold' }}>Waiting response ({pendingTimer}s)...</Text>
+                    </View>
+                 )}
+
+                 <TouchableOpacity 
+                    onPress={() => setShowPending(false)}
+                    style={styles.cancelLink}
+                 >
+                    <Text style={[styles.cancelLinkText, { color: theme.colors.textSecondary }]}>Cancel and Try Again</Text>
+                 </TouchableOpacity>
               </View>
             </View>
           </Modal>
@@ -310,28 +553,34 @@ export default function PaymentScreen({ route, navigation }) {
             </Text>
           </View>
 
-          {/* Pay Button */}
-          <TouchableOpacity
-            onPress={handlePayment}
-            disabled={loading}
-            style={[
-              styles.payButton,
-              { backgroundColor: theme.colors.secondary },
-              loading && { opacity: 0.6 }
-            ]}
-          >
-            <LinearGradient
-              colors={['#FACC15', '#F59E0B']}
-              style={styles.payButtonGradient}
-            >
-              <Text style={styles.payButtonText}>
-                {loading ? 'Processing...' : `Pay ${plan?.price?.toLocaleString()} RWF`}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          <View style={{ height: 20 }} />
+          </ScrollView>
 
-          <View style={{ height: 40 }} />
-        </ScrollView>
+          {/* Fixed Footer with Pay Button */}
+          <View style={[styles.footer, { 
+            backgroundColor: isDark ? 'rgba(18, 18, 18, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            borderTopColor: theme.colors.glassBorder 
+          }]}>
+            <TouchableOpacity
+              onPress={handlePayment}
+              disabled={loading}
+              style={[
+                styles.payButton,
+                { backgroundColor: paymentMethod === 'airtel' ? '#EF4444' : theme.colors.secondary },
+                loading && { opacity: 0.6 }
+              ]}
+            >
+              <LinearGradient
+                colors={paymentMethod === 'airtel' ? ['#EF4444', '#B91C1C'] : ['#FACC15', '#F59E0B']}
+                style={styles.payButtonGradient}
+              >
+                <Text style={[styles.payButtonText, { color: paymentMethod === 'airtel' ? '#FFF' : '#000' }]}>
+                  {loading ? 'Processing...' : `Pay ${selectedCountry.currency} ${Math.ceil(plan?.price * selectedCountry.rate).toLocaleString()}`}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
@@ -539,9 +788,41 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     alignItems: 'center',
   },
-  payButtonText: {
+   payButtonText: {
     color: '#000',
     fontSize: 18,
     fontWeight: '900',
+  },
+  troubleshootContainer: {
+    marginTop: 24,
+    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+    padding: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+  },
+  troubleshootText: {
+    flex: 1,
+    color: '#FACC15',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  cancelLink: {
+    marginTop: 32,
+    padding: 12,
+  },
+  cancelLinkText: {
+    fontSize: 14,
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 0 : 20, // SafeAreaView handles bottom inset on iOS
+    borderTopWidth: 1,
   },
 });

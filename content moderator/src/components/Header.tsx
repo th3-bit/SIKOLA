@@ -4,33 +4,26 @@ import { useTheme } from "next-themes";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GlassInput } from "./ui/GlassInput";
+import { GlobalSearch } from "./GlobalSearch";
 
 interface HeaderProps {
   subject?: string;
   topic?: string;
   onBack?: () => void;
-  searchQuery?: string;
-  onSearchChange?: (query: string) => void;
   previewTitle?: string;
 }
 
-export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChange, previewTitle }: HeaderProps) => {
+export const Header = ({ subject, topic, onBack, previewTitle }: HeaderProps) => {
   const { theme, setTheme } = useTheme();
-  const [showSearch, setShowSearch] = useState(false);
   const navigate = useNavigate();
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const handleCloseSearch = () => {
-    setShowSearch(false);
-    onSearchChange?.("");
-  };
-
   return (
-    <header className="animate-fade-up">
-      <div className="glass-panel-strong px-6 py-4">
+    <header className="relative z-50 animate-fade-up">
+      <div className="glass-panel-strong !overflow-visible px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             {onBack && (
@@ -62,25 +55,7 @@ export const Header = ({ subject, topic, onBack, searchQuery = "", onSearchChang
           </div>
           
           <div className="flex items-center gap-3">
-            {showSearch ? (
-              <div className="flex items-center gap-2">
-                <GlassInput
-                  type="text"
-                  placeholder="Search lessons, examples, questions..."
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange?.(e.target.value)}
-                  className="w-64 h-9"
-                  autoFocus
-                />
-                <GlassButton variant="ghost" size="sm" type="button" onClick={handleCloseSearch}>
-                  ✕
-                </GlassButton>
-              </div>
-            ) : (
-              <GlassButton variant="ghost" size="sm" onClick={() => setShowSearch(true)} title="Search content">
-                <Search className="w-5 h-5" />
-              </GlassButton>
-            )}
+            <GlobalSearch />
             
             {/* Content Explorer Link */}
             <GlassButton variant="ghost" size="sm" onClick={() => navigate("/content")} title="Content Explorer">

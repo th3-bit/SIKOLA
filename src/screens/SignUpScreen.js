@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Animated, Easing, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Animated, Easing, Image, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, User, CheckCircle, GraduationCap, ChevronLeft, ArrowRight, Eye, EyeOff, CheckSquare, Square, Phone } from 'lucide-react-native';
+import { Mail, Lock, User, CheckCircle, GraduationCap, ChevronLeft, ArrowRight, Eye, EyeOff, CheckSquare, Square, Phone, ChevronDown, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 import { supabase } from '../lib/supabase';
+import CountrySelectorModal from '../components/CountrySelectorModal';
+import StatusModal from '../components/StatusModal';
+import { COUNTRIES } from '../constants/CountryList';
 
 export default function SignUpScreen({ navigation }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -19,6 +22,8 @@ export default function SignUpScreen({ navigation }) {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ type: 'success', title: '', message: '', actionText: 'Continue' });
 
   // Focus States
   const [isNameFocused, setIsNameFocused] = useState(false);
@@ -26,10 +31,33 @@ export default function SignUpScreen({ navigation }) {
   const [isPhoneFocused, setIsPhoneFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
   const [isConfirmFocused, setIsConfirmFocused] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({
+    length: false,
+    uppercase: false,
+    number: false,
+    special: false
+  });
+
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]); // Default to first (Rwanda)
 
   // Animation Values
   const slideAnim = useRef(new Animated.Value(50)).current; 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    const hasLength = password.length >= 8;
+
+    setPasswordStrength({
+      length: hasLength,
+      uppercase: hasUpperCase,
+      number: hasNumber,
+      special: hasSpecial
+    });
+  }, [password]);
 
   useEffect(() => {
     Animated.parallel([
@@ -48,25 +76,79 @@ export default function SignUpScreen({ navigation }) {
   }, []);
 
   const handleSignUp = async () => {
+    console.log('handleSignUp called', { name, email, phone: phone?.length, agreeTerms });
     if (!name || !email || !phone || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setModalConfig({
+        type: 'error',
+        title: 'Missing Info',
+        message: 'Please fill in all fields to create your account.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      setModalConfig({
+        type: 'error',
+        title: 'Password Mismatch',
+        message: 'The passwords you entered do not match. Please try again.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
     if (!agreeTerms) {
-      Alert.alert('Error', 'Please agree to the terms and conditions');
+      setModalConfig({
+        type: 'error',
+        title: 'Terms Required',
+        message: 'Please agree to the terms and conditions to continue.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
+      return;
+    }
+
+    // Password strength check
+    if (!passwordStrength.length || !passwordStrength.uppercase || !passwordStrength.number || !passwordStrength.special) {
+      setModalConfig({
+        type: 'error',
+        title: 'Weak Password',
+        message: 'Your password does not meet the security requirements. Please check the requirements below the password field.',
+        actionText: 'I Understood'
+      });
+      setShowModal(true);
       return;
     }
 
     try {
       setLoading(true);
 
+      // 0. Proactively check if email already exists (since Supabase hides this during signUp)
+      console.log('Checking if email exists:', email);
+      const { data: userExists, error: checkError } = await supabase.rpc('check_if_user_exists', { 
+        email_to_check: email 
+      });
+
+      if (checkError) {
+        console.error('Error checking user existence:', checkError);
+        // We don't throw here, we continue with signUp as usual if the check fails
+      } else if (userExists) {
+        console.log('User already exists, showing "Account Exists" modal');
+        setModalConfig({
+          type: 'error',
+          title: 'Account Exists',
+          message: 'This email is already registered. Please try logging in or use a different email address.',
+          actionText: 'Login Instead'
+        });
+        setShowModal(true);
+        setLoading(false);
+        return;
+      }
+
       // 1. Create the user in Supabase Auth
+      console.log('Attempting auth.signUp with:', { email, passwordLength: password.length });
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -78,11 +160,23 @@ export default function SignUpScreen({ navigation }) {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Auth signUp error details:', authError);
+        throw authError;
+      }
+
+      console.log('Auth signUp success:', { userId: authData?.user?.id, hasSession: !!authData?.session });
 
       if (authData.user) {
         // 2. Create the profile in the public.profiles table
-        // This ensures the Full Name and Phone Number are saved into personal information
+        const combinedPhone = `${selectedCountry.code}${phone.replace(/^0+/, '')}`;
+        console.log('Attempting profile upsert with:', { 
+          id: authData.user.id, 
+          name, 
+          email, 
+          phone: combinedPhone 
+        });
+
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert([
@@ -90,7 +184,7 @@ export default function SignUpScreen({ navigation }) {
               id: authData.user.id,
               full_name: name,
               email: email,
-              phone: phone,
+              phone: combinedPhone,
               status: 'active',
               subscription_type: 'limited',
               updated_at: new Date().toISOString(),
@@ -98,35 +192,51 @@ export default function SignUpScreen({ navigation }) {
           ]);
 
         if (profileError) {
-          console.warn('Profile creation error (might be RLS):', profileError);
+          console.error('Profile creation error details:', profileError);
+          // We don't throw here to avoid blocking registration if profile creation fails
+          // but we should know why it failed.
+        } else {
+          console.log('Profile upsert success');
         }
 
         if (authData.session) {
-          const successMsg = 'Welcome to Sikola+! Your account has been created and your profile information has been saved.';
-          if (Platform.OS === 'web') {
-            alert(successMsg);
-            navigation.replace('MainApp');
-          } else {
-            Alert.alert('Account Created', successMsg, [{ text: 'Great!', onPress: () => navigation.replace('MainApp') }]);
-          }
+          console.log('Session exists, showing welcome modal');
+          setModalConfig({
+            type: 'success',
+            title: 'Welcome!',
+            message: 'Your account has been created successfully. Welcome to Sikola+!',
+            actionText: 'Get Started'
+          });
+          setShowModal(true);
         } else {
-          // Standard flow: email confirmation required
-          const confirmMsg = 'We\'ve sent a verification code to ' + email + '. Please enter it to activate your account.';
-          if (Platform.OS === 'web') {
-            alert(confirmMsg);
-            navigation.navigate('VerifyEmail', { email: email });
-          } else {
-            Alert.alert(
-              'Confirm Your Email',
-              confirmMsg,
-              [{ text: 'Enter Code', onPress: () => navigation.navigate('VerifyEmail', { email: email }) }]
-            );
-          }
+          setModalConfig({
+            type: 'success',
+            title: 'OTP Sent',
+            message: `We've sent a verification code to ${email}. Please enter it to activate your account.`,
+            actionText: 'Enter Code'
+          });
+          setShowModal(true);
         }
       }
     } catch (error) {
       console.error('Sign up error:', error);
-      Alert.alert('Sign Up Failed', error.message || 'An error occurred during sign up');
+      
+      let errorTitle = 'Registration Failed';
+      let errorMessage = error.message || 'An error occurred during sign up. Please try again.';
+
+      // Specific handling for existing user
+      if (error.message?.toLowerCase().includes('already registered') || error.status === 400 && error.message?.toLowerCase().includes('already registered')) {
+        errorTitle = 'Account Exists';
+        errorMessage = 'This email is already registered. Please try logging in or use a different email address.';
+      }
+
+      setModalConfig({
+        type: 'error',
+        title: errorTitle,
+        message: errorMessage,
+        actionText: errorTitle === 'Account Exists' ? 'Login Instead' : 'Try Again'
+      });
+      setShowModal(true);
     } finally {
       setLoading(false);
     }
@@ -144,6 +254,14 @@ export default function SignUpScreen({ navigation }) {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                 <ChevronLeft color={theme.colors.textPrimary} size={28} />
                 <Text style={[styles.backText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.themeToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]} 
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+            >
+              {isDark ? <Sun size={20} color="#FCE72D" /> : <Moon size={20} color={theme.colors.textPrimary} />}
             </TouchableOpacity>
         </View>
 
@@ -167,8 +285,14 @@ export default function SignUpScreen({ navigation }) {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent} 
+            showsVerticalScrollIndicator={false} 
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
             
             <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Create Account</Text>
 
@@ -245,12 +369,33 @@ export default function SignUpScreen({ navigation }) {
                     size={20} 
                     style={styles.icon} 
                   />
+                  
+                  {/* Country Selector Trigger */}
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, borderRightWidth: 1, borderRightColor: theme.colors.inputBorder, paddingRight: 10, height: '60%' }}
+                    onPress={() => setShowCountryPicker(true)}
+                  >
+                    <Image 
+                      source={{ uri: `https://flagcdn.com/w40/${selectedCountry.iso}.png` }}
+                      style={{ width: 24, height: 16, borderRadius: 2, marginRight: 8 }} 
+                    />
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginRight: 4 }}>{selectedCountry.code}</Text>
+                    <ChevronDown size={14} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+
                   <TextInput
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Phone Number"
                     placeholderTextColor={theme.colors.textSecondary}
                     value={phone}
-                    onChangeText={setPhone}
+                    onChangeText={(text) => {
+                      // Only allow numbers and limit to 9 characters
+                      const numericText = text.replace(/[^0-9]/g, '');
+                      if (numericText.length <= 9) {
+                        setPhone(numericText);
+                      }
+                    }}
+                    maxLength={9}
                     keyboardType="phone-pad"
                     onFocus={() => setIsPhoneFocused(true)}
                     onBlur={() => setIsPhoneFocused(false)}
@@ -291,6 +436,29 @@ export default function SignUpScreen({ navigation }) {
                     )}
                   </TouchableOpacity>
                 </View>
+
+                {/* Password Strength Checklist */}
+                {password.length > 0 && (
+                  <View style={styles.strengthContainer}>
+                    <Text style={[styles.strengthTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Password Requirements:</Text>
+                    <View style={styles.requirementRow}>
+                      <CheckCircle size={14} color={passwordStrength.length ? '#10B981' : theme.colors.textSecondary} />
+                      <Text style={[styles.requirementText, { color: passwordStrength.length ? '#10B981' : theme.colors.textSecondary }]}>At least 8 characters</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <CheckCircle size={14} color={passwordStrength.uppercase ? '#10B981' : theme.colors.textSecondary} />
+                      <Text style={[styles.requirementText, { color: passwordStrength.uppercase ? '#10B981' : theme.colors.textSecondary }]}>At least one uppercase letter (A-Z)</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <CheckCircle size={14} color={passwordStrength.number ? '#10B981' : theme.colors.textSecondary} />
+                      <Text style={[styles.requirementText, { color: passwordStrength.number ? '#10B981' : theme.colors.textSecondary }]}>At least one number (0-9)</Text>
+                    </View>
+                    <View style={styles.requirementRow}>
+                      <CheckCircle size={14} color={passwordStrength.special ? '#10B981' : theme.colors.textSecondary} />
+                      <Text style={[styles.requirementText, { color: passwordStrength.special ? '#10B981' : theme.colors.textSecondary }]}>At least one special character (@, #, $, etc.)</Text>
+                    </View>
+                  </View>
+                )}
               </View>
 
                <View style={styles.inputWrapper}>
@@ -304,7 +472,7 @@ export default function SignUpScreen({ navigation }) {
                     isConfirmFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <CheckCircle 
-                    color={isConfirmFocused ? theme.colors.secondary : theme.colors.textSecondary} 
+                    color={confirmPassword.length > 0 ? (password === confirmPassword ? '#10B981' : '#EF4444') : (isConfirmFocused ? theme.colors.secondary : theme.colors.textSecondary)} 
                     size={20} 
                     style={styles.icon} 
                   />
@@ -380,10 +548,36 @@ export default function SignUpScreen({ navigation }) {
                  </TouchableOpacity>
               </View>
 
+              {/* Country Picker Modal */}
+              <CountrySelectorModal 
+                visible={showCountryPicker}
+                onClose={() => setShowCountryPicker(false)}
+                onSelect={setSelectedCountry}
+                selectedCountry={selectedCountry}
+              />
+
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      {/* Status Modal */}
+      <StatusModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        onAction={() => {
+          setShowModal(false);
+          if (modalConfig.type === 'success') {
+            navigation.navigate('VerifyEmail', { email: email });
+          } else if (modalConfig.title === 'Account Exists') {
+            navigation.navigate('Login');
+          }
+        }}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        actionText={modalConfig.actionText}
+      />
     </View>
   );
 }
@@ -410,8 +604,16 @@ const styles = StyleSheet.create({
   header: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       marginTop: 10,
       width: '100%', 
+  },
+  themeToggle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
       flexDirection: 'row',
@@ -525,5 +727,23 @@ const styles = StyleSheet.create({
   verificationNoticeText: {
     fontSize: 12,
     opacity: 0.8,
+  },
+  strengthContainer: {
+    marginTop: 10,
+    paddingHorizontal: 5,
+  },
+  strengthTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  requirementRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
+  requirementText: {
+    fontSize: 12,
   },
 });

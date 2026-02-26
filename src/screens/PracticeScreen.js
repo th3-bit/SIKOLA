@@ -31,13 +31,18 @@ import {
   Code,
   Scale,
   Clock,
-  Award
+  Award,
+  Lock
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import GlassHeader from '../components/GlassHeader';
 import StreakCard from '../components/StreakCard';
+import LockStatusModal from '../components/LockStatusModal';
+import TrialBanner from '../components/TrialBanner';
+import FreePassModal from '../components/FreePassModal';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
@@ -56,7 +61,16 @@ const iconMap = {
 
 export default function PracticeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { getTopicScore, userStats, weeklyActivity, sessions } = useProgress();
+  const { 
+    getTopicScore, 
+    userStats, 
+    weeklyActivity, 
+    sessions, 
+    subscriptions,
+    checkAccess,
+    checkTrialLimit,
+    isTrialExpired 
+  } = useProgress();
 
   const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
     <View style={[styles.statCardWrapper, { shadowColor: shadowColor }]}>
@@ -83,6 +97,11 @@ export default function PracticeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockConfig, setLockConfig] = useState({ type: 'subscription', title: '', message: '', onAction: null });
+  const [showFreePassModal, setShowFreePassModal] = useState(false);
+  const [pendingTest, setPendingTest] = useState(null);
+
   useEffect(() => {
     fetchContent();
   }, []);
@@ -98,7 +117,8 @@ export default function PracticeScreen({ navigation }) {
           topics (
             id,
             title,
-            subject_id
+            subject_id,
+            created_at
           )
         `)
         .order('name');
@@ -109,8 +129,10 @@ export default function PracticeScreen({ navigation }) {
           return {
             ...subject,
             icon: style.icon,
-            color: style.color,
-            topics: (subject.topics || []).sort((a, b) => a.title.localeCompare(b.title))
+            color: subject.color || style.color,
+            topics: (subject.topics || [])
+              .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+              .map((topic, tIdx) => ({ ...topic, originalIndex: tIdx }))
           };
         });
         
@@ -139,77 +161,139 @@ export default function PracticeScreen({ navigation }) {
   const handleStartComprehensiveTest = async (topic, subject) => {
     try {
       setLoading(true);
-      // 1. Fetch all lessons and their contents for this topic
+      
+      const isUnlocked = checkAccess(topic.id, subject.id, topic.originalIndex ?? 0); 
+      const hasAnySub = subscriptions && subscriptions.length > 0;
+
+      if (!isUnlocked) {
+        if (hasAnySub) {
+           setLockConfig({
+             type: 'subscription',
+             title: "Course Not Included",
+             message: "This proficiency test is not included in your current plan. Upgrade to Full Access or purchase this specific course to unlock it.",
+             onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+           });
+        } else {
+           setLockConfig({
+             type: 'subscription',
+             title: "Premium Feature",
+             message: "Comprehensive tests are exclusive to Premium members. Please subscribe to unlock.",
+             onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+           });
+        }
+        setShowLockModal(true);
+        setLoading(false);
+        return;
+      }
+
+       // Check Trial Daily Limit
+      if (!hasAnySub) {
+         const canTakeTest = checkTrialLimit();
+         if (!canTakeTest) {
+            setLockConfig({
+              type: 'limit',
+              title: "Daily Limit Reached",
+              message: "Trial users are limited to 1 comprehensive test per day. Please come back tomorrow or upgrade for unlimited attempts!",
+              onAction: () => { setShowLockModal(false); navigation.navigate('Subscription'); }
+            });
+            setShowLockModal(true);
+            setLoading(false);
+            return;
+         } else {
+            // Show Free Pass Modal for confirmation (now serves as Daily Pass)
+            setPendingTest({ topic, subject });
+            setShowFreePassModal(true);
+            setLoading(false);
+            return;
+         }
+      }
+
+      // If subscribed, go straight to launch
+      launchTest(topic, subject, false);
+      
+    } catch (err) {
+      console.error('Error in handleStartComprehensiveTest:', err);
+      setLoading(false);
+    }
+  };
+
+  const launchTest = async (topic, subject, isFreePass) => {
+      try {
+        setLoading(true);
+
+      // 1. Fetch all lessons and their contents for this topic (Fetch ALL for test)
       const { data: lessonsData, error } = await supabase
         .from('lessons')
         .select('*')
-        .eq('topic_id', topic.id);
+        .eq('topic_id', topic.id)
+        .order('created_at', { ascending: true }); // Ensure order
 
       if (error) throw error;
       if (!lessonsData || lessonsData.length === 0) {
         alert('No questions available for this topic yet.');
+        setLoading(false);
         return;
       }
 
+      // Use ALL lessons because the Free Pass grants full access to this one test
+      let accessibleLessons = lessonsData;
+      
       let allQuestions = [];
       let lessonsWithQuestions = [];
 
-      // 2. Extract questions from each lesson
-      lessonsData.forEach(lesson => {
-        const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
-        const quizSlides = slides?.filter(s => s.type === 'quiz') || [];
-        
-        if (quizSlides.length > 0) {
-          lessonsWithQuestions.push({
-            lessonId: lesson.id,
-            questions: quizSlides.map(q => ({
-              ...q,
-              lesson_id: lesson.id,
-              subject_name: subject.name
-            }))
-          });
+      // 2. Extract questions from ACCESSIBLE lessons
+      accessibleLessons.forEach(lesson => {
+        try {
+          const slides = typeof lesson.content === 'string' ? JSON.parse(lesson.content) : lesson.content;
+          const quizSlides = slides?.filter(s => s.type === 'quiz') || [];
+          
+          if (quizSlides.length > 0) {
+            lessonsWithQuestions.push({
+              lessonId: lesson.id,
+              questions: quizSlides.map(q => ({
+                ...q,
+                lesson_id: lesson.id,
+                subject_name: subject.name
+              }))
+            });
+          }
+        } catch (parseErr) {
+          console.error(`PracticeScreen: Failed to parse content for lesson ${lesson.id}`, parseErr);
+          // Skip corrupt lesson
         }
       });
 
       if (lessonsWithQuestions.length === 0) {
-        alert('No questions found in the lessons of this topic.');
+        alert('No questions found in the accessible lessons of this topic.');
+        setLoading(false);
         return;
       }
 
-      // 3. Selection Logic (The User's Rule: 2 per lesson, total max 20)
+      // 3. Selection Logic (The User's New Rule: 5 per lesson, NO total max)
       let selectedQuestions = [];
       
-      // Step A: Pick 2 questions from every lesson that has questions
+      // Check if we have enough questions per lesson
       lessonsWithQuestions.forEach(lwq => {
+        // Shuffle the questions for this lesson
         const shuffled = [...lwq.questions].sort(() => 0.5 - Math.random());
-        selectedQuestions.push(...shuffled.slice(0, 2));
+        
+        // Take up to 5 questions (or all if less than 5)
+        const questionsToTake = shuffled.slice(0, 5);
+        
+        selectedQuestions.push(...questionsToTake);
       });
 
-      // Step B: If we need more to reach 20, fill from the remaining pool
-      if (selectedQuestions.length < 20) {
-        let remainingPool = [];
-        lessonsWithQuestions.forEach(lwq => {
-          // Add questions not already selected
-          const notTaken = lwq.questions.filter(q => !selectedQuestions.includes(q));
-          remainingPool.push(...notTaken);
-        });
-
-        // Shuffle and fill up to 20
-        const extraNeeded = 20 - selectedQuestions.length;
-        const shuffledPool = remainingPool.sort(() => 0.5 - Math.random());
-        selectedQuestions.push(...shuffledPool.slice(0, extraNeeded));
-      } else if (selectedQuestions.length > 20) {
-        // Technically this might happen if there are more than 10 lessons.
-        // We trim to 20
-        selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random()).slice(0, 20);
-      }
+      // Final Shuffle of the entire test so questions are mixed
+      selectedQuestions = selectedQuestions.sort(() => 0.5 - Math.random());
 
       // 4. Navigate to Quiz screen with the combined questions
       navigation.navigate('Quiz', { 
         questions: selectedQuestions,
         topic: topic,
         subject: subject,
-        isComprehensive: true
+        isComprehensive: true,
+        isFree: isFreePass || (subscriptions && subscriptions.length > 0), 
+        isFreePass: isFreePass 
       });
 
     } catch (err) {
@@ -231,9 +315,12 @@ export default function PracticeScreen({ navigation }) {
         <GlassHeader showSearch={false} />
         
         <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
         >
+          <TrialBanner />
+
           {/* Test Streak Section */}
           <View style={styles.streakCardSection}>
             <StreakCard />
@@ -248,14 +335,14 @@ export default function PracticeScreen({ navigation }) {
 
           {/* Content Browser Section */}
           <View style={[styles.sectionHeader]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Select Course for Test</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Select Topic for Test</Text>
           </View>
 
           {/* Search Bar */}
           <View style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: theme.colors.glassBorder }]}>
             <Search size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
             <TextInput
-              placeholder="Search courses..."
+              placeholder="Search topics..."
               placeholderTextColor={theme.colors.textSecondary}
               style={[styles.searchInput, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
               value={searchQuery}
@@ -306,33 +393,64 @@ export default function PracticeScreen({ navigation }) {
             {loading ? (
               <ActivityIndicator color={theme.colors.secondary} />
             ) : filteredTopics.length > 0 ? (
-              filteredTopics.map((topic) => (
-                <TouchableOpacity 
-                  key={topic.id} 
-                  onPress={() => handleStartComprehensiveTest(topic, topic.parentSubject)}
-                  style={[styles.topicRowWrapper, { shadowColor: topic.parentSubject?.color }]}
-                >
-                  <BlurView intensity={15} tint={isDark ? "dark" : "light"} style={[styles.topicRow, { borderColor: theme.colors.glassBorder }]}>
-                    <View style={styles.topicMain}>
-                      <Text style={[styles.topicName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                        {topic.title}
-                      </Text>
-                      <Text style={[styles.topicSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                        {topic.parentSubject?.name} • Start Proficiency Test
-                      </Text>
-                    </View>
-                    <View style={styles.scoreInfo}>
-                      <Text style={[styles.scorePercent, { color: topic.parentSubject?.color || theme.colors.secondary }]}>
-                        {getTopicScore(topic.parentSubject?.id, topic.id)}%
-                      </Text>
-                      <Zap size={18} color={topic.parentSubject?.color || theme.colors.secondary} />
-                    </View>
-                  </BlurView>
-                </TouchableOpacity>
-              ))
+              filteredTopics.map((topic, index) => {
+                const hasAnySub = subscriptions && subscriptions.length > 0;
+                // FIX: Use originalIndex instead of current map index to prevent search-based bypass
+                const topicIndex = topic.originalIndex ?? index;
+                const isFree = topicIndex < 2 && !hasAnySub && !isTrialExpired; 
+                const isUnlocked = checkAccess(topic.id, topic.parentSubject?.id, topicIndex);
+                const isLocked = !isUnlocked;
+
+                return (
+                  <TouchableOpacity 
+                    key={topic.id} 
+                    onPress={() => handleStartComprehensiveTest(topic, topic.parentSubject)}
+                    style={[styles.topicRowWrapper, { shadowColor: topic.parentSubject?.color }]}
+                    activeOpacity={0.7}
+                  >
+                    <BlurView 
+                        intensity={15} 
+                        tint={isDark ? "dark" : "light"} 
+                        style={[
+                            styles.topicRow, 
+                            { 
+                                borderColor: theme.colors.glassBorder,
+                                opacity: isLocked ? 0.6 : 1
+                            }
+                        ]}
+                    >
+                      <View style={styles.topicMain}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <Text style={[styles.topicName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, marginRight: 8 }]}>
+                            {topic.title}
+                          </Text>
+                          {isFree && (
+                            <View style={[styles.freeBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' }]}>
+                              <Text style={styles.freeBadgeText}>FREE</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[styles.topicSub, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                          {topic.parentSubject?.name} • Start Proficiency Test
+                        </Text>
+                      </View>
+                      <View style={styles.scoreInfo}>
+                        <Text style={[styles.scorePercent, { color: isLocked ? theme.colors.textSecondary : (topic.parentSubject?.color || theme.colors.secondary), opacity: isLocked ? 0.5 : 1 }]}>
+                          {getTopicScore(topic.parentSubject?.id, topic.id)}%
+                        </Text>
+                        {isLocked ? (
+                          <Lock size={18} color={theme.colors.textSecondary} opacity={0.5} />
+                        ) : (
+                          <Zap size={18} color={topic.parentSubject?.color || theme.colors.secondary} />
+                        )}
+                      </View>
+                    </BlurView>
+                  </TouchableOpacity>
+                );
+              })
             ) : (
               <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginTop: 20 }}>
-                {subjects.length === 0 ? "Loading content..." : "No courses found matching your search."}
+                {subjects.length === 0 ? "Loading content..." : "No topics found matching your search."}
               </Text>
             )}
           </View>
@@ -340,6 +458,29 @@ export default function PracticeScreen({ navigation }) {
           <View style={{ height: 120 }} />
         </ScrollView>
       </SafeAreaView>
+
+      <LockStatusModal 
+        visible={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        type={lockConfig.type}
+        title={lockConfig.title}
+        message={lockConfig.message}
+        onAction={lockConfig.onAction}
+      />
+
+      <FreePassModal 
+        visible={showFreePassModal}
+        onClose={() => {
+            setShowFreePassModal(false);
+            setPendingTest(null);
+        }}
+        onStart={() => {
+            setShowFreePassModal(false);
+            if (pendingTest) {
+                launchTest(pendingTest.topic, pendingTest.subject, true);
+            }
+        }}
+      />
     </View>
   );
 }
@@ -534,5 +675,18 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
+  },
+  freeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  freeBadgeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

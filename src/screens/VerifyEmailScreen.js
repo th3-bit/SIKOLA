@@ -4,15 +4,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GraduationCap, ChevronLeft, ArrowRight } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import { Alert, ActivityIndicator } from 'react-native';
+import StatusModal from '../components/StatusModal';
 
 export default function VerifyEmailScreen({ navigation, route }) {
   const { theme, isDark } = useTheme();
+  const { refreshStats } = useProgress();
   const [otp, setOtp] = useState(['', '', '', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [modalLoading, setModalLoading] = useState(false);
   const userEmail = route.params?.email || '';
   const inputs = useRef([]);
+  const [showModal, setShowModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ type: 'success', title: '', message: '', actionText: 'Continue' });
 
   const handleOtpChange = (value, index) => {
     const newOtp = [...otp];
@@ -28,7 +36,13 @@ export default function VerifyEmailScreen({ navigation, route }) {
   const handleVerify = async () => {
     const code = otp.join('');
     if (code.length < 8) {
-      Alert.alert('Error', 'Please enter the 8-digit code');
+      setModalConfig({
+        type: 'error',
+        title: 'Incomplete Code',
+        message: 'Please enter all 8 digits of the verification code.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
       return;
     }
 
@@ -43,25 +57,31 @@ export default function VerifyEmailScreen({ navigation, route }) {
       if (error) throw error;
 
       if (route.params?.type === 'recovery') {
-        const resetMsg = 'Code verified successfully! You can now set a new password.';
-        if (Platform.OS === 'web') {
-          alert(resetMsg);
-          navigation.navigate('ResetPassword');
-        } else {
-          Alert.alert('Email Verified', resetMsg, [{ text: 'Set New Password', onPress: () => navigation.navigate('ResetPassword') }]);
-        }
+        setModalConfig({
+          type: 'success',
+          title: 'Email Verified',
+          message: 'Code verified successfully! You can now set a new password.',
+          actionText: 'Set New Password'
+        });
+        setShowModal(true);
       } else {
-        const verifyMsg = 'Your account has been successfully verified! You can now log in.';
-        if (Platform.OS === 'web') {
-          alert(verifyMsg);
-          navigation.navigate('Login');
-        } else {
-          Alert.alert('Email Verified', verifyMsg, [{ text: 'Login', onPress: () => navigation.navigate('Login') }]);
-        }
+        setModalConfig({
+          type: 'success',
+          title: 'Account Verified',
+          message: 'Your account has been successfully verified! Welcome to Sikola+.',
+          actionText: 'Get Started'
+        });
+        setShowModal(true);
       }
     } catch (error) {
       console.error('Verification error:', error);
-      Alert.alert('Verification Failed', error.message || 'Invalid or expired code');
+      setModalConfig({
+        type: 'error',
+        title: 'Verification Failed',
+        message: error.message || 'Invalid or expired code. Please try again.',
+        actionText: 'Try Again'
+      });
+      setShowModal(true);
     } finally {
       setLoading(false);
     }
@@ -71,6 +91,58 @@ export default function VerifyEmailScreen({ navigation, route }) {
       if (key === 'Backspace' && !otp[index] && index > 0) {
           inputs.current[index - 1].focus();
       }
+  };
+
+  // Cooldown timer effect
+  React.useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => {
+        setResendCooldown(resendCooldown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+
+    try {
+      setResendLoading(true);
+      
+      // Resend OTP based on type
+      if (route.params?.type === 'recovery') {
+        const { error } = await supabase.auth.resetPasswordForEmail(userEmail);
+        if (error) throw error;
+      } else {
+        // For signup, we need to resend the signup confirmation
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: userEmail,
+        });
+        if (error) throw error;
+      }
+
+      setResendCooldown(60); // 60 second cooldown
+      setOtp(['', '', '', '', '', '', '', '']); // Clear old code
+      setModalConfig({
+        type: 'success',
+        title: 'Code Resent',
+        message: 'A new verification code has been sent to your email.',
+        actionText: 'Got It'
+      });
+      setShowModal(true);
+    } catch (error) {
+      console.error('Resend error:', error);
+      setModalConfig({
+        type: 'error',
+        title: 'Resend Failed',
+        message: error.message || 'Failed to resend code. Please try again.',
+        actionText: 'Try Again'
+      });
+      setShowModal(true);
+    } finally {
+      setResendLoading(false);
+    }
   };
 
   return (
@@ -153,15 +225,62 @@ export default function VerifyEmailScreen({ navigation, route }) {
                 </LinearGradient>
               </TouchableOpacity>
 
-               <TouchableOpacity style={styles.resendContainer}>
+               <TouchableOpacity 
+                 style={styles.resendContainer}
+                 onPress={handleResendOtp}
+                 disabled={resendLoading || resendCooldown > 0}
+               >
                   <Text style={[styles.resendText, { color: theme.colors.textSecondary }]}>Didn't receive code? </Text>
-                  <Text style={[styles.resendLink, { color: theme.colors.secondary }]}>Resend</Text>
+                  {resendLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.secondary} />
+                  ) : (
+                    <Text style={[styles.resendLink, { 
+                      color: resendCooldown > 0 ? theme.colors.textSecondary : theme.colors.secondary,
+                      opacity: resendCooldown > 0 ? 0.5 : 1
+                    }]}>
+                      {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : 'Resend'}
+                    </Text>
+                  )}
                </TouchableOpacity>
 
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Status Modal */}
+      <StatusModal
+        visible={showModal}
+        onClose={() => !modalLoading && setShowModal(false)}
+        loading={modalLoading}
+        onAction={async () => {
+          if (modalConfig.type === 'success' && modalConfig.title !== 'Code Resent') {
+            if (route.params?.type === 'recovery') {
+              setShowModal(false);
+              navigation.navigate('ResetPassword');
+            } else {
+              setModalLoading(true);
+              try {
+                if (refreshStats) await refreshStats();
+                setShowModal(false);
+                navigation.replace('MainApp');
+              } catch (err) {
+                console.error("Refresh stats error:", err);
+                setShowModal(false);
+                navigation.replace('MainApp');
+              } finally {
+                setModalLoading(false);
+              }
+            }
+          } else {
+            setShowModal(false);
+          }
+        }}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        actionText={modalConfig.actionText}
+      />
     </View>
   );
 }

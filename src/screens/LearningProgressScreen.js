@@ -16,7 +16,9 @@ import {
   Clock, 
   CheckCircle, 
   TrendingUp, 
-  BookOpen
+  BookOpen,
+  Trophy,
+  Medal
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
@@ -27,6 +29,23 @@ import Svg, { Circle } from 'react-native-svg';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 
 const { width } = Dimensions.get('window');
+
+const formatRelativeTime = (date) => {
+  const now = new Date();
+  const activityDate = new Date(date);
+  const diff = now - activityDate;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 7) return activityDate.toLocaleDateString();
+  if (days > 1) return `${days} days ago`;
+  if (days === 1) return 'Yesterday';
+  if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  return 'Just now';
+};
 
 export default function LearningProgressScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -116,14 +135,59 @@ export default function LearningProgressScreen({ navigation }) {
 
         const mappedActivity = activity.map(a => {
           const topic = topics?.find(t => t.id === a.topic_id);
+          const hasScore = a.score > 0;
+          
+          let title = `Completed "${topic?.title || 'Lesson'}"`;
+          let icon = CheckCircle;
+          let iconColor = '#10B981';
+
+          if (hasScore) {
+            title = `Scored ${a.score}% in ${topic?.title || 'Quiz'}`;
+            icon = Trophy;
+            iconColor = '#F59E0B';
+          }
+
           return {
             id: a.topic_id,
-            title: `Completed "${topic?.title || 'Lesson'}"`,
-            time: new Date(a.completed_at).toLocaleDateString(),
-            score: a.score
+            title,
+            time: formatRelativeTime(a.completed_at),
+            score: a.score,
+            icon,
+            iconColor
           };
         });
-        setRecentActivity(mappedActivity);
+        
+        // Let's also fetch sessions to see if there are "Started" activities
+        // In a real app, we'd have a dedicated activity log. 
+        // For now, we mix these in.
+        const { data: recentSessions } = await supabase
+          .from('learning_sessions')
+          .select('*, subjects(name, color)')
+          .eq('user_id', user.id)
+          .order('started_at', { ascending: false })
+          .limit(3);
+        
+        if (recentSessions) {
+          const sessionsAsActivity = recentSessions.map(s => {
+            const isJustStarted = s.duration_minutes === 0;
+            return {
+              id: s.id,
+              title: isJustStarted ? `Started "${s.subjects?.name || 'New Topic'}"` : `Studied "${s.subjects?.name || 'Topic'}"`,
+              time: formatRelativeTime(s.started_at),
+              icon: isJustStarted ? BookOpen : Clock,
+              iconColor: s.subjects?.color || theme.colors.secondary,
+              isSession: true,
+              rawTime: s.started_at
+            };
+          });
+          
+          setRecentActivity([...mappedActivity, ...sessionsAsActivity]
+            .sort((a, b) => new Date(b.rawTime || b.completed_at) - new Date(a.rawTime || a.completed_at))
+            .slice(0, 5)
+          );
+        } else {
+          setRecentActivity(mappedActivity);
+        }
       }
 
     } catch (error) {
@@ -141,17 +205,25 @@ export default function LearningProgressScreen({ navigation }) {
   const circumference = 2 * Math.PI * radius;
 
   const StatCard = ({ icon: Icon, label, value, color }) => (
-    <View style={[styles.statCard, { 
-      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
-    }]}>
-       <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
-         <Icon size={20} color={color} />
-       </View>
-       <View>
-         <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>{value}</Text>
-         <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>{label}</Text>
-       </View>
+    <View style={styles.statCardWrapper}>
+      <View style={[styles.statCard, { 
+        backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+      }]}>
+        <LinearGradient
+          colors={isDark ? [`${color}15`, 'transparent'] : [`${color}08`, 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
+          <Icon size={20} color={color} />
+        </View>
+        <View>
+          <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
+          <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
+        </View>
+      </View>
     </View>
   );
 
@@ -207,6 +279,12 @@ export default function LearningProgressScreen({ navigation }) {
                 backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
                 borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
               }]}>
+                <LinearGradient
+                   colors={isDark ? ['rgba(255, 255, 255, 0.03)', 'transparent'] : ['rgba(0, 0, 0, 0.01)', 'transparent']}
+                   start={{ x: 0, y: 0 }}
+                   end={{ x: 1, y: 1 }}
+                   style={StyleSheet.absoluteFill}
+                />
                 <View style={styles.donutRow}>
                   <View style={styles.chartSection}>
                     <Svg width={160} height={160}>
@@ -263,7 +341,7 @@ export default function LearningProgressScreen({ navigation }) {
               {timeRange === 'monthly' ? (
                 <MonthlyStreakCalendar />
               ) : (
-                <StreakCard />
+                <StreakCard mode={timeRange} />
               )}
               
               <View style={styles.statsGrid}>
@@ -273,8 +351,8 @@ export default function LearningProgressScreen({ navigation }) {
               {/* Subject Breakdown */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Subject Progress</Text>
-                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Overall Curriculum Completion</Text>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Topic Progress</Text>
+                  <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Overall Topic Completion</Text>
                 </View>
                 
                 <View style={styles.subjectList}>
@@ -291,6 +369,12 @@ export default function LearningProgressScreen({ navigation }) {
                           borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
                         }]}
                       >
+                        <LinearGradient
+                          colors={isDark ? [`${subject.color}08`, 'transparent'] : [`${subject.color}04`, 'transparent']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
                         <View style={styles.subjectHeaderRow}>
                           <View style={[styles.subjectIconBox, { backgroundColor: `${subject.color}15` }]}>
                             {subject.icon ? <subject.icon size={18} color={subject.color} /> : <BookOpen size={18} color={subject.color} />}
@@ -300,7 +384,7 @@ export default function LearningProgressScreen({ navigation }) {
                               {subject.name}
                             </Text>
                             <Text style={[styles.subjectStats, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                              {completedCount} of {totalCount} topics completed
+                              {completedCount} of {totalCount} sub-topics completed
                             </Text>
                           </View>
                           <Text style={[styles.subjectPercentage, { color: subject.color, fontFamily: theme.typography.fontFamily }]}>
@@ -328,15 +412,16 @@ export default function LearningProgressScreen({ navigation }) {
                 <View style={[styles.timelineContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)', borderColor: theme.colors.glassBorder }]}>
                   {recentActivity.map((activity, index) => (
                     <View key={index} style={[styles.activityRow, index !== recentActivity.length - 1 && styles.activityBorder]}>
-                      <View style={[styles.activityIcon, { backgroundColor: theme.colors.glass }]}>
-                        <BookOpen size={16} color={theme.colors.secondary} />
+                      <View style={[styles.activityIconBox, { backgroundColor: `${activity.iconColor}15` }]}>
+                        {React.createElement(activity.icon, { size: 18, color: activity.iconColor })}
                       </View>
                       <View style={styles.activityInfo}>
-                        <Text style={[styles.activityTitle, { color: theme.colors.textPrimary }]}>{activity.title}</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={[styles.activityTime, { color: theme.colors.textSecondary }]}>{activity.time}</Text>
-                          <Text style={[styles.activityTime, { color: theme.colors.secondary, fontWeight: 'bold' }]}>{activity.score}%</Text>
-                        </View>
+                        <Text style={[styles.activityTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                          {activity.title}
+                        </Text>
+                        <Text style={[styles.activityTime, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                          {activity.time}
+                        </Text>
                       </View>
                     </View>
                   ))}
@@ -431,12 +516,14 @@ const styles = StyleSheet.create({
   legendName: { fontSize: 12, fontWeight: '500' },
   legendValue: { fontSize: 14, fontWeight: '700' },
   statsGrid: { flexDirection: 'row', gap: 12, marginBottom: 30 },
-  statCard: {
+  statCardWrapper: {
     flex: 1,
-    padding: 16,
     borderRadius: 20,
-    borderWidth: 1,
     overflow: 'hidden',
+  },
+  statCard: {
+    padding: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -460,16 +547,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(150,150,150,0.1)',
   },
-  activityIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  activityIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
   activityInfo: { flex: 1 },
-  activityTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  activityTime: { fontSize: 12 },
+  activityTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  activityTime: { fontSize: 13, opacity: 0.6 },
   sectionHeader: {
     marginBottom: 16,
   },

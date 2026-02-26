@@ -93,7 +93,7 @@ export default function SubscriptionScreen({ navigation }) {
       console.log('Navigating to Subjects for Per Course');
       // Use nested navigation to reach the Tab screen with params
       navigation.navigate('MainApp', {
-        screen: 'Subjects',
+        screen: 'Topics',
         params: { selectingForSubscription: true, plan: plan }
       });
     } else {

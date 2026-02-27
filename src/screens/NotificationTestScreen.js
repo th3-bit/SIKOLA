@@ -23,7 +23,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
-import NotificationService from '../services/NotificationService';
+import NotificationService from '../NotificationService';
 import * as Notifications from 'expo-notifications';
 
 const TestButton = ({ icon: Icon, title, description, time, onPress, color }) => {

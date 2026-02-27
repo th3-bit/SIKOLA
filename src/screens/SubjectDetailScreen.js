@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 import LessonCard from '../components/LessonCard';
 import LockStatusModal from '../components/LockStatusModal';
+import Skeleton from '../components/Skeleton';
 
 const { width } = Dimensions.get('window');
 
@@ -50,7 +51,7 @@ export default function SubjectDetailScreen({ route, navigation }) {
           lessons (id, duration)
         `)
         .eq('subject_id', subject.id)
-        .order('order_index', { ascending: true });
+        .order('created_at', { ascending: true });
 
       if (error) {
           console.error('Supabase Error in SubjectDetail:', error);
@@ -108,6 +109,51 @@ export default function SubjectDetailScreen({ route, navigation }) {
   };
 
 
+  const SubjectDetailSkeleton = () => (
+    <View style={{ flex: 1 }}>
+      {/* Stats Card Skeleton */}
+      <View style={[styles.statsCardWrapper, { opacity: 0.6 }]}>
+        <View style={[styles.statsCard, { 
+          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+        }]}>
+          <View style={styles.statsRow}>
+            {[1, 2, 3].map((i) => (
+              <View key={i} style={styles.statItem}>
+                <Skeleton width={44} height={44} borderRadius={14} style={{ marginBottom: 8 }} />
+                <Skeleton width={40} height={20} style={{ marginBottom: 4 }} />
+                <Skeleton width={60} height={12} />
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      {/* Curriculum List Skeleton */}
+      <View style={styles.lessonsContent}>
+        <View style={styles.sectionHeaderRow}>
+          <Skeleton width={100} height={24} />
+          <Skeleton width={80} height={18} />
+        </View>
+
+        <View style={styles.curriculumList}>
+          {[1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.curriculumItemWrapper}>
+              <View style={styles.curriculumItemLeft}>
+                <Skeleton width={30} height={30} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Skeleton width="60%" height={18} style={{ marginBottom: 8 }} />
+                  <Skeleton width="40%" height={14} />
+                </View>
+              </View>
+              <Skeleton width={28} height={28} borderRadius={14} />
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <LinearGradient
@@ -125,43 +171,41 @@ export default function SubjectDetailScreen({ route, navigation }) {
             >
               <ArrowLeft color={theme.colors.textPrimary} size={24} />
             </TouchableOpacity>
-
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('Search')}
-              style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
-            >
-              <Search color={theme.colors.textPrimary} size={24} />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={[styles.headerContent, { 
-            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
-          }]}>
-            <View style={[styles.subjectIcon, { backgroundColor: `${subject.color || '#8B5CF6'}15` }]}>
-              {(() => {
-                const IconComponent = typeof subject.icon === 'function' 
-                  ? subject.icon 
-                  : getSubjectStyle(subject.name).icon;
-                return <IconComponent color={subject.color || '#8B5CF6'} size={32} />;
-              })()}
-            </View>
-            <View style={styles.headerText}>
-              <Text style={[styles.subjectName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                {subject.name || 'Topic'}
-              </Text>
-              <Text style={[styles.lessonCount, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                {stats.total} courses available
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {loading ? (
-           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-             <ActivityIndicator size="large" color={subject.color} />
+ 
+             <TouchableOpacity 
+               onPress={() => navigation.navigate('Search')}
+               style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+             >
+               <Search color={theme.colors.textPrimary} size={24} />
+             </TouchableOpacity>
            </View>
-        ) : (
+           
+           <View style={[styles.headerContent, { 
+             backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+             borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+           }]}>
+             <View style={[styles.subjectIcon, { backgroundColor: `${subject.color || '#8B5CF6'}15` }]}>
+               {(() => {
+                 const IconComponent = typeof subject.icon === 'function' 
+                   ? subject.icon 
+                   : getSubjectStyle(subject.name).icon;
+                 return <IconComponent color={subject.color || '#8B5CF6'} size={32} />;
+               })()}
+             </View>
+             <View style={styles.headerText}>
+               <Text style={[styles.subjectName, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+                 {subject.name || 'Topic'}
+               </Text>
+               <Text style={[styles.lessonCount, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                 {stats.total} courses available
+               </Text>
+             </View>
+           </View>
+         </View>
+ 
+         {loading ? (
+            <SubjectDetailSkeleton />
+         ) : (
           <>
             {/* Stats Card */}
             <View style={[styles.statsCardWrapper, { shadowColor: subject.color || '#8B5CF6' }]}>

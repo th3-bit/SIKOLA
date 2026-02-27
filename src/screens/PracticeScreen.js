@@ -121,7 +121,7 @@ export default function PracticeScreen({ navigation }) {
             created_at
           )
         `)
-        .order('name');
+        .order('created_at', { ascending: true });
 
       if (!error && subjectsData) {
         const formattedSubjects = subjectsData.map(subject => {

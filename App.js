@@ -27,7 +27,7 @@ import LearningProgressScreen from './src/screens/LearningProgressScreen';
 import CourseCompletionScreen from './src/screens/CourseCompletionScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import NotificationTestScreen from './src/screens/NotificationTestScreen';
-import NotificationService from './src/services/NotificationService';
+import NotificationService from './src/NotificationService';
 import * as Notifications from 'expo-notifications';
 
 const Stack = createNativeStackNavigator();

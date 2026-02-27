@@ -144,7 +144,8 @@ export default function LearnScreen({ navigation }) {
     try {
       const { data, error } = await supabase
         .from('subjects')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: true });
       if (!error && data) {
         setAllSubjects(data);
       }

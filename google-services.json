@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "484752654241",
+    "project_id": "sikola-plus",
+    "storage_bucket": "sikola-plus.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484752654241:android:ed8e60511cd597cd04d5e0",
+        "android_client_info": {
+          "package_name": "com.th3bit.sikolaplus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCy8zsY6fehUEoO8DlJC85AxsaYZw4IWmA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

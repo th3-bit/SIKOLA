@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
-import NotificationService from '../services/NotificationService';
+import NotificationService from '../NotificationService';
 import { getLevelInfo } from '../constants/LevelConfig';
 import RewardModal from '../components/RewardModal';
 

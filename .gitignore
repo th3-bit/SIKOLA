@@ -39,3 +39,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# non-app folders
+/SIKOLA WEBSITE
+/content moderator
+/website
+/sikola_preview.md
+/sikola_preview_summary.md
+

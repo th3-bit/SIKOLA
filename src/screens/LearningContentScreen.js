@@ -372,7 +372,7 @@ export default function LearningContentScreen({ route, navigation }) {
 
     // Safely get IDs — topic may be undefined if coming from LessonOverviewScreen
     const courseId = subject?.id || null;
-    const topicId = topic?.id || lesson?.topic_id || null;
+    const topicId = lesson?.id || topic?.id || null;
     const durationNum = Math.max(1, Math.round((Date.now() - startTime) / 60000));
 
     logger.log('[finishLesson] percentage:', percentage, 'topicId:', topicId, 'courseId:', courseId);

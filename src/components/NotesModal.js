@@ -7,7 +7,8 @@ import {
   Modal, 
   Dimensions, 
   ScrollView,
-  Platform
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { WebView } from 'react-native-webview';
@@ -27,7 +28,38 @@ const { width, height } = Dimensions.get('window');
 
 export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
   const { theme, isDark } = useTheme();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isLargeScreen = windowWidth >= 768;
   const [viewPdf, setViewPdf] = useState(false);
+
+  const renderBoldText = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*|\$.*?\$|Step \d+:?)/gi);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return (
+          <Text key={index} style={{ fontWeight: '900', color: theme.colors.textPrimary }}>
+            {part.slice(2, -2)}
+          </Text>
+        );
+      }
+      if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+        return (
+          <Text key={index} style={{ fontWeight: '900', color: theme.colors.textPrimary }}>
+            {part.slice(1, -1)}
+          </Text>
+        );
+      }
+      if (/^Step \d+:?$/i.test(part)) {
+        return (
+          <Text key={index} style={{ fontWeight: '900', color: theme.colors.textPrimary }}>
+            {part}
+          </Text>
+        );
+      }
+      return <Text key={index}>{part}</Text>;
+    });
+  };
 
   const renderNotesContent = () => (
     <View style={styles.contentContainer}>
@@ -41,7 +73,7 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView showsVerticalScrollIndicator={true} indicatorStyle={isDark ? 'white' : 'black'} contentContainerStyle={styles.scrollContent}>
         {/* Resource Badge */}
         {pdfUrl && (
           <TouchableOpacity 
@@ -103,12 +135,12 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
                         <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                           {cleaned.split('\n').map((line, lidx) => {
                             if (line.startsWith('WHAT:')) {
-                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHAT: </Text>{line.replace('WHAT:', '').trim()}{"\n"}</Text>;
+                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHAT: </Text>{renderBoldText(line.replace('WHAT:', '').trim())}{"\n"}</Text>;
                             }
                             if (line.startsWith('WHY:')) {
-                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHY: </Text>{line.replace('WHY:', '').trim()}</Text>;
+                              return <Text key={lidx}><Text style={{ fontWeight: '900', color: theme.colors.textPrimary }}>WHY: </Text>{renderBoldText(line.replace('WHY:', '').trim())}</Text>;
                             }
-                            return <Text key={lidx}>{line}</Text>;
+                            return <Text key={lidx}>{renderBoldText(line)}</Text>;
                           })}
                         </Text>
                     </View>
@@ -133,7 +165,7 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
                 return (
                   <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     <Text style={{ fontWeight: '900', color: '#EF4444', textTransform: 'lowercase' }}>problem: </Text>
-                    {content}
+                    {renderBoldText(content)}
                   </Text>
                 );
               }
@@ -143,14 +175,14 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
                 return (
                   <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     <Text style={{ fontWeight: '900', color: '#10B981', textTransform: 'lowercase' }}>solution: </Text>
-                    {content}
+                    {renderBoldText(content)}
                   </Text>
                 );
               }
 
               return (
                 <Text key={idx} style={[styles.notesText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                  {line}
+                  {renderBoldText(line)}
                 </Text>
               );
             });
@@ -185,12 +217,28 @@ export default function NotesModal({ visible, onClose, notes, pdfUrl }) {
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.overlay}>
+    <Modal visible={visible} transparent animationType={isLargeScreen ? 'fade' : 'slide'}>
+      <View style={[
+        styles.overlay,
+        isLargeScreen && { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, paddingVertical: 40 }
+      ]}>
         <BlurView 
           intensity={100} 
           tint={isDark ? "dark" : "light"} 
-          style={[styles.container, { backgroundColor: isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.45)' }]}
+          style={[
+            styles.container,
+            { backgroundColor: isDark ? 'rgba(20,20,20,0.6)' : 'rgba(255,255,255,0.45)' },
+            isLargeScreen && {
+              width: '100%',
+              maxWidth: 900,
+              height: windowHeight * 0.85,
+              borderRadius: 32,
+              borderTopLeftRadius: 32,
+              borderTopRightRadius: 32,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
+            }
+          ]}
         >
           {viewPdf ? renderPdfViewer() : renderNotesContent()}
         </BlurView>

@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Lock, Crown, ChevronRight, X, AlertCircle, Clock, GraduationCap, Sparkles } from 'lucide-react-native';
+import { Lock, Crown, ChevronRight, X, AlertCircle, Clock, GraduationCap, Sparkles, Search, Info } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 
 const { width } = Dimensions.get('window');
 
@@ -58,6 +59,15 @@ export default function LockStatusModal({
           defaultActionText: 'Keep Going',
           showFeatures: false
         };
+      case 'info':
+        return {
+          icon: Info,
+          colors: ['#3B82F6', '#60A5FA'], // Blue
+          defaultTitle: 'Information',
+          defaultMessage: 'Please check back later for updates.',
+          defaultActionText: 'Understood',
+          showFeatures: false
+        };
       case 'subscription':
       default:
         return {
@@ -77,7 +87,7 @@ export default function LockStatusModal({
   const content = (
     <View style={[styles.modalContent, { 
         backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+        borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.1)'
     }]}>
         
         {/* Close Button */}
@@ -86,7 +96,7 @@ export default function LockStatusModal({
             style={styles.closeButton}
             activeOpacity={0.7}
         >
-            <X size={20} color={theme.colors.textSecondary} />
+            <X size={scale(20)} color={theme.colors.textSecondary} />
         </TouchableOpacity>
 
         {/* Icon Header */}
@@ -97,10 +107,10 @@ export default function LockStatusModal({
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             >
-                <IconComponent size={32} color="#FFF" fill={type === 'sequential' ? "none" : "#FFF"} />
+                <IconComponent size={scale(32)} color="#FFF" fill={type === 'sequential' ? "none" : "#FFF"} />
             </LinearGradient>
             <View style={[styles.lockBadge, { backgroundColor: isDark ? '#1F2937' : '#FFF' }]}>
-                <Lock size={12} color={type === 'motivation' ? '#10B981' : (type === 'sequential' ? '#3B82F6' : theme.colors.textSecondary)} />
+                <Lock size={scale(12)} color={type === 'motivation' ? '#10B981' : (type === 'sequential' ? '#3B82F6' : (type === 'info' ? '#3B82F6' : theme.colors.textSecondary))} />
             </View>
         </View>
 
@@ -123,7 +133,7 @@ export default function LockStatusModal({
                     "Ad-Free Excellence"
                 ].map((feature, index) => (
                     <View key={index} style={styles.featureItem}>
-                        <AlertCircle size={14} color={config.colors[0]} style={{ marginRight: 8 }} />
+                        <AlertCircle size={scale(14)} color={config.colors[0]} style={{ marginRight: scale(8) }} />
                         <Text style={[styles.featureText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                             {feature}
                         </Text>
@@ -146,7 +156,7 @@ export default function LockStatusModal({
                     end={{ x: 1, y: 0 }}
                 >
                     <Text style={styles.primaryButtonText}>{actionText || config.defaultActionText}</Text>
-                    <ChevronRight size={18} color="#FFF" />
+                    <ChevronRight size={scale(18)} color="#FFF" />
                 </LinearGradient>
             </TouchableOpacity>
 
@@ -199,7 +209,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: scale(20),
   },
   webContainer: {
     width: '100%',
@@ -210,11 +220,11 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    maxWidth: 340,
-    borderRadius: 30,
-    padding: 24,
+    maxWidth: scale(340),
+    borderRadius: scale(30),
+    padding: scale(24),
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: scale(1),
     overflow: 'hidden',
     shadowColor: "#000",
     shadowOffset: {
@@ -227,78 +237,78 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    top: verticalScale(16),
+    right: scale(16),
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(16),
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
     backgroundColor: 'rgba(128,128,128,0.1)',
   },
   iconContainer: {
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconGradient: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
+    width: scale(72),
+    height: scale(72),
+    borderRadius: scale(24),
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
   },
   lockBadge: {
     position: 'absolute',
-    bottom: -6,
-    right: -6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    bottom: verticalScale(-6),
+    right: scale(-6),
+    width: scale(24),
+    height: scale(24),
+    borderRadius: scale(12),
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: scale(2),
     borderColor: 'transparent',
     elevation: 2,
   },
   title: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: verticalScale(10),
   },
   message: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     textAlign: 'center',
     opacity: 0.8,
-    marginBottom: 24,
-    paddingHorizontal: 10,
-    lineHeight: 20,
+    marginBottom: verticalScale(24),
+    paddingHorizontal: scale(10),
+    lineHeight: moderateScale(20),
   },
   featuresList: {
     width: '100%',
-    marginBottom: 24,
-    borderRadius: 20,
-    padding: 16,
-    gap: 10,
+    marginBottom: verticalScale(24),
+    borderRadius: scale(20),
+    padding: scale(16),
+    gap: verticalScale(10),
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   featureText: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
     opacity: 0.8,
   },
   actions: {
     width: '100%',
-    gap: 12,
+    gap: verticalScale(12),
   },
   primaryButtonWrapper: {
-    borderRadius: 16,
+    borderRadius: scale(16),
     overflow: 'hidden',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -309,21 +319,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(20),
   },
   primaryButtonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
-    marginRight: 8,
+    marginRight: scale(8),
   },
   secondaryButton: {
-    paddingVertical: 10,
+    paddingVertical: verticalScale(10),
     alignItems: 'center',
   },
   secondaryText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '600',
   },
 });

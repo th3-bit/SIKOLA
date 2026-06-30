@@ -65,8 +65,8 @@ export default function ThemeSwitch() {
         
         {/* Static background icons for the depth effect if needed, but the thumb covers them */}
         <View style={styles.backgroundIcons}>
-           <Sun color="rgba(255,255,255,0.1)" size={16} style={{ marginLeft: 10 }} />
-           <Moon color="rgba(255,255,255,0.1)" size={16} style={{ marginRight: 10 }} />
+           <Sun color="rgba(255,255,255,0.22)" size={16} style={{ marginLeft: 10 }} />
+           <Moon color="rgba(255,255,255,0.22)" size={16} style={{ marginRight: 10 }} />
         </View>
       </BlurView>
     </TouchableOpacity>
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 0,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   thumb: {
     width: 32,

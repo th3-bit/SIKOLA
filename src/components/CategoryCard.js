@@ -1,120 +1,146 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 import Svg, { Circle } from 'react-native-svg';
 import { useTheme } from '../context/ThemeContext';
 
 export default function CategoryCard({ category, onPress }) {
-  const { theme, isDark } = useTheme();
+  const { theme, isDark, hapticsEnabled } = useTheme();
+  
+  // Animation ref
+  const scaleValue = useRef(new Animated.Value(1)).current;
 
-  // Progress Circle config
-  const size = 60;
-  const strokeWidth = 5;
+  // Progress Circle config (Scaled)
+  const size = scale(60);
+  const strokeWidth = scale(5);
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = category.progress || 0; // Use progress if available, otherwise default logic
+  const progress = category.progress || 0; 
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
-  return (
-    <TouchableOpacity 
-      activeOpacity={0.9} 
-      onPress={onPress}
-      style={[styles.cardWrapper, { shadowColor: category.color }]}
-    >
-      <View style={[
-        styles.card, 
-        { 
-          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-        }
-      ]}>
-        {/* Left Side: Subject Info */}
-        <View style={styles.leftSection}>
-          <Text style={[styles.title, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-            {category.name}
-          </Text>
-          <Text style={[styles.count, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-            {category.topicCount || 0} Topics Available
-          </Text>
-        </View>
+  const handlePressIn = () => {
+    Animated.spring(scaleValue, {
+      toValue: 0.98,
+      useNativeDriver: true,
+    }).start();
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
-        {/* Right Side: Pie Progress Chart */}
-        <View style={styles.rightSection}>
-          <View style={styles.chartContainer}>
-            <Svg width={size} height={size} style={styles.svg}>
-              {/* Background Circle */}
-              <Circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}
-                strokeWidth={strokeWidth}
-                fill="none"
-              />
-              {/* Progress Circle */}
-              <Circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                stroke={category.color}
-                strokeWidth={strokeWidth}
-                fill="none"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              />
-            </Svg>
-            <View style={styles.percentageContainer}>
-              <Text style={[styles.percentageText, { color: theme.colors.textPrimary }]}>
-                {Math.round(progress)}%
-              </Text>
+  const handlePressOut = () => {
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
+      <TouchableOpacity 
+        activeOpacity={0.9} 
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+        style={[styles.cardWrapper, { shadowColor: category.color }]}
+      >
+        <View style={[
+          styles.card, 
+          { 
+            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)',
+          }
+        ]}>
+          {/* Left Side: Subject Info */}
+          <View style={styles.leftSection}>
+            <Text style={[styles.title, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+              {category.name}
+            </Text>
+            <Text style={[styles.count, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+              {category.topicCount || 0} Topics Available
+            </Text>
+          </View>
+
+          {/* Right Side: Pie Progress Chart */}
+          <View style={styles.rightSection}>
+            <View style={styles.chartContainer}>
+              <Svg width={size} height={size} style={styles.svg}>
+                {/* Background Circle */}
+                <Circle
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  stroke={isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'}
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                />
+                {/* Progress Circle */}
+                <Circle
+                  cx={size / 2}
+                  cy={size / 2}
+                  r={radius}
+                  stroke={category.color}
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                />
+              </Svg>
+              <View style={styles.percentageContainer}>
+                <Text style={[styles.percentageText, { color: theme.colors.textPrimary }]}>
+                  {Math.round(progress)}%
+                </Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   cardWrapper: {
     width: '100%',
-    marginBottom: 12,
-    borderRadius: 32,
+    marginBottom: verticalScale(8),
+    borderRadius: moderateScale(28),
   },
   card: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderRadius: 32,
-    borderWidth: 1,
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(28),
+    borderWidth: scale(1),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 100,
+    minHeight: verticalScale(64),
   },
   leftSection: {
     flex: 1,
     justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: moderateScale(15),
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: verticalScale(1),
     letterSpacing: -0.5,
   },
   count: {
-    fontSize: 13,
+    fontSize: moderateScale(10),
     fontWeight: '500',
     opacity: 0.6,
   },
   rightSection: {
-    marginLeft: 16,
+    marginLeft: scale(16),
     justifyContent: 'center',
     alignItems: 'center',
   },
   chartContainer: {
-    width: 60,
-    height: 60,
+    width: scale(60),
+    height: scale(60),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -126,7 +152,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   percentageText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '800',
   },
 });
+

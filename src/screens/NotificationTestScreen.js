@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   ScrollView, 
   Alert,
-  Platform
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,6 +55,8 @@ const TestButton = ({ icon: Icon, title, description, time, onPress, color }) =>
 };
 
 export default function NotificationTestScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768;
   const { theme, isDark } = useTheme();
   const { userProfile, recentLessons, userStats } = useProgress();
   const [permissionStatus, setPermissionStatus] = useState('unknown');
@@ -84,20 +87,48 @@ export default function NotificationTestScreen({ navigation }) {
   };
 
   const handleTestDaily = async () => {
-    // Standardizing to the working 'Streak' pattern for visual verification
-    await NotificationService.sendInstantNotification(
-      `Rise and Shine, ${firstName}! ☀️`,
-      `Ready to master more of ${lastSubject} today? Your progress is waiting.`,
-      { screen: 'Home' }
+    Alert.alert(
+      "Scheduling Morning Reminder",
+      "We are scheduling a real test for 10 seconds from now. Click OK and minimize the app immediately!",
+      [
+        {
+          text: "OK",
+          onPress: async () => {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `Morning Learning Reminder 📚`,
+                body: `Rise and Shine, ${firstName}! ☀️ Ready to master more ${lastSubject || 'subjects'} today?`,
+                data: { screen: 'Home' },
+                android: { channelId: 'default' }
+              },
+              trigger: { seconds: 10 },
+            });
+          }
+        }
+      ]
     );
   };
 
   const handleSmartNudgeTest = async () => {
-    // Standardizing to the working 'Streak' pattern for visual verification
-    await NotificationService.sendInstantNotification(
-      "You're on a roll! 📈",
-      `You've already mastered ${lessonCount} lessons. Unlock the full curriculum to become a certified expert! 👑`,
-      { screen: 'Subscription' }
+    Alert.alert(
+      "Scheduling Smart Nudge",
+      "Scheduling a real nudge for 10 seconds from now. Click OK and minimize the app!",
+      [
+        {
+          text: "OK",
+          onPress: async () => {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: "You're on a roll! 📈",
+                body: `You've already mastered ${lessonCount} lessons. Unlock the full curriculum to become a certified expert! 👑`,
+                data: { screen: 'Subscription' },
+                android: { channelId: 'default' }
+              },
+              trigger: { seconds: 10 },
+            });
+          }
+        }
+      ]
     );
   };
 
@@ -189,105 +220,215 @@ export default function NotificationTestScreen({ navigation }) {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Status Section */}
-          <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.statusCard, { borderColor: theme.colors.glassBorder }]}>
-            <View style={styles.statusRow}>
-              <ShieldCheck color={permissionStatus === 'granted' ? '#10B981' : '#EF4444'} size={20} />
-              <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>
-                Permissions: <Text style={{ fontWeight: 'bold' }}>{permissionStatus.toUpperCase()}</Text>
-              </Text>
+          {isLargeScreen ? (
+            <View style={styles.largeScreenContainer}>
+              <View style={styles.column}>
+                {/* Status Section */}
+                <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.statusCard, { borderColor: theme.colors.glassBorder }]}>
+                  <View style={styles.statusRow}>
+                    <ShieldCheck color={permissionStatus === 'granted' ? '#10B981' : '#EF4444'} size={20} />
+                    <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>
+                      Permissions: <Text style={{ fontWeight: 'bold' }}>{permissionStatus.toUpperCase()}</Text>
+                    </Text>
+                  </View>
+                  <View style={[styles.statusRow, { marginTop: 10 }]}>
+                    <Smartphone color={theme.colors.secondary} size={20} />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>Device Token:</Text>
+                      <Text style={[styles.tokenValue, { color: theme.colors.textSecondary }]} numberOfLines={1} ellipsizeMode="middle">
+                        {pushToken}
+                      </Text>
+                    </View>
+                  </View>
+                </BlurView>
+
+                <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>Available Tests</Text>
+                
+                <TestButton 
+                  icon={Bell}
+                  title="Instant Test"
+                  description="Trigger a generic notification immediately"
+                  onPress={handleInstantTest}
+                  color="#8B5CF6"
+                />
+
+                <TestButton 
+                  icon={Zap}
+                  title="Morning Reminder (4 AM)"
+                  description={`Test 4 AM logic for ${firstName}`}
+                  time="Daily 4:00 AM"
+                  onPress={handleTestDaily}
+                  color="#FACC15"
+                />
+
+                <TestButton 
+                  icon={Star}
+                  title="Smart Nudge"
+                  description={`Test with ${lessonCount} lessons`}
+                  time="38h After Activity"
+                  onPress={handleSmartNudgeTest}
+                  color="#3B82F6"
+                />
+
+                <TestButton 
+                  icon={Flame}
+                  title="Streak Alert"
+                  description="Test streak protection"
+                  time="Daily 6:00 PM"
+                  onPress={handleTestStreak}
+                  color="#EF4444"
+                />
+
+                <TestButton 
+                  icon={Star}
+                  title="Achievement Unlocked"
+                  description="Test celebration message"
+                  time="Instant Event"
+                  onPress={handleTestAchievement}
+                  color="#3B82F6"
+                />
+              </View>
+
+              <View style={styles.column}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, marginTop: 0 }]}>Phase 2 Integration</Text>
+
+                <TestButton 
+                  icon={Flame}
+                  title="Inactivity Nudge"
+                  description={`Test missing ${firstName}`}
+                  time="35h Inactivity"
+                  onPress={handleInactivityTest}
+                  color="#F59E0B"
+                />
+
+                <TestButton 
+                  icon={Zap}
+                  title="Weekend Warrior"
+                  description="Test Sat/Sun XP bonus"
+                  time="Sat/Sun 10 AM"
+                  onPress={handleWeekendTest}
+                  color="#8B5CF6"
+                />
+
+                <TestButton 
+                  icon={Bell}
+                  title="Trial Countdown"
+                  description="Test expiry warning"
+                  time="24h Before End"
+                  onPress={handleTrialExpiryTest}
+                  color="#EF4444"
+                />
+
+                <View style={[styles.noteBox, { marginTop: 40 }]}>
+                  <Text style={[styles.noteText, { color: theme.colors.textSecondary }]}>
+                    Note: If you don't see notifications, ensure you are using a physical device or a simulator with Play Services. Verify your app's notification settings in system preferences.
+                  </Text>
+                </View>
+              </View>
             </View>
-            <View style={[styles.statusRow, { marginTop: 10 }]}>
-              <Smartphone color={theme.colors.secondary} size={20} />
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>Device Token:</Text>
-                <Text style={[styles.tokenValue, { color: theme.colors.textSecondary }]} numberOfLines={1} ellipsizeMode="middle">
-                  {pushToken}
+          ) : (
+            <View>
+              {/* Status Section */}
+              <BlurView intensity={20} tint={isDark ? "dark" : "light"} style={[styles.statusCard, { borderColor: theme.colors.glassBorder }]}>
+                <View style={styles.statusRow}>
+                  <ShieldCheck color={permissionStatus === 'granted' ? '#10B981' : '#EF4444'} size={20} />
+                  <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>
+                    Permissions: <Text style={{ fontWeight: 'bold' }}>{permissionStatus.toUpperCase()}</Text>
+                  </Text>
+                </View>
+                <View style={[styles.statusRow, { marginTop: 10 }]}>
+                  <Smartphone color={theme.colors.secondary} size={20} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.statusText, { color: theme.colors.textPrimary }]}>Device Token:</Text>
+                    <Text style={[styles.tokenValue, { color: theme.colors.textSecondary }]} numberOfLines={1} ellipsizeMode="middle">
+                      {pushToken}
+                    </Text>
+                  </View>
+                </View>
+              </BlurView>
+
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>Available Tests</Text>
+              
+              <TestButton 
+                icon={Bell}
+                title="Instant Test"
+                description="Trigger a generic notification immediately"
+                onPress={handleInstantTest}
+                color="#8B5CF6"
+              />
+
+              <TestButton 
+                icon={Zap}
+                title="Morning Reminder (4 AM)"
+                description={`Test 4 AM logic for ${firstName}`}
+                time="Daily 4:00 AM"
+                onPress={handleTestDaily}
+                color="#FACC15"
+              />
+
+              <TestButton 
+                icon={Star}
+                title="Smart Nudge"
+                description={`Test with ${lessonCount} lessons`}
+                time="38h After Activity"
+                onPress={handleSmartNudgeTest}
+                color="#3B82F6"
+              />
+
+              <TestButton 
+                icon={Flame}
+                title="Streak Alert"
+                description="Test streak protection"
+                time="Daily 6:00 PM"
+                onPress={handleTestStreak}
+                color="#EF4444"
+              />
+
+              <TestButton 
+                icon={Star}
+                title="Achievement Unlocked"
+                description="Test celebration message"
+                time="Instant Event"
+                onPress={handleTestAchievement}
+                color="#3B82F6"
+              />
+
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, marginTop: 20 }]}>Phase 2 Integration</Text>
+
+              <TestButton 
+                icon={Flame}
+                title="Inactivity Nudge"
+                description={`Test missing ${firstName}`}
+                time="35h Inactivity"
+                onPress={handleInactivityTest}
+                color="#F59E0B"
+              />
+
+              <TestButton 
+                icon={Zap}
+                title="Weekend Warrior"
+                description="Test Sat/Sun XP bonus"
+                time="Sat/Sun 10 AM"
+                onPress={handleWeekendTest}
+                color="#8B5CF6"
+              />
+
+              <TestButton 
+                icon={Bell}
+                title="Trial Countdown"
+                description="Test expiry warning"
+                time="24h Before End"
+                onPress={handleTrialExpiryTest}
+                color="#EF4444"
+              />
+
+              <View style={styles.noteBox}>
+                <Text style={[styles.noteText, { color: theme.colors.textSecondary }]}>
+                  Note: If you don't see notifications, ensure you are using a physical device or a simulator with Play Services. Verify your app's notification settings in system preferences.
                 </Text>
               </View>
             </View>
-          </BlurView>
-
-          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>Available Tests</Text>
-          
-          <TestButton 
-            icon={Bell}
-            title="Instant Test"
-            description="Trigger a generic notification immediately"
-            onPress={handleInstantTest}
-            color="#8B5CF6"
-          />
-
-          <TestButton 
-            icon={Zap}
-            title="Personalized Daily"
-            description={`Test with ${firstName}/${lastSubject}`}
-            time="Daily 9:00 AM"
-            onPress={handleTestDaily}
-            color="#FACC15"
-          />
-
-          <TestButton 
-            icon={Star}
-            title="Smart Nudge"
-            description={`Test with ${lessonCount} lessons`}
-            time="48h After Activity"
-            onPress={handleSmartNudgeTest}
-            color="#3B82F6"
-          />
-
-          <TestButton 
-            icon={Flame}
-            title="Streak Alert"
-            description="Test streak protection"
-            time="Daily 6:00 PM"
-            onPress={handleTestStreak}
-            color="#EF4444"
-          />
-
-          <TestButton 
-            icon={Star}
-            title="Achievement Unlocked"
-            description="Test celebration message"
-            time="Instant Event"
-            onPress={handleTestAchievement}
-            color="#3B82F6"
-          />
-
-          <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, marginTop: 20 }]}>Phase 2 Integration</Text>
-
-          <TestButton 
-            icon={Flame}
-            title="Inactivity Nudge"
-            description={`Test missing ${firstName}`}
-            time="48h Inactivity"
-            onPress={handleInactivityTest}
-            color="#F59E0B"
-          />
-
-          <TestButton 
-            icon={Zap}
-            title="Weekend Warrior"
-            description="Test Saturday XP bonus"
-            time="Sat 10:00 AM"
-            onPress={handleWeekendTest}
-            color="#8B5CF6"
-          />
-
-          <TestButton 
-            icon={Bell}
-            title="Trial Countdown"
-            description="Test expiry warning"
-            time="24h Before End"
-            onPress={handleTrialExpiryTest}
-            color="#EF4444"
-          />
-
-          <View style={styles.noteBox}>
-            <Text style={[styles.noteText, { color: theme.colors.textSecondary }]}>
-              Note: If you don't see notifications, ensure you are using a physical device or a simulator with Play Services. Verify your app's notification settings in system preferences.
-            </Text>
-          </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -403,5 +544,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  largeScreenContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 30,
+    width: '100%',
+  },
+  column: {
+    flex: 1,
+    maxWidth: 500,
   },
 });

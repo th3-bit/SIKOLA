@@ -6,7 +6,7 @@ export default function CircularProgress({
   progress = 0, 
   strokeWidth = 10, 
   color = '#10B981',
-  backgroundColor = 'rgba(255,255,255,0.1)',
+  backgroundColor = 'rgba(255,255,255,0.22)',
   children 
 }) {
   // Ensure progress is between 0 and 1

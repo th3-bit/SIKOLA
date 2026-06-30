@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, ChevronRight, Zap, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
+const { scale, verticalScale, moderateScale } = require('../utils/Scaling');
 
 export default function ExamplesScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
@@ -97,7 +98,7 @@ Process:
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
-            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
           >
             <ArrowLeft color={theme.colors.textPrimary} size={24} />
           </TouchableOpacity>
@@ -113,7 +114,7 @@ Process:
 
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
-            <View style={[styles.progressBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}>
+            <View style={[styles.progressBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.1)' }]}>
               <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: lesson.color }]} />
             </View>
           </View>
@@ -138,9 +139,17 @@ Process:
               />
 
               {/* Example Title */}
-              <View style={styles.titleContainer}>
-                <Text style={[styles.exampleTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                  Example Title: <Text style={{ fontWeight: '800', textDecorationLine: 'underline' }}>{currentExampleData.title}</Text>
+              <View style={[styles.titleContainer, { marginBottom: verticalScale(20) }]}>
+                <Text
+                  numberOfLines={2}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                  style={{ fontSize: moderateScale(22), color: isDark ? '#FFFFFF' : '#000000', fontFamily: theme.typography.fontFamily, lineHeight: moderateScale(30) }}
+                >
+                  Example Title:{' '}
+                  <Text style={{ fontWeight: '800', textDecorationLine: 'underline', color: lesson.color }}>
+                    {currentExampleData.title}
+                  </Text>
                 </Text>
               </View>
 
@@ -167,12 +176,7 @@ Process:
               <View style={styles.takeawayWrapper}>
                 <View style={[styles.takeawayCard, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2' }]}>
                   <View style={styles.takeawayAccent} />
-                  <View style={styles.takeawayIconContainer}>
-                    <View style={[styles.takeawayIconCircle, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FFF' }]}>
-                      <Zap color="#EF4444" size={18} fill="#EF4444" />
-                    </View>
-                  </View>
-                  <View style={styles.takeawayContent}>
+                  <View style={[styles.takeawayContent, { marginLeft: scale(16) }]}>
                     <Text style={[styles.takeawayHeader, { fontFamily: theme.typography.fontFamily }]}>KEY TAKEAWAY</Text>
                     <Text style={[styles.takeawayText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                       WHAT: {currentExampleData.keyTakeaway}
@@ -195,7 +199,7 @@ Process:
         <View style={styles.navigationContainer}>
           {currentExample > 0 && (
             <TouchableOpacity 
-              style={[styles.navButton, styles.prevButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+              style={[styles.navButton, styles.prevButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
               onPress={handlePrevious}
             >
               <Text style={[styles.navButtonText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
@@ -230,116 +234,116 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 16,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(10),
+    paddingBottom: verticalScale(16),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   headerInfo: {
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     fontWeight: '800',
   },
   headerSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(4),
   },
   progressContainer: {
     width: '100%',
   },
   progressBar: {
-    height: 6,
-    borderRadius: 3,
+    height: verticalScale(6),
+    borderRadius: scale(3),
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: scale(3)
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
   },
   exampleCardWrapper: {
-    borderRadius: 28,
+    borderRadius: scale(28),
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: verticalScale(10) },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowRadius: scale(20),
     elevation: 10,
   },
   exampleCard: {
-    padding: 24,
+    padding: scale(24),
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: scale(28),
     overflow: 'hidden',
   },
   titleContainer: {
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
     alignSelf: 'flex-start',
   },
   exampleTitle: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '800',
-    paddingBottom: 4,
+    paddingBottom: verticalScale(4),
   },
   section: {
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   sectionLabel: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '800',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   sectionContent: {
-    fontSize: 15,
-    lineHeight: 26,
+    fontSize: moderateScale(15),
+    lineHeight: moderateScale(26),
   },
   solutionBox: {
-    padding: 16,
-    borderRadius: 16,
+    padding: scale(16),
+    borderRadius: scale(16),
     borderWidth: 1,
   },
   takeawayWrapper: {
-    marginTop: 10,
-    borderRadius: 24,
+    marginTop: verticalScale(10),
+    borderRadius: scale(24),
     overflow: 'hidden',
   },
   takeawayCard: {
     flexDirection: 'row',
-    padding: 20,
-    borderRadius: 24,
+    padding: scale(20),
+    borderRadius: scale(24),
     alignItems: 'center',
   },
   takeawayAccent: {
     position: 'absolute',
     left: 0,
-    top: 20,
-    bottom: 20,
-    width: 6,
+    top: verticalScale(20),
+    bottom: verticalScale(20),
+    width: scale(6),
     backgroundColor: '#EF4444',
-    borderTopRightRadius: 4,
-    borderBottomRightRadius: 4,
+    borderTopRightRadius: scale(4),
+    borderBottomRightRadius: scale(4),
   },
   takeawayIconContainer: {
-    marginRight: 16,
-    marginLeft: 8,
+    marginRight: scale(16),
+    marginLeft: scale(8),
   },
   takeawayIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(14),
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -348,30 +352,30 @@ const styles = StyleSheet.create({
   },
   takeawayHeader: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '900',
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   takeawayText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: moderateScale(24),
   },
   navigationContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingBottom: 24,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(16),
+    paddingBottom: verticalScale(24),
   },
   navButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-    gap: 8,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(24),
+    borderRadius: scale(20),
+    gap: scale(8),
   },
   prevButton: {
     flex: 1,
@@ -380,7 +384,7 @@ const styles = StyleSheet.create({
     flex: 2,
   },
   navButtonText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
 });

@@ -127,7 +127,7 @@ export default function MasteryModal({
       styles.modalContent, 
       { 
         backgroundColor: isDark ? 'rgba(28, 28, 30, 0.96)' : 'rgba(255, 255, 255, 0.96)',
-        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+        borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)',
         transform: [{ scale: scaleValue }],
         opacity: opacityValue
       }

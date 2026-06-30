@@ -1,0 +1,181 @@
+const fs = require('fs');
+
+const filePath = 'c:\\\\Users\\\\HP\\\\OneDrive\\\\Desktop\\\\CODES\\\\sikola-app\\\\src\\\\screens\\\\SubjectDetailScreen.js';
+// Normalize all line endings to \n so our string replacements work perfectly!
+let content = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
+
+// 1. Imports
+content = content.replace(
+    "BackHandler } from 'react-native';",
+    "BackHandler, useWindowDimensions } from 'react-native';"
+);
+
+// 2. isLargeScreen
+content = content.replace(
+    "const { theme, isDark } = useTheme();",
+    "const { width: windowWidth } = useWindowDimensions();\n  const isLargeScreen = windowWidth >= 768;\n  const { theme, isDark } = useTheme();"
+);
+
+// 3. Restructuring return block
+const old_return = `  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.background}
+      />
+      
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <View style={styles.header}>`;
+
+const new_return = `  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.background}
+      />
+      
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={isLargeScreen ? styles.scrollContentLarge : styles.scrollContent}
+        >
+          <View style={isLargeScreen ? styles.largeScreenContainer : null}>
+            
+            {/* Left Column (Sticky Header & Stats) */}
+            <View style={isLargeScreen ? styles.leftColumn : null}>
+              <View style={[styles.header, isLargeScreen && { paddingHorizontal: 0, paddingTop: 10 }]}>`;
+
+if (content.includes(old_return)) {
+    content = content.replace(old_return, new_return);
+} else {
+    console.error("Failed to replace old_return");
+}
+
+const old_loading_stats = `         </View>
+ 
+         {loading ? (
+            <SubjectDetailSkeleton />
+         ) : (
+          <>
+            {/* Stats Card */}
+            <View style={[styles.statsRow, { marginBottom: verticalScale(25) }]}`;
+
+const new_loading_stats = `              </View>
+
+              {/* Stats Card (only show if not loading) */}
+              {!loading && (
+                <View style={[styles.statsRow, { marginBottom: verticalScale(25) }, isLargeScreen && { flexDirection: 'column', gap: 12, paddingHorizontal: 0 }]}`;
+
+if (content.includes(old_loading_stats)) {
+    content = content.replace(old_loading_stats, new_loading_stats);
+} else {
+    console.error("Failed to replace old_loading_stats");
+}
+
+const old_stat_items = `                    borderRadius: moderateScale(16),
+                    marginHorizontal: scale(4)
+                  }]}`;
+
+const new_stat_items = `                    borderRadius: moderateScale(16),
+                    marginHorizontal: isLargeScreen ? 0 : scale(4),
+                    width: isLargeScreen ? '100%' : undefined
+                  }]}`;
+if (content.includes(old_stat_items)) {
+    content = content.split(old_stat_items).join(new_stat_items); // Replace all occurrences
+} else {
+    console.error("Failed to replace old_stat_items");
+}
+
+const old_scroll_start = `            </View>
+
+            {/* Topics/Lessons List (Curriculum Style) */}
+            <ScrollView 
+              style={styles.scrollView}
+              contentContainerStyle={styles.lessonsContent}
+              showsVerticalScrollIndicator={false}
+            >`;
+
+const new_scroll_start = `              </View>
+              )}
+            </View>
+
+            {/* Right Column (Courses List & Skeleton) */}
+            <View style={isLargeScreen ? [styles.rightColumnGlass, { 
+              backgroundColor: isDark ? 'rgba(30, 30, 30, 0.4)' : 'rgba(255, 255, 255, 0.6)',
+              borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)'
+            }] : { flex: 1 }}>
+              
+              {loading ? (
+                <SubjectDetailSkeleton />
+              ) : (
+              <View style={[styles.scrollView, isLargeScreen && { paddingHorizontal: 0 }]}`;
+
+if (content.includes(old_scroll_start)) {
+    content = content.replace(old_scroll_start, new_scroll_start);
+} else {
+    console.error("Failed to replace old_scroll_start");
+}
+
+const old_scroll_end = `                  )}
+                </View>
+
+                <View style={{ height: 120 }} />
+            </ScrollView>
+          </>
+         )}
+      </SafeAreaView>`;
+
+const new_scroll_end = `                  )}
+                </View>
+
+                {/* Padding at the bottom to ensure content doesn't get hidden behind banners */}
+                <View style={{ height: 120 }} />
+              </View>
+              )}
+            </View>
+
+          </View>
+        </ScrollView>
+      </SafeAreaView>`;
+
+if (content.includes(old_scroll_end)) {
+    content = content.replace(old_scroll_end, new_scroll_end);
+} else {
+    console.error("Failed to replace old_scroll_end");
+}
+
+// Add styles
+const new_styles = `
+  scrollContent: {
+    paddingBottom: verticalScale(120),
+  },
+  scrollContentLarge: {
+    paddingHorizontal: scale(30),
+    paddingTop: verticalScale(20),
+    paddingBottom: verticalScale(120),
+  },
+  largeScreenContainer: {
+    flexDirection: 'row',
+    gap: scale(30),
+    alignItems: 'flex-start',
+  },
+  leftColumn: {
+    flex: 1,
+    maxWidth: 350,
+    position: 'sticky',
+    top: verticalScale(10),
+    zIndex: 10,
+  },
+  rightColumnGlass: {
+    flex: 2,
+    borderRadius: scale(32),
+    borderWidth: 1,
+    padding: scale(20),
+    overflow: 'hidden',
+  },
+`;
+content = content.replace("  header: {", new_styles + "  header: {");
+
+fs.writeFileSync(filePath, content, "utf-8");
+console.log("Updated via node!");

@@ -7,6 +7,7 @@ import { CheckCircle, Award, Share2, Home, ArrowRight, Star } from 'lucide-react
 import { useTheme } from '../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
+const { scale, verticalScale, moderateScale } = require('../utils/Scaling');
 
 // Simple particle system for confetti effect
 const ConfettiParticle = ({ index }) => {
@@ -51,7 +52,7 @@ const ConfettiParticle = ({ index }) => {
 
   const colors = ['#FACC15', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981'];
   const color = colors[index % colors.length];
-  const size = 10 + Math.random() * 10;
+  const size = scale(10) + Math.random() * scale(10);
 
   return (
     <Animated.View
@@ -62,12 +63,12 @@ const ConfettiParticle = ({ index }) => {
         width: size,
         height: size,
         backgroundColor: color,
-        borderRadius: size / 2, // Circle or square? Let's mix it up
+        borderRadius: size / 2, 
         transform: [
           { translateX: positionX },
           { translateY: positionY },
           { rotate: spin },
-          { scale: opacity } // Shrink as they fade
+          { scale: opacity } 
         ],
         opacity: opacity,
         zIndex: 100,
@@ -122,7 +123,7 @@ export default function CourseCompletionScreen({ navigation, route }) {
                 colors={[theme.colors.secondary, '#8B5CF6']}
                 style={styles.iconCircle}
               >
-                <Award size={64} color="#FFF" fill="#FFF" />
+                <Award size={scale(64)} color="#FFF" fill="#FFF" />
               </LinearGradient>
             </View>
 
@@ -197,7 +198,7 @@ export default function CourseCompletionScreen({ navigation, route }) {
 
                  <TouchableOpacity 
                    style={[styles.outlineButton, { borderColor: theme.colors.glassBorder }]}
-                   onPress={() => navigation.navigate('Home')}
+                   onPress={() => navigation.navigate('MainApp', { screen: 'Home' })}
                  >
                     <Home size={20} color={theme.colors.textPrimary} />
                     <Text style={[styles.outlineButtonText, { color: theme.colors.textPrimary }]}>Home</Text>
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    padding: 24,
+    padding: scale(24),
     justifyContent: 'center',
   },
   contentContainer: {
@@ -234,30 +235,30 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
-    width: 120,
-    height: 120,
+    width: scale(120),
+    height: scale(120),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: verticalScale(30),
   },
   glowRing: {
     position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: scale(120),
+    height: scale(120),
+    borderRadius: scale(60),
     opacity: 0.5,
   },
   glowRingInner: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: scale(100),
+    height: scale(100),
+    borderRadius: scale(50),
     opacity: 0.8,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scale(80),
+    height: scale(80),
+    borderRadius: scale(40),
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: "#000",
@@ -267,59 +268,59 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   title: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: '900',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: moderateScale(16),
+    marginBottom: verticalScale(8),
     textAlign: 'center',
   },
   courseName: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '800',
-    marginBottom: 40,
+    marginBottom: verticalScale(40),
     textAlign: 'center',
   },
   certificateCard: {
     width: '100%',
-    padding: 24,
-    borderRadius: 24,
+    padding: scale(24),
+    borderRadius: scale(24),
     borderWidth: 1,
     overflow: 'hidden',
-    marginBottom: 40,
+    marginBottom: verticalScale(40),
   },
   certificateHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    gap: 12,
+    marginBottom: verticalScale(20),
+    gap: scale(12),
   },
   certLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(12),
+    backgroundColor: 'rgba(255,255,255,0.22)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   certLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '800',
     letterSpacing: 1,
   },
   separator: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    marginBottom: verticalScale(20),
   },
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   statItem: {
     alignItems: 'center',
@@ -327,36 +328,36 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    height: 30,
+    height: verticalScale(30),
   },
   statValue: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '900',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     opacity: 0.7,
   },
   xpRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 16,
-    gap: 8,
+    padding: scale(12),
+    borderRadius: scale(16),
+    gap: scale(8),
   },
   xpText: {
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   buttonContainer: {
     width: '100%',
-    gap: 16,
+    gap: verticalScale(16),
   },
   primaryButton: {
     width: '100%',
-    borderRadius: 20,
+    borderRadius: scale(20),
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
@@ -366,32 +367,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    borderRadius: 20,
-    gap: 8,
+    paddingVertical: verticalScale(18),
+    borderRadius: scale(20),
+    gap: scale(8),
   },
   buttonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '800',
   },
   secondaryButtons: {
     flexDirection: 'row',
-    gap: 16,
+    gap: scale(16),
   },
   outlineButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 20,
+    paddingVertical: verticalScale(16),
+    borderRadius: scale(20),
     borderWidth: 1,
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    gap: scale(8),
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   outlineButtonText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
   }
 });

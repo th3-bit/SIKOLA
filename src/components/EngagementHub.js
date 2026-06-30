@@ -57,7 +57,7 @@ export default function EngagementHub({ navigation }) {
           cx={center}
           cy={center}
           r={radius}
-          stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}
+          stroke={isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'}
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -177,7 +177,7 @@ export default function EngagementHub({ navigation }) {
       >
         <LinearGradient
           colors={['rgba(139, 92, 246, 0.1)', 'rgba(99, 102, 241, 0.1)']}
-          style={[styles.featuredCard, { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
+          style={[styles.featuredCard, { borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' }]}
         >
           <View style={styles.featuredIconBg}>
             <Zap size={24} color="#8B5CF6" fill="#8B5CF6" />
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   },
   levelProgressContainer: {
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
     borderRadius: 2,
     marginTop: 8,
     marginBottom: 4,
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   webProgressBar: {
     width: '80%',
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 10,

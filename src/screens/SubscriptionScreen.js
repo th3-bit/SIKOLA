@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import logger from '../utils/logger';
 import {
   View,
   Text,
@@ -7,9 +8,11 @@ import {
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import {
   Check,
   Clock,
@@ -21,7 +24,9 @@ import {
   ArrowLeft,
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 
 const { width } = Dimensions.get('window');
 
@@ -37,15 +42,38 @@ const planColors = {
   free_trial: '#10B981',
   per_course: '#3B82F6',
   daily: '#F59E0B',
-  weekly: '#8B5CF6',
-  monthly: '#EC4899',
+  weekly: '#FF7A00',
+  monthly: '#F50707',
 };
 
-export default function SubscriptionScreen({ navigation }) {
+export default function SubscriptionScreen({ navigation, route }) {
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768;
   const { theme, isDark } = useTheme();
+  const { isTrialExpired, subscriptions } = useProgress();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedPlanId, setExpandedPlanId] = useState(null);
+
+  // Course context passed from a locked course modal (if any)
+  const lockedCourse = route.params?.lockedCourse || null;
+  const isFirstTime  = route.params?.firstTime    || false;
+
+  const hasActiveSub = subscriptions && subscriptions.length > 0;
+
+  // Filter plans based on eligibility
+  const eligiblePlans = plans.filter(plan => {
+    if (isTrialExpired && plan.price === 0) return false;
+    if (hasActiveSub && plan.plan_type === 'free_trial') return false;
+    return true;
+  });
+
+  // Keep expandedPlanId pointing at a valid eligible plan
+  React.useEffect(() => {
+    if (eligiblePlans.length > 0 && !eligiblePlans.find(p => p.id === expandedPlanId)) {
+      setExpandedPlanId(eligiblePlans[0].id);
+    }
+  }, [eligiblePlans.length]);
 
   useEffect(() => {
     fetchPlans();
@@ -55,20 +83,24 @@ export default function SubscriptionScreen({ navigation }) {
     try {
       const { data, error } = await supabase
         .from('subscription_plans')
-        .select('*') // Reverted to * to ensure all fields are present
+        .select('*')
         .eq('is_active', true)
         .order('price');
 
-      console.log('Plans fetched:', data.length);
-
       if (error) throw error;
-      setPlans(data || []);
+
+      const data2 = data || [];
+      logger.log('SubscriptionScreen: fetched', data2.length, 'plans');
+      setPlans(data2);
+
       // Auto-expand the first popular or middle plan if available
-      const popular = data?.find(p => p.plan_type === 'weekly') || data?.[0];
+      const defaultType = route.params?.defaultPlanType;
+      const targetPlan = defaultType ? data2.find(p => p.plan_type === defaultType) : null;
+      const popular = targetPlan || data2.find(p => p.plan_type === 'weekly') || data2[0];
       if (popular) setExpandedPlanId(popular.id);
 
     } catch (error) {
-      console.error('Error fetching plans:', error);
+      logger.error('Error fetching plans:', error);
     } finally {
       setLoading(false);
     }
@@ -85,28 +117,24 @@ export default function SubscriptionScreen({ navigation }) {
   };
 
   const handleSelectPlan = (plan) => {
-    console.log('handleSelectPlan called with:', plan);
     if (!plan) return;
-    
-    // Navigate based on plan type
+
     if (plan.plan_type === 'per_course') {
-      console.log('Navigating to Subjects for Per Course');
-      // Use nested navigation to reach the Tab screen with params
-      navigation.navigate('MainApp', {
-        screen: 'Topics',
-        params: { selectingForSubscription: true, plan: plan }
-      });
+      if (lockedCourse) {
+        navigation.navigate('Payment', { plan, course: lockedCourse });
+      } else {
+        navigation.navigate('MainApp', {
+          screen: 'Course',
+          params: { selectingForSubscription: true, plan: plan }
+        });
+      }
     } else {
-      console.log('Navigating to Payment');
       navigation.navigate('Payment', { plan });
     }
   };
 
   const handlePressCard = (planId) => {
-    // Toggle expand
-    if (expandedPlanId === planId) {
-      // Optional: setExpandedPlanId(null); // Allow collapsing? formatting suggests radio behavior so maybe not needed to collapse fully
-    } else {
+    if (expandedPlanId !== planId) {
       setExpandedPlanId(planId);
     }
   };
@@ -119,95 +147,96 @@ export default function SubscriptionScreen({ navigation }) {
     return (
       <View
         style={[
-          styles.planCardWrapper, 
-          { 
+          styles.planCardWrapper,
+          {
             shadowColor: isExpanded ? color : 'transparent',
             borderColor: isExpanded ? color : theme.colors.glassBorder,
             borderWidth: isExpanded ? 2 : 1,
           }
         ]}
       >
-        <View
-          style={[styles.planCard, { 
-            backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-            borderColor: isExpanded ? color : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)')
+        <BlurView
+          intensity={isLargeScreen ? 20 : 80}
+          tint={isDark ? "dark" : "light"}
+          style={[styles.planCard, {
+            backgroundColor: isLargeScreen ? theme.colors.glass : (isDark ? 'rgba(25, 25, 25, 0.8)' : 'rgba(255, 255, 255, 0.8)'),
+            borderColor: isExpanded ? color : (isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)')
           }]}
         >
           {/* Header: Clickable to Toggle Expand */}
-          <TouchableOpacity 
-            activeOpacity={0.7} 
+          <TouchableOpacity
+            activeOpacity={0.7}
             onPress={() => handlePressCard(plan.id)}
             style={styles.cardHeader}
           >
             <View style={styles.headerLeft}>
-               <Text style={[styles.planName, { color: theme.colors.textPrimary }]}>
-                  {plan.name}
-               </Text>
-               <View style={styles.priceRow}>
-                 <Text style={[styles.planPriceMini, { color: theme.colors.textSecondary }]}>
-                   {formatPrice(plan.price)}
-                 </Text>
-                 <Text style={[styles.planDurationMini, { color: theme.colors.textSecondary }]}>
-                   {plan.price > 0 ? ` / ${formatDuration(plan.duration_hours)}` : ''}
-                 </Text>
-               </View>
+              <Text style={[styles.planName, { color: theme.colors.textPrimary }]}>
+                {plan.name}
+              </Text>
+              <View style={styles.priceRow}>
+                <Text style={[styles.planPriceMini, { color: theme.colors.textSecondary }]}>
+                  {formatPrice(plan.price)}
+                </Text>
+                <Text style={[styles.planDurationMini, { color: theme.colors.textSecondary }]}>
+                  {plan.price > 0 ? ` / ${formatDuration(plan.duration_hours)}` : ''}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.headerRight}>
-               {isPopular && !isExpanded && (
-                  <View style={[styles.popularBadgeMini, { backgroundColor: color }]}>
-                    <Text style={styles.popularTextMini}>Best Value</Text>
-                  </View>
-               )}
-               {/* Radio Button */}
-               <View style={[
-                 styles.radioButton, 
-                 { borderColor: isExpanded ? color : theme.colors.textSecondary },
-                 isExpanded && { backgroundColor: color, borderColor: color }
-               ]}>
-                 {isExpanded && <Check size={14} color="#FFF" />}
-               </View>
+              {isPopular && !isExpanded && (
+                <View style={[styles.popularBadgeMini, { backgroundColor: color }]}>
+                  <Text style={styles.popularTextMini}>Best Value</Text>
+                </View>
+              )}
+              {/* Radio Button */}
+              <View style={[
+                styles.radioButton,
+                { borderColor: isExpanded ? color : theme.colors.textSecondary },
+                isExpanded && { backgroundColor: color, borderColor: color }
+              ]}>
+                {isExpanded && <Check size={scale(14)} color="#FFF" />}
+              </View>
             </View>
           </TouchableOpacity>
 
-          {/* Expanded Content: Independent click area */}
+          {/* Expanded Content */}
           {isExpanded && (
             <View style={styles.expandedContent}>
-               <View style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />
-               
-               <Text style={[styles.planDescription, { color: theme.colors.textSecondary }]}>
-                 {plan.description}
-               </Text>
+              <View style={[styles.divider, { backgroundColor: theme.colors.glassBorder }]} />
 
-               <View style={styles.featuresContainer}>
-                  <View style={styles.featureRow}>
-                    <Check size={16} color={color} />
-                    <Text style={[styles.featureText, { color: theme.colors.textPrimary }]}>
-                      {plan.access_type === 'all_courses' ? 'Access All Courses' : 'Single Course Access'}
-                    </Text>
-                  </View>
-                   <View style={styles.featureRow}>
-                    <Check size={16} color={color} />
-                    <Text style={[styles.featureText, { color: theme.colors.textPrimary }]}>
-                       Quizzes & Practice
-                    </Text>
-                  </View>
-               </View>
+              <Text style={[styles.planDescription, { color: theme.colors.textSecondary }]}>
+                {plan.description}
+              </Text>
 
-               <TouchableOpacity
-                  style={[styles.selectButton, { backgroundColor: color }]}
-                  onPress={() => handleSelectPlan(plan)}
-                >
-                  <Text style={styles.selectButtonText}>
-                    {plan.price === 0 ? 'Start Free Trial' : 'Continue'}
+              <View style={styles.featuresContainer}>
+                <View style={styles.featureRow}>
+                  <Check size={16} color={color} />
+                  <Text style={[styles.featureText, { color: theme.colors.textPrimary }]}>
+                    {plan.access_type === 'all_courses' ? 'Access All Courses' : 'Single Course Access'}
                   </Text>
-                </TouchableOpacity>
+                </View>
+                <View style={styles.featureRow}>
+                  <Check size={16} color={color} />
+                  <Text style={[styles.featureText, { color: theme.colors.textPrimary }]}>
+                    Quizzes & Practice
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.selectButton, { backgroundColor: color }]}
+                onPress={() => handleSelectPlan(plan)}
+              >
+                <Text style={styles.selectButtonText}>
+                  {plan.price === 0 ? 'Start Free Trial' : 'Continue'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
-        </View>
+        </BlurView>
       </View>
     );
-
   };
 
   return (
@@ -219,15 +248,24 @@ export default function SubscriptionScreen({ navigation }) {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
-          >
-            <ArrowLeft color={theme.colors.textPrimary} size={24} />
-          </TouchableOpacity>
+          {isFirstTime ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('MainApp')}
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
+            >
+              <Text style={[styles.skipText, { color: theme.colors.textPrimary }]}>Skip</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
+            >
+              <ArrowLeft color={theme.colors.textPrimary} size={scale(24)} />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.headerInfo}>
-            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary, textAlign: isLargeScreen ? 'center' : 'left' }]}>
               Choose Plan
             </Text>
           </View>
@@ -237,16 +275,50 @@ export default function SubscriptionScreen({ navigation }) {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.textPrimary} />
           </View>
+        ) : eligiblePlans.length === 0 ? (
+          /* ── Empty / Error state ── */
+          <View style={styles.emptyContainer}>
+            <Crown size={scale(48)} color={theme.colors.textSecondary} style={{ opacity: 0.4, marginBottom: verticalScale(16) }} />
+            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+              No Plans Available
+            </Text>
+            <Text style={[styles.emptyDesc, { color: theme.colors.textSecondary }]}>
+              We couldn't load the plans right now.{'\n'}Please check your connection and try again.
+            </Text>
+            <TouchableOpacity
+              onPress={() => { setLoading(true); fetchPlans(); }}
+              style={[styles.retryBtn, { backgroundColor: theme.colors.secondary }]}
+            >
+              <Text style={[styles.retryText, { color: isDark ? '#000' : '#fff' }]}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} />
-            ))}
-
-            <View style={{ height: 40 }} />
+            {isLargeScreen ? (
+              <View style={styles.largeScreenWrapper}>
+                <BlurView 
+                  intensity={15} 
+                  tint={isDark ? "dark" : "light"} 
+                  style={[styles.largeGlassContainer, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}
+                >
+                  <View style={styles.gridContainer}>
+                    {eligiblePlans.map((plan) => (
+                      <View key={plan.id} style={styles.gridItem}>
+                        <PlanCard plan={plan} />
+                      </View>
+                    ))}
+                  </View>
+                </BlurView>
+              </View>
+            ) : (
+              eligiblePlans.map((plan) => (
+                <PlanCard key={plan.id} plan={plan} />
+              ))
+            )}
+            <View style={{ height: verticalScale(40) }} />
           </ScrollView>
         )}
       </SafeAreaView>
@@ -265,30 +337,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(10),
+    paddingBottom: verticalScale(20),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
+  },
+  skipText: {
+    fontSize: moderateScale(15),
+    fontWeight: '600',
   },
   headerInfo: {
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: '900',
     letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    marginTop: 4,
-    opacity: 0.7,
   },
   loadingContainer: {
     flex: 1,
@@ -296,24 +367,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
   },
   planCardWrapper: {
-    marginBottom: 16,
-    borderRadius: 16,
+    marginBottom: verticalScale(16),
+    borderRadius: scale(16),
   },
   planCard: {
-    borderRadius: 16,
+    borderRadius: scale(16),
     overflow: 'hidden',
-    padding: 0, 
+    padding: 0,
     borderWidth: 1,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    minHeight: 80,
+    padding: scale(20),
+    minHeight: verticalScale(80),
   },
   headerLeft: {
     flex: 1,
@@ -322,83 +393,128 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: scale(12),
   },
   planName: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   planPriceMini: {
-    fontSize: 15,
+    fontSize: moderateScale(15),
     fontWeight: '600',
   },
   planDurationMini: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   radioButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: scale(24),
+    height: scale(24),
+    borderRadius: scale(12),
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FFF',
-  },
   popularBadgeMini: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(8),
   },
   popularTextMini: {
     color: '#FFF',
-    fontSize: 10,
+    fontSize: moderateScale(10),
     fontWeight: '700',
   },
   expandedContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingBottom: verticalScale(20),
   },
   divider: {
-    height: 1,
-    marginBottom: 16,
+    height: verticalScale(1),
+    marginBottom: verticalScale(16),
   },
   featuresContainer: {
-    marginTop: 16,
-    marginBottom: 20,
-    gap: 10,
+    marginTop: verticalScale(16),
+    marginBottom: verticalScale(20),
+    gap: scale(10),
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: scale(10),
   },
   featureText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   planDescription: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(20),
   },
   selectButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: verticalScale(14),
+    borderRadius: scale(12),
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
   },
   selectButtonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
+  },
+
+  // Empty / error state
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: scale(32),
+  },
+  emptyTitle: {
+    fontSize: moderateScale(20),
+    fontWeight: '800',
+    marginBottom: verticalScale(10),
+    textAlign: 'center',
+  },
+  emptyDesc: {
+    fontSize: moderateScale(14),
+    lineHeight: moderateScale(22),
+    textAlign: 'center',
+    marginBottom: verticalScale(28),
+    opacity: 0.8,
+  },
+  retryBtn: {
+    paddingHorizontal: scale(32),
+    paddingVertical: verticalScale(14),
+    borderRadius: scale(14),
+  },
+  retryText: {
+    fontSize: moderateScale(15),
+    fontWeight: '700',
+  },
+  gridContainer: {
+    alignItems: 'center',
+    gap: 20,
+    width: '100%',
+  },
+  gridItem: {
+    width: '100%',
+  },
+  largeScreenWrapper: {
+    alignItems: 'center',
+    width: '100%',
+    paddingBottom: 20,
+  },
+  largeGlassContainer: {
+    width: '100%',
+    maxWidth: 600,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 30,
+    alignItems: 'center',
   },
 });

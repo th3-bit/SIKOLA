@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import logger from '../utils/logger';
 
 /**
  * Check if user has an active subscription
@@ -35,7 +36,7 @@ export const checkSubscriptionStatus = async (userId) => {
       plan: null,
     };
   } catch (error) {
-    console.error('Error checking subscription:', error);
+    logger.error('Error checking subscription:', error);
     return {
       hasAccess: false,
       subscription: null,
@@ -84,7 +85,7 @@ export const canAccessTopic = async (userId, topicId) => {
 
     return hasTopicAccess;
   } catch (error) {
-    console.error('Error checking topic access:', error);
+    logger.error('Error checking topic access:', error);
     return false;
   }
 };
@@ -111,7 +112,7 @@ export const getUserSubscriptions = async (userId) => {
     if (error) throw error;
     return data || [];
   } catch (error) {
-    console.error('Error getting subscriptions:', error);
+    logger.error('Error getting subscriptions:', error);
     return [];
   }
 };
@@ -137,7 +138,7 @@ export const isOnFreeTrial = async (userId) => {
 
     return data?.some(sub => sub.plan.plan_type === 'free_trial') || false;
   } catch (error) {
-    console.error('Error checking free trial:', error);
+    logger.error('Error checking free trial:', error);
     return false;
   }
 };
@@ -182,6 +183,6 @@ export const deactivateExpiredSubscriptions = async (userId) => {
 
     if (error) throw error;
   } catch (error) {
-    console.error('Error deactivating subscriptions:', error);
+    logger.error('Error deactivating subscriptions:', error);
   }
 };

@@ -1,17 +1,47 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { Alert } from 'react-native';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { Alert, AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { getSubjectStyle } from '../constants/SubjectConfig';
 import NotificationService from '../NotificationService';
-import { getLevelInfo } from '../constants/LevelConfig';
-import RewardModal from '../components/RewardModal';
+import logger from '../utils/logger';
+
+// On web, we flag that progress was successfully loaded this browser session.
+// On the next reload (tab-return), we start with isLoading=false so the app
+// renders immediately and refreshes data silently in the background.
+const PROGRESS_LOADED_KEY = '@sikola_progress_loaded';
+function isProgressCached() {
+  try {
+    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+      return sessionStorage.getItem(PROGRESS_LOADED_KEY) === '1';
+    }
+  } catch (_) {}
+  return false;
+}
+function markProgressCached() {
+  try {
+    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(PROGRESS_LOADED_KEY, '1');
+    }
+  } catch (_) {}
+}
+
+// Service Imports (Phase 1)
+import { userService } from '../services/userService';
+import { courseService } from '../services/courseService';
+import { progressService } from '../services/progressService';
+
+// Utilities Imports (Phase 2)
+import { AccessControl } from '../utils/AccessControl';
+import { AchievementEngine } from '../utils/AchievementEngine';
 
 const ProgressContext = createContext();
 
-export const useProgress = () => {
+export function useProgress() {
   return useContext(ProgressContext);
-};
+}
+
+// Modals extracted to GlobalModals (Phase 4)
 
 export const ProgressProvider = ({ children }) => {
   const [courseProgress, setCourseProgress] = useState({});
@@ -24,344 +54,466 @@ export const ProgressProvider = ({ children }) => {
   const [recentLessons, setRecentLessons] = useState([]);
   const [continueLearning, setContinueLearning] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [userActivities, setUserActivities] = useState([]);
   const [userProfile, setUserProfile] = useState({ name: 'Sikola Student', email: '' });
   const [weeklyActivity, setWeeklyActivity] = useState(new Array(7).fill(false));
-    const [subscriptions, setSubscriptions] = useState([]);
+  const [subscriptions, setSubscriptions] = useState([]);
   const [isTrialExpired, setIsTrialExpired] = useState(false);
   const [trialDaysRemaining, setTrialDaysRemaining] = useState(0);
-  const [levelInfo, setLevelInfo] = useState(getLevelInfo(0));
+  const [levelInfo, setLevelInfo] = useState(AchievementEngine.getLevelInfo(0));
   const [subscriptionInfo, setSubscriptionInfo] = useState({ type: 'trial', label: 'Loading...', subLabel: '' });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isProgressCached()); // skip loading screen on cached reload
+  const [achievements, setAchievements] = useState([]);
+  const [subjects, setSubjects] = useState([]); 
+  const [subjectBreakdown, setSubjectBreakdown] = useState([]); 
+  
+  // Modals state
   const [showRewardModal, setShowRewardModal] = useState(false);
-  const [rewardConfig, setRewardConfig] = useState({ 
-    xp: 0, 
-    title: '', 
-    subTitle: '', 
-    type: 'lesson',
-    onAction: null 
-  });
+  const [rewardConfig, setRewardConfig] = useState({ xp: 0, title: '', subTitle: '', type: 'lesson', onAction: null });
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [levelUpData, setLevelUpData] = useState(null);
+  const [showAchievementModal, setShowAchievementModal] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState(null);
+  const lastAchievementStatuses = useRef({});
+  // Guard against concurrent loadProgress calls (prevents TOKEN_REFRESHED cascade)
+  const isLoadingRef = useRef(false);
+  // Debounce TOKEN_REFRESHED — only allow one silent refresh every 10 seconds
+  const lastTokenRefreshRef = useRef(0);
+  // Cooldown for AppState foreground refresh — max once every 60 seconds
+  const lastForegroundRefreshRef = useRef(0);
 
-  // Load progress from storage on mount
   useEffect(() => {
-    loadProgress();
+    // ─── RACE CONDITION FIX ───────────────────────────────────────────────────
+    // Problem: loadProgress() was called immediately on mount. At that moment,
+    // supabase.auth.getUser() could return null because the session hasn't been
+    // restored from AsyncStorage yet (it's async). So data appeared empty.
+    //
+    // The SIGNED_IN event only fires on a FRESH login — it does NOT fire when
+    // restoring an existing session on app launch. So returning users would see
+    // empty data until they logged out and back in (which triggers a fresh SIGNED_IN).
+    //
+    // Fix: Explicitly call getSession() first. If a session already exists (returning
+    // user), load data immediately. Then set up the listener for future auth events.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const bootstrap = async () => {
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      if (initialSession?.user) {
+        // Session already exists (returning user) — load data straight away
+        // Pass user directly to avoid a second getUser() round-trip
+        loadProgress(false, initialSession.user);
+      } else {
+        // No session yet — stop loading spinner so the login screen can show
+        setIsLoading(false);
+      }
+    };
+
+    bootstrap();
+
+    // Listen for auth state changes to handle fresh logins and logouts
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      logger.log(`ProgressContext: Auth event detected: ${event}`);
+      if (event === 'SIGNED_IN') {
+        // Fresh login — force-reset the guard so this always loads,
+        // even if a bootstrap() call was in flight and already held the lock.
+        isLoadingRef.current = false;
+        if (session?.user) {
+          loadProgress(false, session.user);
+        } else {
+          setTimeout(async () => {
+            const { data: { session: retrySession } } = await supabase.auth.getSession();
+            if (retrySession?.user) loadProgress(false, retrySession.user);
+          }, 500);
+        }
+      } else if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        // ── TOKEN_REFRESHED DEBOUNCE ─────────────────────────────────────────────
+        // React Strict Mode causes two onAuthStateChange listeners to exist briefly.
+        // When the Supabase lock is stolen between them, AbortErrors fire which
+        // trigger MORE TOKEN_REFRESHED events → infinite cascade → logout.
+        // Fix: Only allow one silent refresh every 10 seconds.
+        const now = Date.now();
+        if (now - lastTokenRefreshRef.current < 10000) {
+          logger.log('ProgressContext: TOKEN_REFRESHED debounced, skipping.');
+          return;
+        }
+        lastTokenRefreshRef.current = now;
+        if (session?.user) {
+          loadProgress(true, session.user);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        // Clear data on sign out and reset the loading guard
+        // so the next SIGNED_IN event can always trigger a fresh load.
+        isLoadingRef.current = false;
+        setCourseProgress({});
+        setUserProfile({ name: 'Guest Student', email: '' });
+        setRecentLessons([]);
+        setContinueLearning([]);
+        setSubscriptions([]);
+        setSessions([]);
+        setUserActivities([]);
+        setIsLoading(false);
+
+        // Tear down subscription realtime channel on logout
+        if (subscriptionChannel) {
+          supabase.removeChannel(subscriptionChannel);
+          subscriptionChannel = null;
+        }
+      }
+    });
+
+    // FIX 3: Realtime listener on user_subscriptions table
+    // When the payment Edge Function writes a new subscription row,
+    // this fires immediately and refreshes the context — no logout/login needed.
+    let subscriptionChannel = null;
+
+    const setupSubscriptionListener = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        subscriptionChannel = supabase
+          .channel('user-subscriptions-realtime')
+          .on(
+            'postgres_changes',
+            {
+              event: '*', // INSERT or UPDATE
+              schema: 'public',
+              table: 'user_subscriptions',
+              filter: `user_id=eq.${user.id}`,
+            },
+            (payload) => {
+              logger.log('ProgressContext: Subscription change detected, refreshing...', payload.eventType);
+              // Pass user directly — no extra getUser() round-trip needed
+              setTimeout(() => loadProgress(true, user), 500);
+            }
+          )
+          .subscribe((status) => {
+            logger.log('ProgressContext: Subscription realtime status:', status);
+          });
+      } catch (err) {
+        logger.warn('ProgressContext: Failed to set up subscription listener:', err);
+      }
+    };
+
+    setupSubscriptionListener();
+
+    // ── WEB VISIBILITY FIX ───────────────────────────────────────────────────────
+    // On web, switching tabs and coming back can cause Supabase's TOKEN_REFRESHED
+    // to re-fire and trigger the loading screen. Instead, we listen for the page
+    // becoming visible again and do a silent background data refresh only.
+    let visibilityHandler = null;
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      visibilityHandler = () => {
+        if (document.visibilityState === 'visible') {
+          logger.log('ProgressContext: Tab became visible, doing silent refresh.');
+          supabase.auth.getSession().then(({ data: { session: s } }) => {
+            if (s?.user) loadProgress(true, s.user); // silent = true, no loading spinner
+          });
+        }
+      };
+      document.addEventListener('visibilitychange', visibilityHandler);
+    }
+
+    // ── NATIVE APP STATE FIX (iOS / Android) ─────────────────────────────────────
+    // On native, when the app comes back to foreground, do a silent refresh.
+    // Cooldown: max once every 60 seconds — prevents a full network call every
+    // time the user switches apps briefly (e.g. copy-paste from another app).
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active' && Platform.OS !== 'web') {
+        const now = Date.now();
+        if (now - lastForegroundRefreshRef.current < 60000) {
+          logger.log('ProgressContext: Foreground refresh skipped (cooldown active).');
+          return;
+        }
+        lastForegroundRefreshRef.current = now;
+        logger.log('ProgressContext: App came to foreground, doing silent refresh.');
+        supabase.auth.getSession().then(({ data: { session: s } }) => {
+          if (s?.user) loadProgress(true, s.user);
+        });
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+      if (subscriptionChannel) {
+        supabase.removeChannel(subscriptionChannel);
+      }
+      if (visibilityHandler) {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+      }
+      appStateSubscription?.remove();
+    };
   }, []);
 
-  const loadProgress = async () => {
-    console.log('ProgressContext: loadProgress started');
+  // Accept an optional `knownUser` to avoid an extra getUser() round-trip.
+  // All callers now pass the user they already have, eliminating the race
+  // where getUser() could return null milliseconds after SIGNED_IN fires.
+  const loadProgress = async (silent = false, knownUser = null) => {
+    // ── CONCURRENT CALL GUARD ───────────────────────────────────────────────────
+    // Prevent two simultaneous loadProgress calls (e.g. from double TOKEN_REFRESHED).
+    // The second call is simply dropped — the first one has the latest data.
+    if (isLoadingRef.current) {
+      logger.log('ProgressContext: loadProgress already running, skipping duplicate call.');
+      return;
+    }
+    isLoadingRef.current = true;
     try {
-      setIsLoading(true);
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      console.log('ProgressContext: User fetched', user?.id, userError);
-      
+      // On a cached reload we start silent (no spinner) to avoid the loading screen,
+      // but still refresh all data in the background.
+      const effectivelySilent = silent || isProgressCached();
+      if (!effectivelySilent) setIsLoading(true);
+
+      // Use the provided user, or fall back to getUser() as a last resort
+      let user = knownUser;
+      if (!user) {
+        const { data } = await supabase.auth.getUser();
+        user = data?.user ?? null;
+      }
+
       if (!user) {
         setIsLoading(false);
         setUserProfile({ name: 'Guest Student', email: '' });
         return;
       }
 
-      // Fetch Profile Details
-      try {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', user.id)
-          .single();
-        
-        if (profileData) {
-          setUserProfile({
-            name: profileData.full_name || 'Sikola Student',
-            email: profileData.email || user.email
-          });
-        } else {
-          setUserProfile({
-            name: user.user_metadata?.full_name || 'Sikola Student',
-            email: user.email
-          });
-        }
-      } catch (e) {
-        console.error("Error fetching user profile", e);
-        setUserProfile({ name: 'Sikola Student', email: user.email });
+      // Parallelize All Main Data Fetches via Services
+      const [
+        profileRes,
+        subRes,
+        progressRes,
+        statsRes,
+        sessionRes,
+        subjectsRes
+      ] = await Promise.all([
+        userService.getProfile(user.id),
+        userService.getActiveSubscriptions(user.id),
+        progressService.getUserProgress(user.id),
+        progressService.getUserStats(user.id).catch(() => ({ data: null })), // Handle PGRST116 safely
+        progressService.getLearningSessions(user.id),
+        courseService.getFullCurriculum(),
+      ]);
+
+      // 1. Process Profile
+      const profileData = profileRes.data;
+      if (profileData) {
+        setUserProfile({ name: profileData.full_name || 'Sikola Student', email: profileData.email || user.email });
       }
 
-      // Check Trial Status & Countdown
-      let expired = false;
+      // 2. Process Trial Status
       let daysLeft = 0;
+      let expired = false;
       if (user.created_at) {
-        try {
-          const createdAt = new Date(user.created_at).getTime();
-          const now = Date.now();
-          if (!isNaN(createdAt)) {
-             const diffDays = (now - createdAt) / (1000 * 60 * 60 * 24);
-             expired = diffDays > 3;
-             daysLeft = Math.max(0, Math.ceil(3 - diffDays));
-             console.log('ProgressContext: Trial Status', { diffDays, expired, daysLeft });
-          }
-        } catch (e) {
-          console.error("Error calculating trial expiry", e);
-        }
+        const diffDays = (Date.now() - new Date(user.created_at).getTime()) / (1000 * 60 * 60 * 24);
+        expired = diffDays > 3;
+        daysLeft = Math.max(0, Math.ceil(3 - diffDays));
       }
       setIsTrialExpired(expired);
       setTrialDaysRemaining(daysLeft);
 
-      // 0. Fetch User Subscriptions
-      let currentSubs = [];
-      try {
-          console.log('ProgressContext: Fetching subscriptions');
-          const { data: subData, error: subError } = await supabase
-            .from('user_subscriptions')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('is_active', true)
-            .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`); // Support permanent or timed subs
+      // 3. Process Subscriptions
+      const subData = subRes.data || [];
+      setSubscriptions(subData);
+      setSubscriptionInfo(AccessControl.getSubscriptionInfo(subData, expired, daysLeft));
 
-          if (subData) {
-            setSubscriptions(subData);
-            currentSubs = subData;
-          }
-      } catch (e) {
-         console.error("Error fetching subscriptions", e);
-      }
+      // 4. Process Progress & Analytics
+      const progressData = progressRes.data || [];
+      const formattedProgress = {};
+      progressData.forEach(item => {
+        formattedProgress[item.topic_id] = { completed: true, score: item.score };
+      });
+      setCourseProgress(formattedProgress);
 
-      // 0b. Process Final Subscription/Trial Status
-      // FIX: Use fresh currentSubs instead of potentially stale 'subscriptions' state
-      const info = getSubscriptionInfo(currentSubs, daysLeft, expired, user.created_at);
-      setSubscriptionInfo(info);
+      const subjectsData = subjectsRes.data || [];
+      const sessionData = sessionRes.data || [];
+      setSessions(sessionData);
 
-      // 1. Fetch user progress
-      console.log('ProgressContext: Fetching user_progress');
-      const { data: progressData } = await supabase
-        .from('user_progress')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('completed_at', { ascending: false }); // Get most recent first
+      const topicMap = new Map();
+      const lessonMap = new Map();
       
-      console.log('ProgressContext: user_progress fetched', progressData?.length);
-
-      if (progressData) {
-        // Map for internal lookups
-        const formattedProgress = {};
-        progressData.forEach(item => {
-          formattedProgress[item.topic_id] = { completed: true, score: item.score };
-        });
-        setCourseProgress(formattedProgress);
-
-        // 2. Fetch Lesson Details for Recent Activity
-        // extract unique lesson IDs (stored as 'topic_id' in user_progress based on previous usage)
-        const lessonIds = [...new Set(progressData.map(p => p.topic_id))].slice(0, 10); // Limit to 10
-        console.log('ProgressContext: processing lessonIds', lessonIds);
-        
-        if (lessonIds.length > 0) {
-          try {
-            console.log('ProgressContext: Fetching recent activity details (lessons/topics)');
-            
-            // Fetch everything we might need in parallel
-            const [lessonsRes, topicsRes] = await Promise.all([
-              supabase.from('lessons').select('*, topics(*, subjects(*))').in('id', lessonIds),
-              supabase.from('topics').select('*, subjects(*)').in('id', lessonIds)
-            ]);
-
-            const lessonsData = lessonsRes.data || [];
-            const topicsAsActivity = topicsRes.data || [];
-
-            // Combine and map based on original progress order
-            const processedRecent = lessonIds.map(id => {
-              const progressEntry = progressData.find(p => p.topic_id === id);
-              const lesson = lessonsData.find(l => l.id === id);
-              
-              if (lesson) {
-                const topicNav = Array.isArray(lesson.topics) ? lesson.topics[0] : lesson.topics;
-                const subjectNav = topicNav ? (Array.isArray(topicNav.subjects) ? topicNav.subjects[0] : topicNav.subjects) : null;
-                const style = getSubjectStyle(subjectNav?.name);
-                
-                return {
-                  id: lesson.id,
-                  title: lesson.title,
-                  category: subjectNav?.name || 'General',
-                  progress: 100, // If it's in progressData sorted by completed_at, it's completed
-                  duration: lesson.duration || 15,
-                  color: subjectNav?.color || style.color,
-                  icon: style.icon,
-                  completed_at: progressEntry?.completed_at,
-                  topic_id: lesson.topic_id,
-                  topic_title: topicNav?.title,
-                  subject_id: subjectNav?.id,
-                  type: 'lesson'
-                };
-              }
-
-              const topicAsAct = topicsAsActivity.find(t => t.id === id);
-              if (topicAsAct) {
-                const subjectNav = Array.isArray(topicAsAct.subjects) ? topicAsAct.subjects[0] : topicAsAct.subjects;
-                const style = getSubjectStyle(subjectNav?.name);
-                
-                return {
-                  id: topicAsAct.id,
-                  title: topicAsAct.title,
-                  category: subjectNav?.name || 'General',
-                  progress: 100,
-                  duration: 30, // Default for topic
-                  color: subjectNav?.color || style.color,
-                  icon: style.icon,
-                  completed_at: progressEntry?.completed_at,
-                  topic_id: topicAsAct.id,
-                  topic_title: topicAsAct.title,
-                  type: 'topic'
-                };
-              }
-
-              return null;
-            }).filter(Boolean);
-
-            // Only show actual lessons in Recent Lessons, not topics
-            setRecentLessons(processedRecent.filter(item => item && item.type === 'lesson'));
-
-            // Process Continue Learning (Keep previous logic but ensure it uses the fetched lessonsData)
-            const uniqueTopicIds = [...new Set(lessonsData.map(l => l.topic_id).filter(Boolean))];
-              
-              console.log('ProgressContext: fetching topicLessons for stats', uniqueTopicIds);
-              const { data: topicLessons } = await supabase
-                .from('lessons')
-                .select('id, topic_id')
-                .in('topic_id', uniqueTopicIds);
-              
-              if (topicLessons) {
-                const topicStats = uniqueTopicIds.map(tId => {
-                  const topicLessonList = topicLessons.filter(l => l.topic_id === tId);
-                  const total = topicLessonList.length;
-                  const completed = topicLessonList.filter(l => formattedProgress[l.id]?.completed).length;
-                  const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-                  
-                  // Find a lesson example to get metadata
-                  const exampleLesson = lessonsData.find(l => l.topic_id === tId);
-                  const topicData = Array.isArray(exampleLesson?.topics) ? exampleLesson.topics[0] : exampleLesson?.topics;
-                  const subjectData = topicData ? (Array.isArray(topicData.subjects) ? topicData.subjects[0] : topicData.subjects) : null;
-
-                  const style = getSubjectStyle(subjectData?.name);
-
-                  return {
-                    id: tId,
-                    subject_id: subjectData?.id,
-                    title: topicData?.title || 'Unknown Topic',
-                    category: subjectData?.name || 'General',
-                    progress,
-                    duration: total * 15,
-                    color: subjectData?.color || style.color,
-                    icon: style.icon
-                  };
+      if (subjectsData) {
+        subjectsData.forEach((s, sIdx) => {
+          if (s.topics) {
+            s.topics.forEach((t, tIdx) => {
+              topicMap.set(t.id, { topic: t, subject: s, subjectIndex: sIdx, topicIndex: tIdx });
+              if (t.lessons) {
+                t.lessons.forEach(l => {
+                  lessonMap.set(l.id, { lesson: l, topic: t, subject: s, subjectIndex: sIdx, topicIndex: tIdx });
                 });
-                setContinueLearning(topicStats.filter(t => t && t.progress < 100)); 
               }
-          } catch (err) {
-            console.error('Error fetching recent lessons details:', err);
+            });
           }
-        }
+        });
       }
 
-      // Fetch user stats
-      try {
-        console.log('ProgressContext: Fetching user_stats');
-        const { data: statsData } = await supabase
-          .from('user_stats')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-
-        if (statsData) {
-          setUserStats(statsData);
-          setLevelInfo(getLevelInfo(statsData.total_xp));
-        } else {
-          const initialStats = {
-            user_id: user.id,
-            current_streak: 0,
-            max_streak: 0,
-            total_xp: 0,
-            total_lessons_completed: 0
-          };
-          // Try insert, ignore error if duplicate
-          await supabase.from('user_stats').insert([initialStats]).catch(e => console.log('Insert stats error', e));
-          setUserStats(initialStats);
-        }
-      } catch (e) {
-        console.log("Stats fetch error", e);
-      }
+      const completedTopicIds = new Set();
+      progressData.forEach(p => {
+        completedTopicIds.add(p.topic_id);
+        const lessonEntry = lessonMap.get(p.topic_id);
+        if (lessonEntry) completedTopicIds.add(lessonEntry.topic.id);
+      });
+      const totalMinutes = sessionData.reduce((acc, curr) => acc + (curr.duration_minutes || 0), 0);
       
-      // Fetch learning sessions
-      try {
-        console.log('ProgressContext: Fetching learning_sessions');
-        const { data: sessionData } = await supabase
-          .from('learning_sessions')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('started_at', { ascending: false });
+      const breakdown = subjectsData.map(s => {
+        const style = getSubjectStyle(s.name);
+        const subjectTime = sessionData
+          .filter(ses => ses.subject_id === s.id)
+          .reduce((acc, curr) => acc + (curr.duration_minutes || 0), 0);
         
-        if (sessionData) {
-          setSessions(sessionData);
+        const subjectTopics = s.topics || [];
+        const completedCount = subjectTopics.filter(t => completedTopicIds.has(t.id)).length;
+        const subjectLessonCount = subjectTopics.reduce((acc, t) => acc + (t.lessons?.length || 0), 0);
+
+        return {
+          id: s.id,
+          name: s.name,
+          color: s.color || style.color,
+          minutes: subjectTime,
+          percentage: totalMinutes > 0 ? Math.round((subjectTime / totalMinutes) * 100) : 0,
+          totalTopics: subjectTopics.length,
+          completedTopics: completedCount,
+          totalLessons: subjectLessonCount,
+          icon: style.icon
+        };
+      }).sort((a, b) => b.completedTopics - a.completedTopics || a.name.localeCompare(b.name));
+      
+      setSubjectBreakdown(breakdown);
+      setSubjects(subjectsData);
+
+      // 4.5. Process Recent Topics (Phase 3)
+      const topicProgressMap = new Map();
+      const progressKeys = new Set((progressData || []).map(p => p.topic_id));
+
+      (progressData || []).forEach(p => {
+        const entry = lessonMap.get(p.topic_id) || topicMap.get(p.topic_id);
+        if (!entry) return;
+        
+        const topic = entry.topic;
+        const subject = entry.subject;
+        
+        if (!topicProgressMap.has(topic.id)) {
+          // Calculate progress for this topic
+          const totalLessons = topic.lessons?.length || 0;
+          const completedLessons = (topic.lessons || []).filter(l => progressKeys.has(l.id)).length;
           
-          // Calculate weekly activity (Mon-Sun)
-          const activity = new Array(7).fill(false);
-          const now = new Date();
-          const firstDayOfWeek = new Date(now);
-          // Set to Monday of current week
-          const day = now.getDay(); // 0 is Sun, 1 is Mon...
-          const diff = (day === 0 ? -6 : 1) - day;
-          firstDayOfWeek.setDate(now.getDate() + diff);
-          firstDayOfWeek.setHours(0, 0, 0, 0);
+          // Heuristic: If there are lessons, use lesson completion. 
+          // If the topic itself is in progressKeys (e.g. test passed), it's 100%.
+          let progressPerc = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+          if (progressKeys.has(topic.id)) progressPerc = 100;
 
-          sessionData.forEach(s => {
-            try {
-              const sessionDate = new Date(s.started_at);
-              if (sessionDate >= firstDayOfWeek && !isNaN(sessionDate)) {
-                const dayIdx = (sessionDate.getDay() + 6) % 7; // Map 0-6 (Sun-Sat) to 0-6 (Mon-Sun)
-                activity[dayIdx] = true;
-              }
-            } catch (err) { console.error('Date parse error', err); }
+          const style = getSubjectStyle(subject?.name);
+          
+          topicProgressMap.set(topic.id, {
+            id: topic.id,
+            title: topic.title, // Course Name
+            category: subject?.name || 'Education', // Course
+            progress: Math.min(progressPerc, 100),
+            duration: totalLessons * 15, 
+            color: subject?.color || style.color,
+            icon: style.icon,
+            completed_at: p.completed_at,
+            subject_id: subject?.id,
+            subjectIndex: entry.subjectIndex,
+            topicIndex: entry.topicIndex
           });
-          setWeeklyActivity(activity);
         }
-      } catch (e) {
-        console.log("Sessions fetch error", e);
+      });
+
+      const processedRecentTopics = Array.from(topicProgressMap.values())
+        .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
+
+      setRecentLessons(processedRecentTopics);
+      // For "Continue Learning", show ONLY in-progress topics (less than 100%) and remove limit
+      setContinueLearning(processedRecentTopics.filter(t => t.progress < 100));
+
+      // 4.6. UNIFIED Activities Timeline (Phase 2)
+      const activityFromProgress = (progressData || []).map(p => {
+        const entry = lessonMap.get(p.topic_id) || topicMap.get(p.topic_id);
+        const subject = entry?.subject;
+        const style = getSubjectStyle(subject?.name);
+        return {
+          id: `prog-${p.topic_id}-${p.completed_at}`,
+          title: `Mastered ${entry?.lesson?.title || entry?.topic?.title || 'Topic'}`,
+          time: p.completed_at,
+          type: 'score',
+          color: subject?.color || style.color,
+          timestamp: new Date(p.completed_at).getTime()
+        };
+      });
+
+      const activityFromSessions = (sessionData || []).map(s => {
+        const subject = subjectsData.find(subj => subj.id === s.subject_id);
+        const style = getSubjectStyle(subject?.name);
+        return {
+          id: `sess-${s.id}`,
+          title: `${s.session_type === 'test' ? 'Tested' : 'Studied'} ${subject?.name || 'Lessons'}`,
+          time: s.started_at,
+          type: s.session_type === 'test' ? 'score' : 'start',
+          color: subject?.color || style.color,
+          timestamp: new Date(s.started_at).getTime()
+        };
+      });
+
+      const unifiedActivities = [...activityFromProgress, ...activityFromSessions]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 20);
+
+      setUserActivities(unifiedActivities);
+
+      // 5. Process Stats via AchievementEngine
+      if (statsRes.data) {
+        setUserStats(statsRes.data);
+        setLevelInfo(AchievementEngine.getLevelInfo(statsRes.data.total_xp));
       }
-      // Initialize and schedule notifications
-      try {
-        await NotificationService.initialize();
-        
-        // 1. Personalized Daily Reminder (using name and last subject)
-        const firstName = userProfile.name.split(' ')[0];
-        const lastSubject = recentLessons.length > 0 ? recentLessons[0].category : null;
-        await NotificationService.scheduleDailyReminder(9, 0, firstName, lastSubject);
 
-        // 2. Smart Nudge (using total lessons completed)
-        const lessonsCount = userStats.total_lessons_completed || 0;
-        await NotificationService.scheduleSmartNudge(lessonsCount);
+      // 6. Activities & Achievements (Delegated to AchievementEngine)
+      setWeeklyActivity(AchievementEngine.calculateWeeklyActivity(sessionData, progressData));
+      
+      const calculatedAchievements = AchievementEngine.calculateWeeklyAchievements(sessionData, progressData);
+      setAchievements(calculatedAchievements);
 
-        // 3. Streak Alert (standard)
-        await NotificationService.scheduleStreakAlert();
+      calculatedAchievements.forEach(achievement => {
+        const wasUnlocked = lastAchievementStatuses.current[achievement.id];
+        const isNowUnlocked = achievement.unlocked;
 
-        // Phase 2: Engagement Notifications
-        
-        // 4. Inactivity Safety Net
-        await NotificationService.scheduleInactivityNudge(firstName);
+        if (wasUnlocked === false && isNowUnlocked === true) {
+          setSelectedAchievement(achievement);
+          setTimeout(() => setShowAchievementModal(true), 1500); 
+        }
+        lastAchievementStatuses.current[achievement.id] = isNowUnlocked;
+      });
 
-        // 5. Weekend Warrior (Only schedule if it's not already the weekend)
-        const dayOfWeek = new Date().getDay();
-        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // 7. Notifications
+      setTimeout(async () => {
+        try {
+          await NotificationService.initialize();
+          const firstName = (profileData?.full_name || user.user_metadata?.full_name || 'Student').split(' ')[0];
+          const lastSubName = breakdown?.length > 0 ? breakdown[0].name : 'Subjects';
+          
+          await NotificationService.scheduleDailyReminder(4, 0, firstName, lastSubName);
+          await NotificationService.scheduleStreakAlert();
           await NotificationService.scheduleWeekendBonus();
+          await NotificationService.scheduleInactivityNudge(firstName);
+          await NotificationService.scheduleSmartNudge(statsRes.data?.total_lessons_completed || 0);
+          
+          if (daysLeft === 1) await NotificationService.scheduleTrialExpiryWarning(1);
+        } catch (e) {
+          logger.warn('Full notification sync failure', e);
         }
+      }, 1000);
 
-        // 6. Trial Countdown (If user is in trial and has 1 day left)
-        if (subscriptionInfo.type === 'trial' && trialDaysRemaining <= 1) {
-          await NotificationService.scheduleTrialExpiryWarning(trialDaysRemaining);
-        }
-        
-      } catch (notiError) {
-        console.warn('Silent notification init failure:', notiError);
-      }
-
-      console.log('ProgressContext: loadProgress finished');
     } catch (error) {
-      console.error('Failed to load progress from Supabase', error);
+      // AbortError is expected when React Strict Mode causes a lock-steal between
+      // two competing Supabase listeners. It is NOT a real error — ignore it silently.
+      if (error?.name === 'AbortError' || error?.message?.includes('Lock broken')) {
+        logger.log('ProgressContext: loadProgress aborted by lock-steal (React Strict Mode). Ignoring.');
+      } else {
+        logger.error('Failed to parallel load progress', error);
+      }
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
+      // Mark that progress was loaded this session — future reloads skip the spinner
+      markProgressCached();
     }
   };
 
@@ -369,19 +521,24 @@ export const ProgressProvider = ({ children }) => {
     try {
       await AsyncStorage.setItem('userProgress', JSON.stringify(newProgress));
     } catch (error) {
-      console.error('Failed to save progress', error);
+      logger.error('Failed to save progress', error);
     }
   };
 
-  // Mark a topic as completed
-  const completeTopic = async (courseId, topicId, score = 0, duration = 15, sessionType = 'lesson', onAction = null) => {
+  const completeTopic = (courseId, topicId, score = 0, duration = 15, sessionType = 'lesson', onAction = null) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
       const xpGained = score >= 90 ? 150 : score >= 70 ? 100 : 50;
+      const oldXP = userStats.total_xp || 0;
+      const updatedXP = oldXP + xpGained;
+      const oldLevelInfo = AchievementEngine.getLevelInfo(oldXP);
+      const newLevelInfo = AchievementEngine.getLevelInfo(updatedXP);
 
-      // 1. OPTIMISTIC UPDATES (Immediate UI feedback)
+      if (newLevelInfo.current.level > oldLevelInfo.current.level) {
+        setLevelUpData(newLevelInfo);
+        setTimeout(() => setShowLevelUpModal(true), 1200); 
+      }
+
+      // 1. OPTIMISTIC UPDATES (Instant UI)
       if (topicId) {
         setCourseProgress(prev => ({
           ...prev,
@@ -390,9 +547,7 @@ export const ProgressProvider = ({ children }) => {
       }
 
       setUserStats(prev => {
-        const updatedXP = (prev?.total_xp || 0) + xpGained;
-        // Update level info concurrently
-        setLevelInfo(getLevelInfo(updatedXP));
+        setLevelInfo(newLevelInfo);
         return {
           ...prev,
           total_xp: updatedXP,
@@ -401,273 +556,51 @@ export const ProgressProvider = ({ children }) => {
         };
       });
 
-      // 2. TRIGGER REWARD FEEDBACK IMMEDIATELY
-      const feedbackTitle = sessionType === 'test' ? 'Mastery Achieved!' : (sessionType === 'exam' ? 'Exam Success!' : 'Lesson Complete!');
-      const feedbackSubTitle = score >= 90 
-        ? "Legendary! Your performance is outstanding." 
-        : score >= 70 
-          ? "Great job! You've mastered this topic." 
-          : "Well done! Keep practicing to reach the top.";
-      
+      // 2. TRIGGER REWARD INSTANTLY
       setRewardConfig({
         xp: xpGained,
-        title: feedbackTitle,
-        subTitle: feedbackSubTitle,
+        title: sessionType === 'test' ? 'Mastery Achieved!' : 'Lesson Complete!',
+        subTitle: score >= 90 ? "Legendary! Your performance is outstanding." : "Great job! You've mastered this topic.",
         type: sessionType,
         onAction: onAction
       });
-      
-      // Use a very short delay for impact (150ms instead of 1500ms)
-      setTimeout(() => setShowRewardModal(true), 150);
+      setShowRewardModal(true);
 
-      // 3. BACKGROUND PERSISTENCE (Don't await these in the main UI flow)
+      // 3. BACKGROUND PERSISTENCE using ProgressService
       const persistProgress = async () => {
         try {
-          // Update user_progress
-          if (topicId) {
-            await supabase
-              .from('user_progress')
-              .upsert({
-                user_id: user.id,
-                topic_id: topicId,
-                score: score,
-                completed_at: new Date().toISOString()
-              }, { onConflict: 'user_id,topic_id' });
-          }
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
 
-          // Fetch current DB stats to ensure accuracy (handling potential race conditions)
-          const { data: currentStats } = await supabase
-            .from('user_stats')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-
-          const today = new Date().toISOString().split('T')[0];
-          const newStats = {
-            total_xp: (currentStats?.total_xp || 0) + xpGained,
-            total_lessons_completed: (currentStats?.total_lessons_completed || 0) + 1,
-            last_activity_date: today
-          };
-
-          await supabase.from('user_stats').update(newStats).eq('user_id', user.id);
-
-          // Log learning session
-          await supabase.from('learning_sessions').insert([{
-            user_id: user.id,
-            subject_id: courseId,
-            duration_minutes: duration,
-            started_at: new Date().toISOString(),
-            session_type: sessionType
-          }]);
-
-          // Silently sync local state with source of truth eventually
-          // This ensures everything is consistent without blocking the modal
-          loadProgress();
-        } catch (err) {
-          console.error('Background save error:', err);
+          if (topicId) await progressService.upsertProgress(user.id, topicId, score);
+          await progressService.incrementUserStats(user.id, xpGained);
+          await progressService.logSession(user.id, courseId, duration, sessionType);
+          loadProgress(true); // Silent refresh
+        } catch (dbErr) {
+          logger.error("Critical: Failed to persist progress to DB", dbErr);
+          Alert.alert("Sync Error", "Progress saved locally but failed to sync to cloud.");
         }
       };
-
+      
+      // Fire and forget
       persistProgress();
 
     } catch (error) {
-      console.error('Error in completeTopic flow:', error);
+      logger.error('Error in completeTopic flow:', error);
     }
   };
 
-  /**
-   * isTopicCompleted: Checks if a TOPIC (DB: lesson) is completed.
-   */
-  const isTopicCompleted = (courseId, topicId) => {
-    return courseProgress[topicId]?.completed === true;
-  };
+  const isTopicCompleted = (courseId, topicId) => courseProgress[topicId]?.completed === true;
+  const getTopicScore = (courseId, topicId) => courseProgress[topicId]?.score || 0;
 
-  /**
-   * getTopicScore: Gets the score for a COURSE (DB: topic) or Subject.
-   */
-  const getTopicScore = (courseId, topicId) => {
-    return courseProgress[topicId]?.score || 0;
-  };
-
-  /**
-   * checkTrialLimit: Checks if a trial user has exceeded their daily quota.
-   */
-  const checkTrialLimit = () => {
-    const hasActiveSub = subscriptions && subscriptions.length > 0;
-    if (hasActiveSub) return true; 
-
-    if (isTrialExpired) return false;
-
-    const today = new Date().toISOString().split('T')[0];
-    const testToday = sessions.some(s => 
-      s.session_type === 'test' && 
-      s.started_at && s.started_at.startsWith(today)
-    );
-
-    return !testToday;
-  };
-
-  /**
-   * checkSubjectAccess: Allows browsing of subjects.
-   */
-  const checkSubjectAccess = (subjectId, subjectIndex) => {
-    return true; // Subjects are always browsable
-  };
-
-  /**
-   * checkAccess: Decides if a COURSE (DB: topic) is unlocked.
-   * Rules:
-   * 1. First 2 topics are free if trial not expired.
-   * 2. If subscribed to "ALL ACCESS", current course is unlocked.
-   * 3. If subscribed to specific course, current course is unlocked.
-   */
+  // Delegated Access Control functions
+  const checkTrialLimit = () => AccessControl.checkTrialLimit(subscriptions, isTrialExpired, sessions);
+  const checkSubjectAccess = (subjectId, subjectIndex) => true; 
   const checkAccess = (topicId, subjectId, topicIndex, subjectIndex) => {
-    // 0. Safety Check
-    if (!topicId) {
-      console.warn('ProgressContext: checkAccess called without topicId');
-      return false;
-    }
-
-    // 1. Subscription Check
-    if (subscriptions && subscriptions.length > 0) {
-        // 1a. All Access (No IDs in subscription record)
-        const hasAllAccess = subscriptions.some(s => !s.topic_id && !s.subject_id);
-        if (hasAllAccess) {
-          console.log(`ProgressContext: Access GRANTED (All Access) for topic: ${topicId}`);
-          return true;
-        }
-
-        // 1b. Targeted Access (Course/Topic or Subject)
-        const hasTargetedAccess = subscriptions.some(s => {
-          // If subscription targets a specific Course (DB topic_id), 
-          // it MUST match exactly. We don't check subject_id in this case
-          // to prevent per-course subs from unlocking the whole subject.
-          if (s.topic_id) {
-            return s.topic_id === topicId;
-          }
-
-          // If it ONLY targets a Subject (no specific topic_id), 
-          // it unlocks the entire subject.
-          if (s.subject_id) {
-            return s.subject_id === subjectId;
-          }
-          
-          return false;
-        });
-
-        if (hasTargetedAccess) {
-          console.log(`ProgressContext: Access GRANTED (Targeted) for topic: ${topicId}`);
-          return true;
-        }
-    }
-
-    // 2. Free Tier: First 2 Courses (DB Topics) are free if trial not expired
-    const isFree = !isTrialExpired && topicIndex < 2;
-    if (isFree) {
-      console.log(`ProgressContext: Access GRANTED (Free Tier) for topic: ${topicId}`);
-      return true;
-    }
-
-    console.log(`ProgressContext: Access DENIED for topic: ${topicId}. Subscriptions: ${subscriptions?.length || 0}, Trial Expired: ${isTrialExpired}`);
-    return false;
+    return AccessControl.checkCourseAccess(topicId, subjectId, topicIndex, subscriptions, isTrialExpired);
   };
-
-  /**
-   * checkLessonAccess: Decides if a TOPIC (DB: lesson) is unlocked inside a course.
-   * Hierarchy: Subject > Course (topic_id) > Topic (lessonIndex)
-   */
   const checkLessonAccess = (lessonIndex, topicId, subjectId, topicIndex) => {
-     // 1. Must have access to the Course (Topic) first
-     // We now pass the actual topicIndex to ensure Free Tier rules are consistent
-     const hasCourseAccess = checkAccess(topicId, subjectId, topicIndex); 
-     if (!hasCourseAccess) return false;
-
-     // 2. Targeted Subscription Check
-     // Only unlock all lessons if the subscription specifically covers this content
-     const hasTargetedSub = subscriptions && subscriptions.length > 0 && subscriptions.some(s => {
-        // 1a. All Access
-        if (!s.topic_id && !s.subject_id) return true;
-
-        // 1b. Targeted (Course specificity prioritised)
-        if (s.topic_id) {
-          return s.topic_id === topicId;
-        }
-
-        // 1c. Subject Level
-        if (s.subject_id) {
-          return s.subject_id === subjectId;
-        }
-
-        return false;
-     });
-
-     if (hasTargetedSub) {
-       console.log(`ProgressContext: Lesson Access GRANTED (Subscribed) for topic: ${topicId}, index: ${lessonIndex}`);
-       return true;
-     }
-
-     // 3. Free Tier: First 2 Lessons (Topics in DB) are free if trial not expired
-     // AND the parent course must also be in the free tier (first 2 topics)
-     const isFree = !isTrialExpired && topicIndex < 2 && lessonIndex < 2;
-     
-     if (isFree) {
-       console.log(`ProgressContext: Lesson Access GRANTED (Free Tier) for topic: ${topicId}, lessonIndex: ${lessonIndex}`);
-       return true;
-     }
-
-     console.log(`ProgressContext: Lesson Access DENIED for topic: ${topicId}, lessonIndex: ${lessonIndex}. Subscribed: ${hasTargetedSub}, Trial Expired: ${isTrialExpired}`);
-     return false;
-  };
-
-  /**
-   * getSubscriptionInfo: Helper to format status for UI
-   */
-  const getSubscriptionInfo = (subs, trialDays, trialExpired, userCreatedAt) => {
-    if (subs && subs.length > 0) {
-      // Find most comprehensive subscription or soonest expiring
-      const sub = subs[0]; 
-      let label = 'Sikola+ Member';
-      let subLabel = 'Full Access Active';
-      
-      if (sub.expires_at) {
-        const expiry = new Date(sub.expires_at);
-        subLabel = `Renews on ${expiry.toLocaleDateString()}`;
-      }
-      return { type: 'premium', label, subLabel };
-    }
-
-    if (trialExpired) {
-      return { 
-        type: 'expired', 
-        label: 'Trial Expired', 
-        subLabel: 'Upgrade to unlock everything' 
-      };
-    }
-
-    // Precise trial countdown
-    const createdAt = new Date(userCreatedAt).getTime();
-    const now = Date.now();
-    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-    const remainingMs = Math.max(0, (createdAt + threeDaysMs) - now);
-    
-    let timeStr = '';
-    const hours = Math.ceil(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.ceil(remainingMs / (1000 * 60));
-    const days = Math.floor(hours / 24);
-
-    if (days >= 1) {
-      timeStr = `${days} day${days > 1 ? 's' : ''} remaining`;
-    } else if (hours >= 1) {
-      timeStr = `${hours} hour${hours > 1 ? 's' : ''} remaining`;
-    } else {
-      timeStr = `${minutes} minute${minutes > 1 ? 's' : ''} remaining`;
-    }
-
-    return { 
-      type: 'trial', 
-      label: 'Free Trial Active', 
-      subLabel: `${timeStr} • Tap to upgrade` 
-    };
+    return AccessControl.checkLessonAccess(lessonIndex, topicId, subjectId, topicIndex, subscriptions, isTrialExpired);
   };
 
   return (
@@ -677,6 +610,7 @@ export const ProgressProvider = ({ children }) => {
       sessions,
       weeklyActivity,
       recentLessons,
+      userActivities,
       continueLearning,
       userProfile,
       levelInfo,
@@ -684,27 +618,26 @@ export const ProgressProvider = ({ children }) => {
       isTopicCompleted,
       getTopicScore,
       checkAccess,
-      checkLessonAccess, // Exported
-      checkSubjectAccess, // Exported
+      checkLessonAccess, 
+      checkSubjectAccess, 
+      checkTrialLimit,
       isLoading,
-      refreshStats: loadProgress,
-      refreshData: loadProgress, // Alias for clearer external use
+      subjectBreakdown,
+      saveProgress,
+      achievements,
+      subjects,
       subscriptions,
       isTrialExpired,
-      trialDaysRemaining,
       subscriptionInfo,
-      checkTrialLimit
+      refreshProgress: loadProgress,
+      refreshStats: loadProgress, // Added for compatibility with other screens
+      refreshData: loadProgress,  // FIX 1: Alias used by PaymentScreen after payment completes
+      // Modals State
+      showRewardModal, setShowRewardModal, rewardConfig,
+      showLevelUpModal, setShowLevelUpModal, levelUpData,
+      showAchievementModal, setShowAchievementModal, selectedAchievement
     }}>
       {children}
-      <RewardModal
-        visible={showRewardModal}
-        onClose={() => setShowRewardModal(false)}
-        xp={rewardConfig.xp}
-        title={rewardConfig.title}
-        subTitle={rewardConfig.subTitle}
-        type={rewardConfig.type}
-        onAction={rewardConfig.onAction}
-      />
     </ProgressContext.Provider>
   );
 };

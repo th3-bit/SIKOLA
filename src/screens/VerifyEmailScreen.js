@@ -1,17 +1,53 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import logger from '../utils/logger';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Image, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GraduationCap, ChevronLeft, ArrowRight } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Alert, ActivityIndicator } from 'react-native';
 import StatusModal from '../components/StatusModal';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
+
+
+const onboardingData = [
+  {
+    image: require('../../assets/onboarding_1.png'),
+    title: 'Learn Anywhere, Anytime',
+    description: 'Turn every moment into a chance to grow — even on the move.',
+  },
+  {
+    image: require('../../assets/onboarding_2.png'),
+    title: 'Make Learning Enjoyable',
+    description: 'Study with interactive lessons, quizzes, and challenges that keep you engaged.',
+  },
+  {
+    image: require('../../assets/onboarding_3.png'),
+    title: 'Track Your Progress',
+    description: 'See your improvement, earn scores, and celebrate every milestone.',
+  },
+];
 
 export default function VerifyEmailScreen({ navigation, route }) {
   const { theme, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth > 768;
+
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  React.useEffect(() => {
+    if (!isDesktop) return;
+    const interval = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % onboardingData.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [isDesktop]);
+
   const { refreshStats } = useProgress();
+  const { setIsRecovering } = useAuth();
   const [otp, setOtp] = useState(['', '', '', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -57,6 +93,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
       if (error) throw error;
 
       if (route.params?.type === 'recovery') {
+        if (setIsRecovering) setIsRecovering(true);
         setModalConfig({
           type: 'success',
           title: 'Email Verified',
@@ -74,7 +111,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
         setShowModal(true);
       }
     } catch (error) {
-      console.error('Verification error:', error);
+      logger.error('Verification error:', error);
       setModalConfig({
         type: 'error',
         title: 'Verification Failed',
@@ -132,7 +169,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
       });
       setShowModal(true);
     } catch (error) {
-      console.error('Resend error:', error);
+      logger.error('Resend error:', error);
       setModalConfig({
         type: 'error',
         title: 'Resend Failed',
@@ -145,35 +182,9 @@ export default function VerifyEmailScreen({ navigation, route }) {
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <LinearGradient
-        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-        style={styles.background}
-      />
-
-      <SafeAreaView style={styles.topSection}>
-        <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                <ChevronLeft color={theme.colors.textPrimary} size={28} />
-                <Text style={[styles.backText, { color: theme.colors.textPrimary }]}>Back</Text>
-            </TouchableOpacity>
-        </View>
-
-        <View style={styles.brandContainer}>
-          <GraduationCap size={60} color={theme.colors.secondary} style={styles.logo} />
-        </View>
-        <Text style={[styles.sloganText, { color: theme.colors.textSecondary }]}>Verify your email</Text> 
-      </SafeAreaView>
-
-      <View style={[styles.bottomSection, { backgroundColor: theme.colors.surface, borderTopLeftRadius: theme.borderRadius.l, borderTopRightRadius: theme.borderRadius.l }]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            
-            <Text style={[styles.formTitle, { color: theme.colors.textPrimary }]}>Enter Code</Text>
+  const renderFormFields = () => (
+    <>
+      <Text style={[styles.formTitle, { color: theme.colors.textPrimary }]}>Enter Code</Text>
             <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
                 Please enter the 8-digit code sent to your email address.
             </Text>
@@ -219,7 +230,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
                   ) : (
                     <>
                       <Text style={[styles.submitButtonText, { color: theme.colors.textContrast }]}>Verify Code</Text>
-                      <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                      <ArrowRight color={theme.colors.textContrast} size={scale(24)} style={{ marginLeft: scale(10) }} />
                     </>
                   )}
                 </LinearGradient>
@@ -244,6 +255,128 @@ export default function VerifyEmailScreen({ navigation, route }) {
                </TouchableOpacity>
 
             </View>
+    </>
+  );
+
+  const renderLogoSection = (desktopStyles = false) => (
+    <View style={[styles.brandContainer, desktopStyles && { marginBottom: 30 }]}>
+      <GraduationCap size={60} color={theme.colors.secondary} style={styles.logo} />
+      {!desktopStyles && <Text style={[styles.sloganText, { color: theme.colors.textSecondary }]}>Verify your email</Text>}
+    </View>
+  );
+
+  if (isDesktop) {
+    return (
+      <View style={[styles.container, styles.desktopContainer, { backgroundColor: theme.colors.primary }]}>
+        
+        {/* Left Side: Cycling Images */}
+        <View style={styles.desktopLeftPane}>
+          <Image 
+            key={activeSlide} 
+            source={onboardingData[activeSlide].image} 
+            style={styles.desktopHeroImage} 
+            resizeMode="cover" 
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.desktopGradientOverlay}
+          />
+          <View style={styles.desktopHeroTextContainer}>
+             <Text style={[styles.desktopHeroTitle, { fontFamily: theme.typography.fontFamily }]}>{onboardingData[activeSlide].title}</Text>
+             <Text style={[styles.desktopHeroDesc, { fontFamily: theme.typography.fontFamily }]}>{onboardingData[activeSlide].description}</Text>
+             <View style={styles.pagination}>
+              {onboardingData.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dot,
+                    { backgroundColor: activeSlide === index ? theme.colors.secondary : 'rgba(255,255,255,0.4)' },
+                    activeSlide === index && styles.activeDot
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Right Side: Form Card */}
+        <View style={styles.desktopRightPane}>
+          <View style={[styles.desktopFormCard, { backgroundColor: theme.colors.surface, shadowColor: isDark ? '#000' : 'rgba(0,0,0,0.1)' }]}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={[styles.backButton, { marginBottom: 20 }]}>
+              <ChevronLeft color={theme.colors.textPrimary} size={28} />
+              <Text style={[styles.backText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Back to login</Text>
+            </TouchableOpacity>
+
+            {renderLogoSection(true)}
+            {renderFormFields()}
+          </View>
+        </View>
+
+        <StatusModal
+          visible={showModal}
+          onClose={() => !modalLoading && setShowModal(false)}
+          loading={modalLoading}
+          onAction={async () => {
+            if (modalConfig.type === 'success' && modalConfig.title !== 'Code Resent') {
+              if (route.params?.type === 'recovery') {
+                setShowModal(false);
+                navigation.navigate('ResetPassword');
+              } else {
+                setModalLoading(true);
+                try {
+                  if (refreshStats) await refreshStats();
+                  setShowModal(false);
+                  navigation.replace('MainApp');
+                } catch (err) {
+                  logger.error("Refresh stats error:", err);
+                  setShowModal(false);
+                  navigation.replace('MainApp');
+                } finally {
+                  setModalLoading(false);
+                }
+              }
+            } else {
+              setShowModal(false);
+            }
+          }}
+          type={modalConfig.type}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          actionText={modalConfig.actionText}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.background}
+      />
+
+      <SafeAreaView style={styles.topSection}>
+        <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.backButton}>
+                <ChevronLeft color={theme.colors.textPrimary} size={scale(28)} />
+                <Text style={[styles.backText, { color: theme.colors.textPrimary }]}>Back</Text>
+            </TouchableOpacity>
+        </View>
+
+        <View style={styles.brandContainer}>
+          <GraduationCap size={scale(60)} color={theme.colors.secondary} style={styles.logo} />
+        </View>
+        <Text style={[styles.sloganText, { color: theme.colors.textSecondary }]}>Verify your email</Text> 
+      </SafeAreaView>
+
+      <View style={[styles.bottomSection, { backgroundColor: theme.colors.surface, borderTopLeftRadius: theme.borderRadius.l, borderTopRightRadius: theme.borderRadius.l }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            
+            {renderFormFields()}
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -265,7 +398,7 @@ export default function VerifyEmailScreen({ navigation, route }) {
                 setShowModal(false);
                 navigation.replace('MainApp');
               } catch (err) {
-                console.error("Refresh stats error:", err);
+                logger.error("Refresh stats error:", err);
                 setShowModal(false);
                 navigation.replace('MainApp');
               } finally {
@@ -299,15 +432,15 @@ const styles = StyleSheet.create({
   },
   topSection: {
     height: '25%',
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
     justifyContent: 'space-between',
-    paddingBottom: 25,
+    paddingBottom: verticalScale(25),
     alignItems: 'center',
   },
   header: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 10,
+      marginTop: verticalScale(10),
       width: '100%',
       justifyContent: 'flex-start',
   },
@@ -316,9 +449,9 @@ const styles = StyleSheet.create({
       alignItems: 'center',
   },
   backText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: '600',
-      marginLeft: 5,
+      marginLeft: scale(5),
   },
   brandContainer: {
     alignItems: 'center',
@@ -328,29 +461,29 @@ const styles = StyleSheet.create({
       // styles if needed
   },
   sloganText: {
-    fontSize: 16,
-    marginBottom: 5,
+    fontSize: moderateScale(16),
+    marginBottom: verticalScale(5),
     fontWeight: '500',
   },
   bottomSection: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 30,
+    paddingHorizontal: scale(30),
+    paddingTop: verticalScale(30),
     marginTop: 0,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: verticalScale(20),
   },
   formTitle: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: verticalScale(10),
     textAlign: 'left',
   },
   description: {
-      fontSize: 14,
-      lineHeight: 20,
-      marginBottom: 30,
+      fontSize: moderateScale(14),
+      lineHeight: moderateScale(20),
+      marginBottom: verticalScale(30),
   },
   form: {
     width: '100%',
@@ -358,46 +491,97 @@ const styles = StyleSheet.create({
   otpContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 30,
+      marginBottom: verticalScale(30),
       paddingHorizontal: 0,
   },
   otpInput: {
-      width: 38,
-      height: 55,
+      width: scale(38),
+      height: verticalScale(55),
       borderWidth: 1,
-      fontSize: 20,
+      fontSize: moderateScale(20),
       fontWeight: 'bold',
       textAlign: 'center',
   },
    buttonContainer: {
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: verticalScale(4) },
     shadowOpacity: 0.5,
-    shadowRadius: 16,
+    shadowRadius: scale(16),
     elevation: 8,
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: verticalScale(10),
+    marginBottom: verticalScale(20),
   },
   submitButton: {
-    borderRadius: 32,
-    height: 60,
+    borderRadius: scale(32),
+    height: verticalScale(60),
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
   },
   submitButtonText: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: 'bold',
   },
   resendContainer: {
       flexDirection: 'row',
       justifyContent: 'center',
-      marginTop: 20,
+      marginTop: verticalScale(20),
   },
   resendText: {
-      fontSize: 14,
+      fontSize: moderateScale(14),
   },
   resendLink: {
       fontWeight: 'bold',
-      fontSize: 14,
+      fontSize: moderateScale(14),
+  }
+,
+  // Desktop Split Screen Styles
+  desktopContainer: {
+    flexDirection: 'row',
+  },
+  desktopLeftPane: {
+    flex: 1.2,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 30,
+    margin: 20,
+    marginRight: 0,
+  },
+  desktopRightPane: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    position: 'relative',
+  },
+  desktopHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  desktopGradientOverlay: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%',
+  },
+  desktopHeroTextContainer: {
+    position: 'absolute', bottom: 60, left: 40, right: 40,
+  },
+  desktopHeroTitle: {
+    fontSize: 48, fontWeight: '900', color: '#FFF', marginBottom: 16,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
+  },
+  desktopHeroDesc: {
+    fontSize: 20, color: 'rgba(255,255,255,0.9)', lineHeight: 30, marginBottom: 24,
+  },
+  pagination: { flexDirection: 'row' },
+  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 4 },
+  activeDot: { width: 24 },
+  desktopFormCard: {
+    width: '100%',
+    maxWidth: 580, // slightly wider to accommodate 8 OTP inputs
+    padding: 40,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.1,
+    shadowRadius: 40,
+    elevation: 20,
   }
 });

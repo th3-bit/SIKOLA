@@ -573,6 +573,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
+    transform: [{ translateZ: 0 }],
   },
   subjectHeaderRow: {
     flexDirection: 'row',

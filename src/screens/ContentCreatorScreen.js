@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import logger from '../utils/logger';
 import { 
   View, 
   Text, 
@@ -204,7 +205,7 @@ export default function ContentCreatorScreen({ navigation }) {
         setSubjectCategory('');
         fetchSubjects();
       } catch (error) {
-        console.error('Save Error:', error);
+        logger.error('Save Error:', error);
         Alert.alert('Error', 'Failed to save subject.');
       } finally {
         setLoading(false);
@@ -413,7 +414,7 @@ export default function ContentCreatorScreen({ navigation }) {
         placeholder="Assign to Lesson"
       />
       
-      <View style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, gap: 15 }}>
+      <View style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, gap: 15 }}>
         <Text style={[styles.inputLabel, { color: theme.colors.secondary }]}>Add New Example</Text>
         <GlassInput 
           label="Example Title" 
@@ -452,7 +453,7 @@ export default function ContentCreatorScreen({ navigation }) {
 
       <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>Current Examples ({examples.length})</Text>
       {examples.map((ex, idx) => (
-        <View key={idx} style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View key={idx} style={{ padding: 15, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: theme.colors.textPrimary, fontWeight: 'bold' }}>{ex.title}</Text>
             <Text numberOfLines={1} style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{ex.problem.substring(0, 40)}...</Text>
@@ -615,7 +616,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   saveBtn: {
     width: 44,
@@ -638,7 +639,7 @@ const styles = StyleSheet.create({
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 20,
     padding: 6,
     marginBottom: 30,
@@ -731,7 +732,7 @@ const styles = StyleSheet.create({
   },
   pickerList: {
     marginTop: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 15,
     padding: 10,
     gap: 10,

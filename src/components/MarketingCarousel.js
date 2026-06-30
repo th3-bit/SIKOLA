@@ -4,8 +4,9 @@ import {
   Text, 
   StyleSheet, 
   ScrollView, 
-  Dimensions, 
-  TouchableOpacity 
+  TouchableOpacity,
+  useWindowDimensions,
+  Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
@@ -17,9 +18,7 @@ import {
   Sparkles
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.8;
+import { scale } from '../utils/Scaling';
 
 const PROMOS = [
   {
@@ -58,6 +57,108 @@ const PROMOS = [
 
 export default function MarketingCarousel({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
+  
+  const CARD_WIDTH = width * 0.8;
+
+  const renderCard = (promo, additionalStyle, isWide = false) => {
+    const Icon = promo.icon;
+    return (
+      <TouchableOpacity
+        key={promo.id}
+        activeOpacity={0.7}
+        onPress={() => {
+          let params = {};
+          if (promo.id === 'elite') params = { defaultPlanType: 'monthly' };
+          if (promo.id === 'xp') params = { defaultPlanType: 'daily' };
+          if (promo.id === 'mastery') params = { defaultPlanType: 'per_course' };
+          if (promo.id === 'coffee') params = { defaultPlanType: 'weekly' };
+          navigation.navigate('Subscription', params);
+        }}
+        style={[styles.cardWrapper, additionalStyle]}
+      >
+        <LinearGradient
+          colors={promo.colors}
+          style={styles.card}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* Decorative Circles */}
+          <View style={[styles.circleLarge, { top: -30, right: -30 }, isWide && { width: 300, height: 300, borderRadius: 150, top: -100, right: -50 }]} />
+          <View style={[styles.circleSmall, { bottom: -20, left: -15 }, isWide && { width: 150, height: 150, borderRadius: 75, bottom: -50, left: -30 }]} />
+
+          <View style={[styles.content, isWide && { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+            
+            {isWide ? (
+              <>
+                <View style={{ flex: 1, height: '100%', justifyContent: 'center' }}>
+                  <View style={[styles.tagContainer, { alignSelf: 'flex-start', marginBottom: 16 }]}>
+                    <Sparkles size={12} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={[styles.tagText, { fontSize: 12 }]}>{promo.tag}</Text>
+                  </View>
+                  <Text style={[styles.title, { fontSize: 24, marginBottom: 8 }]} numberOfLines={1}>
+                    {promo.title}
+                  </Text>
+                  <Text style={[styles.subtitle, { fontSize: 15 }]}>{promo.subtitle}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                  <View style={[styles.iconBubble, { width: 64, height: 64, borderRadius: 20, marginBottom: 16 }]}>
+                    <Icon size={36} color="rgba(255,255,255,0.9)" />
+                  </View>
+                  <View style={[styles.arrowContainer, { width: 44, height: 44, borderRadius: 22 }]}>
+                    <ChevronRight size={24} color="#FFF" />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.header}>
+                  <View style={styles.tagContainer}>
+                    <Sparkles size={10} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.tagText}>{promo.tag}</Text>
+                  </View>
+                  <View style={styles.iconBubble}>
+                    <Icon size={28} color="rgba(255,255,255,0.9)" />
+                  </View>
+                </View>
+
+                <View style={styles.footer}>
+                  <View style={styles.textContainer}>
+                    <Text 
+                      style={styles.title} 
+                      numberOfLines={1} 
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                    >
+                      {promo.title}
+                    </Text>
+                    <Text style={styles.subtitle}>{promo.subtitle}</Text>
+                  </View>
+                  <View style={styles.arrowContainer}>
+                    <ChevronRight size={20} color="#FFF" />
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  if (isDesktop) {
+    return (
+      <View style={[styles.desktopSectionCard, isDark && styles.desktopSectionCardDark]}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
+          Special Offers
+        </Text>
+        <View style={styles.desktopGridContainer}>
+          {PROMOS.map(promo => renderCard(promo, { flex: 1, width: 'auto' }, false))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -69,64 +170,49 @@ export default function MarketingCarousel({ navigation }) {
         decelerationRate="fast"
         snapToInterval={CARD_WIDTH + 15}
       >
-        {PROMOS.map((promo) => {
-          const Icon = promo.icon;
-          return (
-            <TouchableOpacity
-              key={promo.id}
-              activeOpacity={0.9}
-              onPress={() => navigation.navigate('Subscription')}
-              style={styles.cardWrapper}
-            >
-              <LinearGradient
-                colors={promo.colors}
-                style={styles.card}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                {/* Decorative Shapes */}
-                <View style={[styles.circle, { top: -20, right: -20, backgroundColor: 'rgba(255,255,255,0.1)' }]} />
-                <View style={[styles.circle, { bottom: -30, left: -20, width: 100, height: 100, backgroundColor: 'rgba(255,255,255,0.05)' }]} />
-
-                <View style={styles.content}>
-                  <View style={styles.header}>
-                    <View style={styles.tagContainer}>
-                      <Sparkles size={10} color="#FFF" style={{ marginRight: 4 }} />
-                      <Text style={styles.tagText}>{promo.tag}</Text>
-                    </View>
-                    <Icon size={32} color="#FFF" />
-                  </View>
-
-                  <View style={styles.footer}>
-                    <View style={styles.textContainer}>
-                      <Text style={styles.title}>{promo.title}</Text>
-                      <Text style={styles.subtitle}>{promo.subtitle}</Text>
-                    </View>
-                    <View style={styles.arrowContainer}>
-                      <ChevronRight size={20} color="#FFF" />
-                    </View>
-                  </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          );
-        })}
+        {PROMOS.map(promo => renderCard(promo, { width: CARD_WIDTH }))}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  desktopSectionCard: {
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    padding: scale(24),
+    borderRadius: scale(28),
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.15)',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 15,
+    elevation: 3,
+    marginBottom: 30,
+    marginTop: 20,
+  },
+  desktopSectionCardDark: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 16,
+  },
+  desktopGridContainer: {
+    flexDirection: 'row',
+    gap: 20,
+  },
   container: {
     marginVertical: 20,
-    width: '100%',
+    marginHorizontal: -20, // Break out of parent's paddingHorizontal to reach screen edges
   },
   scrollContent: {
     paddingHorizontal: 20,
     gap: 15,
   },
   cardWrapper: {
-    width: CARD_WIDTH,
     height: 140,
     borderRadius: 24,
     shadowColor: "#000",
@@ -141,11 +227,27 @@ const styles = StyleSheet.create({
     padding: 24,
     overflow: 'hidden',
   },
-  circle: {
+  circleLarge: {
     position: 'absolute',
     width: 140,
     height: 140,
     borderRadius: 70,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  circleSmall: {
+    position: 'absolute',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  iconBubble: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
     flex: 1,
@@ -181,7 +283,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFF',
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '800',
     marginBottom: 4,
   },

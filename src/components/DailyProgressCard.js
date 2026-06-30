@@ -1,86 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
-import { supabase } from '../lib/supabase';
+import * as Haptics from 'expo-haptics';
 import Svg, { Circle } from 'react-native-svg';
-import { getSubjectStyle } from '../constants/SubjectConfig';
-
-const { width } = Dimensions.get('window');
 
 export default function DailyProgressCard() {
   const navigation = useNavigation();
-  const { theme, isDark } = useTheme();
-  const { sessions, isLoading } = useProgress();
-  const [categories, setCategories] = useState([]);
-  const [totalMinutes, setTotalMinutes] = useState(0);
+  const { theme, isDark, hapticsEnabled } = useTheme();
+  const { subjectBreakdown, sessions, isLoading } = useProgress();
   const [currentMonth, setCurrentMonth] = useState('');
-  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
-    processData();
-  }, [sessions]);
+    // Get current month for the badge
+    const now = new Date();
+    setCurrentMonth(now.toLocaleString('default', { month: 'short' }));
+  }, []);
 
-  const processData = async () => {
-    try {
-      setDataLoading(true);
-      
-      // Get current month
-      const now = new Date();
-      setCurrentMonth(now.toLocaleString('default', { month: 'short' }));
-
-      // Fetch subjects to get names and colors
-      const { data: subjects } = await supabase.from('subjects').select('*');
-      if (!subjects) return;
-
-      // Filter sessions for current month
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const monthlySessions = sessions.filter(s => new Date(s.started_at) >= startOfMonth);
-
-      const total = monthlySessions.reduce((acc, curr) => acc + (Number(curr.duration_minutes) || 0), 0);
-      setTotalMinutes(Math.round(total)); // Ensure integer
-      if (total <= 0) {
-        // Default empty state or mock-like but zeroed
-        setCategories(subjects.slice(0, 6).map(s => {
-          const style = getSubjectStyle(s.name);
-          return {
-            name: s.name,
-            percentage: 0,
-            color: s.color || style.color
-          };
-        }));
-      } else {
-        // Calculate percentages
-        const breakdown = subjects.map(s => {
-          const style = getSubjectStyle(s.name);
-          const subjectTime = monthlySessions
-            .filter(ses => ses.subject_id === s.id)
-            .reduce((acc, curr) => acc + (Number(curr.duration_minutes) || 0), 0);
-          
-          return {
-            name: s.name,
-            color: s.color || style.color,
-            minutes: subjectTime,
-            // Guard against NaN
-            percentage: total > 0 ? Math.round((subjectTime / total) * 100) : 0
-          };
-        })
-        .filter(c => c.minutes > 0)
-        .sort((a, b) => b.minutes - a.minutes);
-
-        setCategories(breakdown);
-      }
-    } catch (error) {
-      console.error('Error processing progress data:', error);
-    } finally {
-      setDataLoading(false);
-    }
+  const handleMorePress = () => {
+    if (hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('LearningProgress');
   };
 
-  if (isLoading || dataLoading) {
+  if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="small" color={theme.colors.secondary} />
@@ -88,10 +33,23 @@ export default function DailyProgressCard() {
     );
   }
 
-  // Calculate circle segments
-  const radius = 70;
-  const strokeWidth = 20;
+  // Use pre-calculated breakdown from context
+  // Filter for subjects that have at least some progress to show a cleaner chart
+  const activeCategories = subjectBreakdown.filter(c => c.minutes > 0 || c.completedTopics > 0);
+  
+  // If no sessions yet, show the first few subjects as empty states (matching original design)
+  const displayCategories = activeCategories.length > 0 
+    ? activeCategories 
+    : subjectBreakdown.slice(0, 6);
+
+  const totalMinutes = sessions.reduce((acc, curr) => acc + (Number(curr.duration_minutes) || 0), 0);
+
+  // Calculate circle segments (Scaled)
+  const radius = scale(48);
+  const strokeWidth = scale(12);
   const circumference = 2 * Math.PI * radius;
+  const chartSize = scale(130);
+  const chartCenter = chartSize / 2;
 
   return (
     <View style={[styles.cardWrapper, { shadowColor: theme.colors.secondary }]}>
@@ -99,7 +57,7 @@ export default function DailyProgressCard() {
         styles.card, 
         { 
           backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+          borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)',
         }
       ]}>
         
@@ -107,35 +65,35 @@ export default function DailyProgressCard() {
           <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
             Learning Progress
           </Text>
-          <View style={[styles.monthBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
-            <Text style={[styles.monthText, { color: theme.colors.textPrimary }]}>
-              {currentMonth}
+          <View style={[styles.monthBadge, { backgroundColor: theme.colors.secondary }]}>
+            <Text style={[styles.monthText, { color: '#FFF' }]}>
+              Overall
             </Text>
           </View>
         </View>
 
         <View style={styles.content}>
           {/* Segmented Ring Chart */}
-          <View style={styles.chartSection}>
-            <Svg width={180} height={180} style={styles.svg}>
+          <View style={[styles.chartSection, { width: chartSize, height: chartSize }]}>
+            <Svg width={chartSize} height={chartSize} style={styles.svg}>
               {totalMinutes === 0 ? (
                 // Empty state ring
                 <Circle
-                  cx="90"
-                  cy="90"
+                  cx={chartCenter}
+                  cy={chartCenter}
                   r={radius}
-                  stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}
+                  stroke={isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.1)'}
                   strokeWidth={strokeWidth}
                   fill="none"
                 />
               ) : (
-                categories.map((category, index) => {
-                  const previousPercentages = categories.slice(0, index).reduce((sum, cat) => sum + cat.percentage, 0);
+                displayCategories.map((category, index) => {
+                  const previousPercentages = displayCategories.slice(0, index).reduce((sum, cat) => sum + cat.percentage, 0);
                   return (
                     <Circle
                       key={index}
-                      cx="90"
-                      cy="90"
+                      cx={chartCenter}
+                      cy={chartCenter}
                       r={radius}
                       stroke={category.color}
                       strokeWidth={strokeWidth}
@@ -154,21 +112,21 @@ export default function DailyProgressCard() {
               <Text style={[styles.centerLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                 Total
               </Text>
-              <Text style={[styles.centerValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
-                {totalMinutes}
-                <Text style={[styles.centerUnit, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>min</Text>
+              <Text style={[styles.centerValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, fontSize: moderateScale(20) }]}>
+                {Math.round(totalMinutes)}
+                <Text style={[styles.centerUnit, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily, fontSize: moderateScale(10) }]}>min</Text>
               </Text>
             </View>
           </View>
 
           {/* Legend */}
           <View style={styles.legend}>
-            {categories.slice(0, 5).map((category, index) => (
+            {displayCategories.slice(0, 5).map((category, index) => (
               <View key={index} style={styles.legendItem}>
                 <View style={[styles.legendColor, { backgroundColor: category.color }]} />
                 <View style={styles.legendText}>
                   <Text numberOfLines={1} style={[styles.legendName, { color: theme.colors.textSecondary, flex: 1, fontFamily: theme.typography.fontFamily }]}>
-                    {category.name}
+                    {category.name.length > 15 ? category.name.substring(0, 15) + '...' : category.name}
                   </Text>
                   <Text style={[styles.legendPercentage, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
                     {category.percentage}%
@@ -176,82 +134,71 @@ export default function DailyProgressCard() {
                 </View>
               </View>
             ))}
-            {categories.length > 5 && (
+            {displayCategories.length > 5 && (
               <TouchableOpacity 
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('LearningProgress')}
+                onPress={handleMorePress}
                 style={styles.moreButton}
               >
                 <Text style={[styles.moreText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>
-                  +{categories.length - 5} more subjects
+                  +{displayCategories.length - 5} more subjects
                 </Text>
               </TouchableOpacity>
             )}
-            {categories.length === 0 && (
+            {totalMinutes === 0 && displayCategories.length === 0 && (
               <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>No session data yet</Text>
             )}
           </View>
         </View>
 
-        <TouchableOpacity 
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('LearningProgress')}
-          style={[styles.footerButton, { borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}
-        >
-          <Text style={[styles.footerButtonText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>
-            View Detailed Analytics
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
+
 const styles = StyleSheet.create({
   loadingContainer: {
-    height: 200,
+    height: verticalScale(200),
     justifyContent: 'center',
     alignItems: 'center',
   },
   cardWrapper: {
     width: '100%',
-    borderRadius: 28,
+    borderRadius: moderateScale(28),
     overflow: 'visible',
-    marginBottom: 20,
   },
   card: {
-    padding: 20,
+    padding: scale(20),
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: moderateScale(28),
     overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   title: {
-    fontSize: 22,
+    fontSize: moderateScale(22),
     fontWeight: '800',
   },
   monthBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: scale(16),
+    paddingVertical: verticalScale(8),
+    borderRadius: moderateScale(20),
   },
   monthText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
   },
   content: {
     flexDirection: 'row',
-    gap: 20,
+    gap: scale(10),
   },
   chartSection: {
     position: 'relative',
-    width: 180,
-    height: 180,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -263,32 +210,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   centerLabel: {
-    fontSize: 14,
-    marginBottom: 4,
+    fontSize: moderateScale(14),
+    marginBottom: verticalScale(4),
   },
   centerValue: {
-    fontSize: 36,
+    fontSize: moderateScale(36),
     fontWeight: '800',
   },
   centerUnit: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '400',
   },
   legend: {
     flex: 1,
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: verticalScale(10),
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   legendColor: {
-    width: 3,
-    height: 16,
-    borderRadius: 2,
-    marginRight: 8,
+    width: scale(3),
+    height: verticalScale(16),
+    borderRadius: moderateScale(2),
+    marginRight: scale(8),
   },
   legendText: {
     flex: 1,
@@ -297,29 +244,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   legendName: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
   },
   legendPercentage: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
-    marginLeft: 8,
+    marginLeft: scale(8),
   },
   moreButton: {
-    marginTop: 4,
-    paddingVertical: 2,
+    marginTop: verticalScale(4),
+    paddingVertical: verticalScale(2),
   },
   moreText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
   },
   footerButton: {
-    marginTop: 10,
-    paddingTop: 15,
+    marginTop: verticalScale(10),
+    paddingTop: verticalScale(15),
     borderTopWidth: 1,
     alignItems: 'center',
   },
   footerButtonText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
     fontWeight: '700',
     letterSpacing: 0.5,
   },

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, TextInput,
 import { Search, X, Check } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { COUNTRIES } from '../constants/CountryList';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 
 export default function CountrySelectorModal({ visible, onClose, onSelect, selectedCountry }) {
   const { theme, isDark } = useTheme();
@@ -33,13 +34,13 @@ export default function CountrySelectorModal({ visible, onClose, onSelect, selec
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Select Country</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color={theme.colors.textSecondary} />
+              <X size={moderateScale(24)} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           {/* Search Bar */}
           <View style={[styles.searchContainer, { backgroundColor: theme.colors.inputBg, borderColor: theme.colors.inputBorder }]}>
-            <Search size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+            <Search size={moderateScale(20)} color={theme.colors.textSecondary} style={{ marginRight: scale(10) }} />
             <TextInput
               style={[styles.searchInput, { color: theme.colors.textPrimary }]}
               placeholder="Search country or code..."
@@ -59,8 +60,8 @@ export default function CountrySelectorModal({ visible, onClose, onSelect, selec
                   style={[
                     styles.countryItem, 
                     { 
-                        borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                        backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)') : 'transparent'
+                        borderBottomColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
+                        backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)') : 'transparent'
                     }
                   ]}
                   onPress={() => {
@@ -81,14 +82,14 @@ export default function CountrySelectorModal({ visible, onClose, onSelect, selec
                     </View>
                   </View>
                   
-                  {isSelected && <Check size={20} color={theme.colors.secondary} />}
+                  {isSelected && <Check size={moderateScale(20)} color={theme.colors.secondary} />}
                 </TouchableOpacity>
               );
             })}
             
             {filteredCountries.length === 0 && (
-                <View style={{ padding: 20, alignItems: 'center' }}>
-                    <Text style={{ color: theme.colors.textSecondary }}>No countries found</Text>
+                <View style={{ padding: scale(20), alignItems: 'center' }}>
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: moderateScale(14) }}>No countries found</Text>
                 </View>
             )}
           </ScrollView>
@@ -105,9 +106,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: 24,
+    borderTopLeftRadius: scale(32),
+    borderTopRightRadius: scale(32),
+    padding: scale(24),
     height: '80%', // Taller modal
     borderWidth: 1,
   },
@@ -115,57 +116,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '900',
   },
   closeButton: {
-    padding: 4,
+    padding: scale(4),
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 50,
-    borderRadius: 12,
+    paddingHorizontal: scale(16),
+    height: verticalScale(50),
+    borderRadius: scale(12),
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: moderateScale(16),
     height: '100%',
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: verticalScale(40),
   },
   countryItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 10,
+    paddingVertical: verticalScale(16),
+    paddingHorizontal: scale(10),
     borderBottomWidth: 1,
-    borderRadius: 12,
+    borderRadius: scale(12),
   },
   countryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: scale(16),
   },
   flagImage: {
-    width: 32,
-    height: 24,
-    borderRadius: 4,
+    width: scale(32),
+    height: scale(24),
+    borderRadius: scale(4),
   },
   countryName: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   countryCodeDetail: {
-    fontSize: 14,
-    marginTop: 2,
+    fontSize: moderateScale(14),
+    marginTop: verticalScale(2),
   },
 });

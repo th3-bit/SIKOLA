@@ -1,0 +1,8 @@
+# Vercel ignore — don't upload these to Vercel
+node_modules
+.expo
+android
+ios
+*.bak
+*.log
+.env.local

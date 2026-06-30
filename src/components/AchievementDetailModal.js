@@ -43,7 +43,7 @@ export default function AchievementDetailModal({ visible, onClose, achievement }
             style={[styles.modalContent, { borderColor: theme.colors.glassBorder }]}
           >
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <View style={[styles.closeIconWrapper, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }]}>
+              <View style={[styles.closeIconWrapper, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)' }]}>
                 <X size={20} color={theme.colors.textSecondary} />
               </View>
             </TouchableOpacity>
@@ -79,7 +79,7 @@ export default function AchievementDetailModal({ visible, onClose, achievement }
                     {achievement.current} / {achievement.total}
                   </Text>
                 </View>
-                <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+                <View style={[styles.progressBarBg, { backgroundColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' }]}>
                   <LinearGradient
                     colors={[achievement.color, achievement.color + 'CC']}
                     start={{ x: 0, y: 0 }}

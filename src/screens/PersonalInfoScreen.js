@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import logger from '../utils/logger';
 import {
   View,
   Text,
@@ -8,6 +9,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,12 +28,17 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import StatusModal from '../components/StatusModal';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
 
 export default function PersonalInfoScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= 768;
   const { theme, isDark } = useTheme();
   const { refreshStats } = useProgress();
+  const { signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -101,7 +108,7 @@ export default function PersonalInfoScreen({ navigation }) {
         phone: user.phone || profile?.phone || '',
       });
     } catch (error) {
-      console.error('Error fetching user data:', error);
+      logger.error('Error fetching user data:', error);
       setStatusConfig({
         type: 'error',
         title: 'Fetch Failed',
@@ -162,7 +169,7 @@ export default function PersonalInfoScreen({ navigation }) {
       });
       setShowStatus(true);
     } catch (error) {
-      console.error('Error updating profile:', error);
+      logger.error('Error updating profile:', error);
       setStatusConfig({
         type: 'error',
         title: 'Update Failed',
@@ -182,16 +189,50 @@ export default function PersonalInfoScreen({ navigation }) {
     setEditing(false);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you sure you want to permanently delete your account? This action cannot be undone and all your progress will be lost.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const { error } = await supabase.rpc('delete_user_account');
+              if (error) throw error;
+              
+              Alert.alert("Account Deleted", "Your account and all associated data have been permanently deleted.", [
+                { text: "OK", onPress: () => signOut() }
+              ]);
+            } catch (error) {
+              logger.error('Error deleting account:', error);
+              setStatusConfig({
+                type: 'error',
+                title: 'Deletion Failed',
+                message: 'Something went wrong while deleting your account. Please try again.'
+              });
+              setShowStatus(true);
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const InfoField = ({ icon: Icon, label, value, editable = false, field = '' }) => (
     <View style={[styles.infoField, { borderColor: theme.colors.glassBorder }]}>
       <View style={styles.infoFieldHeader}>
         <View style={styles.infoFieldLabel}>
-          <Icon size={18} color={theme.colors.textSecondary} />
+          <Icon size={scale(18)} color={theme.colors.textSecondary} />
           <Text style={[styles.label, { color: theme.colors.textSecondary }]}>{label}</Text>
         </View>
         {editable && !editing && (
           <TouchableOpacity onPress={() => setEditing(true)}>
-            <Edit3 size={16} color={theme.colors.secondary} />
+            <Edit3 size={scale(16)} color={theme.colors.secondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -200,7 +241,7 @@ export default function PersonalInfoScreen({ navigation }) {
         <TextInput
           style={[styles.input, { 
             color: theme.colors.textPrimary,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
             borderColor: theme.colors.glassBorder,
           }]}
           value={editData[field]}
@@ -226,11 +267,11 @@ export default function PersonalInfoScreen({ navigation }) {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity
+            <TouchableOpacity
             onPress={() => navigation.goBack()}
-            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+            style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
           >
-            <ArrowLeft color={theme.colors.textPrimary} size={24} />
+            <ArrowLeft color={theme.colors.textPrimary} size={scale(24)} />
           </TouchableOpacity>
 
           <View style={styles.headerInfo}>
@@ -255,107 +296,259 @@ export default function PersonalInfoScreen({ navigation }) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            {/* Profile Avatar */}
-            <View style={styles.avatarSection}>
-              <View style={[styles.avatarContainer, { backgroundColor: theme.colors.secondary }]}>
-                <Text style={styles.avatarText}>
-                  {userData.full_name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <Text style={[styles.userName, { color: theme.colors.textPrimary }]}>
-                {userData.full_name}
-              </Text>
-              {userData.email_verified && (
-                <View style={styles.verifiedBadge}>
-                  <CheckCircle size={16} color="#10B981" />
-                  <Text style={styles.verifiedText}>Verified Account</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Editable Fields */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                Account Details
-              </Text>
-              
-              <InfoField
-                icon={User}
-                label="Full Name"
-                value={userData.full_name}
-                editable={true}
-                field="full_name"
-              />
-
-              <InfoField
-                icon={Phone}
-                label="Phone Number"
-                value={userData.phone}
-                editable={true}
-                field="phone"
-              />
-            </View>
-
-            {/* Read-only Fields */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                Account Information
-              </Text>
-
-              <InfoField
-                icon={Mail}
-                label="Email Address"
-                value={userData.email}
-                editable={false}
-              />
-
-              <InfoField
-                icon={Calendar}
-                label="Member Since"
-                value={new Date(userData.created_at).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-                editable={false}
-              />
-
-              <InfoField
-                icon={Shield}
-                label="User ID"
-                value={userData.id.substring(0, 8) + '...'}
-                editable={false}
-              />
-            </View>
-
-            {/* Action Buttons */}
-            {editing && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  onPress={handleCancel}
-                  style={[styles.cancelButton, { borderColor: theme.colors.glassBorder }]}
-                  disabled={saving}
+            {isLargeScreen ? (
+              <View style={styles.largeScreenContainer}>
+                <BlurView 
+                  intensity={25} 
+                  tint={isDark ? "dark" : "light"} 
+                  style={[styles.leftColumn, styles.glassPanel, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}
                 >
-                  <X size={20} color={theme.colors.textSecondary} />
-                  <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
+                  {/* Profile Avatar */}
+                  <View style={styles.avatarSection}>
+                    <View style={[styles.avatarContainer, { backgroundColor: theme.colors.secondary }]}>
+                      <Text style={styles.avatarText}>
+                        {userData.full_name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={[styles.userName, { color: theme.colors.textPrimary }]}>
+                      {userData.full_name}
+                    </Text>
+                    {userData.email_verified && (
+                      <View style={styles.verifiedBadge}>
+                        <CheckCircle size={scale(16)} color="#10B981" />
+                        <Text style={styles.verifiedText}>Verified Account</Text>
+                      </View>
+                    )}
+                  </View>
 
-                <TouchableOpacity
-                  onPress={handleSave}
-                  style={[styles.saveButton, { backgroundColor: theme.colors.secondary }]}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color="#000" />
-                  ) : (
-                    <>
-                      <Save size={20} color="#000" />
-                      <Text style={styles.saveButtonText}>Save Changes</Text>
-                    </>
+                  {/* Read-only Fields */}
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                      Account Information
+                    </Text>
+
+                    <InfoField
+                      icon={Mail}
+                      label="Email Address"
+                      value={userData.email}
+                      editable={false}
+                    />
+
+                    <InfoField
+                      icon={Calendar}
+                      label="Member Since"
+                      value={new Date(userData.created_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                      editable={false}
+                    />
+
+                    <InfoField
+                      icon={Shield}
+                      label="User ID"
+                      value={userData.id.substring(0, 8) + '...'}
+                      editable={false}
+                    />
+                  </View>
+
+                  {/* Account Deletion Section */}
+                  {!editing && (
+                    <View style={[styles.section, { marginTop: verticalScale(10), alignItems: 'center' }]}>
+                       <TouchableOpacity 
+                          style={[styles.deleteButton, { borderColor: 'rgba(239, 68, 68, 0.5)', backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
+                          onPress={handleDeleteAccount}
+                       >
+                          <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: moderateScale(14) }}>Delete Account</Text>
+                       </TouchableOpacity>
+                       <Text style={{ color: theme.colors.textSecondary, fontSize: moderateScale(11), marginTop: verticalScale(8), textAlign: 'center', opacity: 0.7 }}>
+                          Permanently delete your account and all associated data.
+                       </Text>
+                    </View>
                   )}
-                </TouchableOpacity>
+                </BlurView>
+
+                <BlurView 
+                  intensity={25} 
+                  tint={isDark ? "dark" : "light"} 
+                  style={[styles.rightColumn, styles.glassPanel, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}
+                >
+                  {/* Editable Fields */}
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                      Account Details
+                    </Text>
+                    
+                    <InfoField
+                      icon={User}
+                      label="Full Name"
+                      value={userData.full_name}
+                      editable={true}
+                      field="full_name"
+                    />
+
+                    <InfoField
+                      icon={Phone}
+                      label="Phone Number"
+                      value={userData.phone}
+                      editable={true}
+                      field="phone"
+                    />
+                  </View>
+
+                  {/* Action Buttons */}
+                  {editing && (
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        onPress={handleCancel}
+                        style={[styles.cancelButton, { borderColor: theme.colors.glassBorder }]}
+                        disabled={saving}
+                      >
+                        <X size={scale(20)} color={theme.colors.textSecondary} />
+                        <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
+                          Cancel
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={handleSave}
+                        style={[styles.saveButton, { backgroundColor: theme.colors.secondary }]}
+                        disabled={saving}
+                      >
+                        {saving ? (
+                          <ActivityIndicator size="small" color="#000" />
+                        ) : (
+                          <>
+                            <Save size={scale(20)} color="#000" />
+                            <Text style={styles.saveButtonText}>Save Changes</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </BlurView>
+              </View>
+            ) : (
+              <View>
+                {/* Profile Avatar */}
+                <View style={styles.avatarSection}>
+                  <View style={[styles.avatarContainer, { backgroundColor: theme.colors.secondary }]}>
+                    <Text style={styles.avatarText}>
+                      {userData.full_name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.userName, { color: theme.colors.textPrimary }]}>
+                    {userData.full_name}
+                  </Text>
+                  {userData.email_verified && (
+                    <View style={styles.verifiedBadge}>
+                      <CheckCircle size={scale(16)} color="#10B981" />
+                      <Text style={styles.verifiedText}>Verified Account</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Editable Fields */}
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                    Account Details
+                  </Text>
+                  
+                  <InfoField
+                    icon={User}
+                    label="Full Name"
+                    value={userData.full_name}
+                    editable={true}
+                    field="full_name"
+                  />
+
+                  <InfoField
+                    icon={Phone}
+                    label="Phone Number"
+                    value={userData.phone}
+                    editable={true}
+                    field="phone"
+                  />
+                </View>
+
+                {/* Read-only Fields */}
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                    Account Information
+                  </Text>
+
+                  <InfoField
+                    icon={Mail}
+                    label="Email Address"
+                    value={userData.email}
+                    editable={false}
+                  />
+
+                  <InfoField
+                    icon={Calendar}
+                    label="Member Since"
+                    value={new Date(userData.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                    editable={false}
+                  />
+
+                  <InfoField
+                    icon={Shield}
+                    label="User ID"
+                    value={userData.id.substring(0, 8) + '...'}
+                    editable={false}
+                  />
+                </View>
+
+                {/* Account Deletion Section */}
+                {!editing && (
+                  <View style={[styles.section, { marginTop: verticalScale(10), alignItems: 'center' }]}>
+                     <TouchableOpacity 
+                        style={[styles.deleteButton, { borderColor: 'rgba(239, 68, 68, 0.5)', backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}
+                        onPress={handleDeleteAccount}
+                     >
+                        <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: moderateScale(14) }}>Delete Account</Text>
+                     </TouchableOpacity>
+                     <Text style={{ color: theme.colors.textSecondary, fontSize: moderateScale(11), marginTop: verticalScale(8), textAlign: 'center', opacity: 0.7 }}>
+                        Permanently delete your account and all associated data.
+                     </Text>
+                  </View>
+                )}
+
+                {/* Action Buttons */}
+                {editing && (
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      onPress={handleCancel}
+                      style={[styles.cancelButton, { borderColor: theme.colors.glassBorder }]}
+                      disabled={saving}
+                    >
+                      <X size={scale(20)} color={theme.colors.textSecondary} />
+                      <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
+                        Cancel
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={handleSave}
+                      style={[styles.saveButton, { backgroundColor: theme.colors.secondary }]}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <ActivityIndicator size="small" color="#000" />
+                      ) : (
+                        <>
+                          <Save size={scale(20)} color="#000" />
+                          <Text style={styles.saveButtonText}>Save Changes</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
 
@@ -394,29 +587,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(10),
+    paddingBottom: verticalScale(20),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   headerInfo: {
     marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: '900',
     letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 15,
-    marginTop: 4,
+    fontSize: moderateScale(15),
+    marginTop: verticalScale(4),
     opacity: 0.7,
   },
   loadingContainer: {
@@ -426,41 +619,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: verticalScale(16),
+    fontSize: moderateScale(16),
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
   },
   avatarSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: verticalScale(32),
   },
   avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: scale(100),
+    height: scale(100),
+    borderRadius: scale(50),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   avatarText: {
-    fontSize: 40,
+    fontSize: moderateScale(40),
     fontWeight: '900',
     color: '#000',
   },
   userName: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     fontWeight: '800',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    gap: scale(6),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(12),
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
   },
   verifiedText: {
@@ -469,65 +662,65 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   section: {
-    marginBottom: 32,
+    marginBottom: verticalScale(32),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   infoField: {
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    marginBottom: verticalScale(16),
+    padding: scale(16),
+    borderRadius: scale(16),
+    borderWidth: scale(1),
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   infoFieldHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   infoFieldLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: scale(8),
   },
   label: {
-    fontSize: 13,
+    fontSize: moderateScale(13),
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   value: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
   },
   input: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '600',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    padding: scale(12),
+    borderRadius: scale(12),
+    borderWidth: scale(1),
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+    gap: scale(12),
+    marginTop: verticalScale(8),
   },
   cancelButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 2,
+    gap: scale(8),
+    paddingVertical: verticalScale(16),
+    borderRadius: scale(16),
+    borderWidth: scale(2),
   },
   cancelButtonText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '700',
   },
   saveButton: {
@@ -535,13 +728,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 16,
+    gap: scale(8),
+    paddingVertical: verticalScale(16),
+    borderRadius: scale(16),
   },
   saveButtonText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
     fontWeight: '900',
     color: '#000',
+  },
+  deleteButton: {
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(24),
+    borderRadius: scale(12),
+    borderWidth: 1,
+    width: '100%',
+    alignItems: 'center',
+  },
+  largeScreenContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: scale(30),
+    marginTop: verticalScale(10),
+    width: '100%',
+  },
+  leftColumn: {
+    width: scale(300),
+    maxWidth: '40%',
+  },
+  rightColumn: {
+    flex: 1,
+    maxWidth: scale(600),
+  },
+  glassPanel: {
+    borderRadius: scale(30),
+    borderWidth: scale(1),
+    paddingVertical: verticalScale(25),
+    paddingHorizontal: scale(20),
+    overflow: 'hidden',
   },
 });

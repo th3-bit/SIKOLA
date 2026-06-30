@@ -27,7 +27,7 @@ export default function AuthStatusModal({ visible, onClose, onAction, type = 'su
           <View style={styles.blurContainer}>
             <View style={[styles.modalContent, { 
                 backgroundColor: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.1)'
             }]}>
                 
                 {/* Close Button */}
@@ -98,7 +98,7 @@ export default function AuthStatusModal({ visible, onClose, onAction, type = 'su
           >
             <View style={[styles.modalContent, { 
                 backgroundColor: isDark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.1)'
             }]}>
                 
                 {/* Close Button */}
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   iconContainer: {
     marginBottom: 20,

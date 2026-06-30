@@ -4,12 +4,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Play, Award, Clock, BookOpen, Target, CheckCircle } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useProgress } from '../context/ProgressContext';
+import LockStatusModal from '../components/LockStatusModal';
 
 const { width } = Dimensions.get('window');
+const { scale, verticalScale, moderateScale } = require('../utils/Scaling');
 
 export default function LessonOverviewScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { lesson, subject } = route.params;
+  const { lesson, subject, topicIndex } = route.params;
+  const { checkLessonAccess, subscriptions } = useProgress();
+
+  const [showLockModal, setShowLockModal] = React.useState(false);
+  const [lockConfig, setLockConfig] = React.useState({ type: 'subscription', title: '', message: '', onAction: null });
 
   // Learning objectives
   const objectives = [
@@ -42,7 +49,7 @@ export default function LessonOverviewScreen({ route, navigation }) {
           <View style={styles.header}>
             <TouchableOpacity 
               onPress={() => navigation.goBack()}
-              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}
+              style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)' }]}
             >
               <ArrowLeft color={theme.colors.textPrimary} size={24} />
             </TouchableOpacity>
@@ -52,7 +59,7 @@ export default function LessonOverviewScreen({ route, navigation }) {
           <View style={[styles.heroCardWrapper]}>
             <View style={[styles.heroCard, { 
               backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+              borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' 
             }]}>
               <LinearGradient
                 colors={isDark 
@@ -104,7 +111,7 @@ export default function LessonOverviewScreen({ route, navigation }) {
             </Text>
             <View style={[styles.objectivesCard, { 
               backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)', 
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+              borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' 
             }]}>
               {objectives.map((objective, index) => (
                 <View key={index} style={styles.objectiveItem}>
@@ -153,7 +160,33 @@ export default function LessonOverviewScreen({ route, navigation }) {
           {/* Start Button */}
           <TouchableOpacity 
             style={[styles.startButton, { backgroundColor: lesson.color }]}
-            onPress={() => navigation.navigate('LearningContent', { lesson, subject })}
+            onPress={() => {
+              const lessonIndex = lesson.order_index ?? 0;
+              const actualTopicIndex = topicIndex ?? 0;
+              const hasAccess = checkLessonAccess(lessonIndex, lesson.topic_id, subject?.id, actualTopicIndex);
+
+              if (!hasAccess) {
+                const hasAnySub = subscriptions && subscriptions.length > 0;
+                if (hasAnySub) {
+                  setLockConfig({
+                    type: 'subscription',
+                    title: 'Content Locked',
+                    message: 'This topic is not included in your current plan. Upgrade to unlock all content in this subject.',
+                    onAction: () => { setShowLockModal(false); navigation.navigate('Subscription', { lockedCourse: { id: lesson.id, title: lesson.title } }); }
+                  });
+                } else {
+                  setLockConfig({
+                    type: 'subscription',
+                    title: 'Unlock Premium',
+                    message: 'This is a premium topic. Get SIKOLA Premium to unlock all detailed notes and quizzes.',
+                    onAction: () => { setShowLockModal(false); navigation.navigate('Subscription', { lockedCourse: { id: lesson.id, title: lesson.title } }); }
+                  });
+                }
+                setShowLockModal(true);
+              } else {
+                navigation.navigate('LearningContent', { lesson, subject, topicIndex: actualTopicIndex });
+              }
+            }}
             activeOpacity={0.9}
           >
             <LinearGradient
@@ -170,6 +203,14 @@ export default function LessonOverviewScreen({ route, navigation }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       </SafeAreaView>
+      <LockStatusModal 
+        visible={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        type={lockConfig.type}
+        title={lockConfig.title}
+        message={lockConfig.message}
+        onAction={lockConfig.onAction}
+      />
     </View>
   );
 }
@@ -188,130 +229,130 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(20),
   },
   header: {
-    paddingTop: 10,
-    marginBottom: 20,
+    paddingTop: verticalScale(10),
+    marginBottom: verticalScale(20),
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
   },
   heroCardWrapper: {
-    marginBottom: 24,
-    borderRadius: 28,
+    marginBottom: verticalScale(24),
+    borderRadius: scale(28),
     overflow: 'visible',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: verticalScale(10) },
     shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowRadius: scale(20),
     elevation: 10,
   },
   heroCard: {
-    padding: 24,
+    padding: scale(24),
     borderWidth: 1,
-    borderRadius: 28,
+    borderRadius: scale(28),
     overflow: 'hidden',
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginBottom: 16,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(12),
+    marginBottom: verticalScale(16),
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   lessonTitle: {
-    fontSize: 28,
+    fontSize: moderateScale(28),
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 20,
+    gap: scale(20),
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: scale(6),
   },
   metaText: {
-    fontSize: 14,
+    fontSize: moderateScale(14),
   },
   section: {
-    marginBottom: 24,
+    marginBottom: verticalScale(24),
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: moderateScale(20),
     fontWeight: '800',
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   objectivesCard: {
-    padding: 20,
-    borderRadius: 20,
+    padding: scale(20),
+    borderRadius: scale(20),
     borderWidth: 1,
-    gap: 16,
+    gap: verticalScale(16),
   },
   objectiveItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: scale(12),
   },
   objectiveIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     justifyContent: 'center',
     alignItems: 'center',
   },
   objectiveText: {
     flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: moderateScale(15),
+    lineHeight: moderateScale(22),
   },
   rewardsCard: {
-    padding: 20,
-    borderRadius: 20,
+    padding: scale(20),
+    borderRadius: scale(20),
     borderWidth: 1,
-    gap: 16,
+    gap: verticalScale(16),
   },
   rewardItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: scale(16),
   },
   rewardInfo: {
     flex: 1,
   },
   rewardValue: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '800',
   },
   rewardLabel: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: moderateScale(13),
+    marginTop: verticalScale(2),
   },
   startButton: {
-    borderRadius: 24,
+    borderRadius: scale(24),
     overflow: 'hidden',
   },
   buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
-    gap: 12,
+    paddingVertical: verticalScale(18),
+    gap: scale(12),
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: '800',
   },
 });

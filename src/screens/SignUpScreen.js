@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Animated, Easing, Image, Alert, ActivityIndicator, Modal } from 'react-native';
+import logger from '../utils/logger';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Animated, Easing, Image, Alert, ActivityIndicator, Modal, Dimensions, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, Lock, User, CheckCircle, GraduationCap, ChevronLeft, ArrowRight, Eye, EyeOff, CheckSquare, Square, Phone, ChevronDown, Sun, Moon } from 'lucide-react-native';
@@ -8,10 +9,45 @@ import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import CountrySelectorModal from '../components/CountrySelectorModal';
 import StatusModal from '../components/StatusModal';
+import TermsModal from '../components/TermsModal';
 import { COUNTRIES } from '../constants/CountryList';
+import { scale, verticalScale, moderateScale } from '../utils/Scaling';
+
+
+const onboardingData = [
+  {
+    image: require('../../assets/onboarding_1.png'),
+    title: 'Learn Anywhere, Anytime',
+    description: 'Turn every moment into a chance to grow — even on the move.',
+  },
+  {
+    image: require('../../assets/onboarding_2.png'),
+    title: 'Make Learning Enjoyable',
+    description: 'Study with interactive lessons, quizzes, and challenges that keep you engaged.',
+  },
+  {
+    image: require('../../assets/onboarding_3.png'),
+    title: 'Track Your Progress',
+    description: 'See your improvement, earn scores, and celebrate every milestone.',
+  },
+];
 
 export default function SignUpScreen({ navigation }) {
   const { theme, isDark, toggleTheme } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth > 768;
+
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    const interval = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % onboardingData.length);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [isDesktop]);
+
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -23,7 +59,17 @@ export default function SignUpScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsModalType, setTermsModalType] = useState('terms');
   const [modalConfig, setModalConfig] = useState({ type: 'success', title: '', message: '', actionText: 'Continue' });
+
+  // Hover States
+  const [isNameHovered, setIsNameHovered] = useState(false);
+  const [isEmailHovered, setIsEmailHovered] = useState(false);
+  const [isPhoneHovered, setIsPhoneHovered] = useState(false);
+  const [isPasswordHovered, setIsPasswordHovered] = useState(false);
+  const [isConfirmHovered, setIsConfirmHovered] = useState(false);
+
 
   // Focus States
   const [isNameFocused, setIsNameFocused] = useState(false);
@@ -44,6 +90,26 @@ export default function SignUpScreen({ navigation }) {
   // Animation Values
   const slideAnim = useRef(new Animated.Value(50)).current; 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Keyboard scroll refs
+  const scrollViewRef = useRef(null);
+  const nameRef = useRef(null);
+  const emailRef = useRef(null);
+  const phoneRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
+
+  // Scroll the active input above the keyboard
+  const scrollToInput = (ref) => {
+    if (!ref?.current || !scrollViewRef?.current) return;
+    ref.current.measureLayout(
+      scrollViewRef.current,
+      (x, y) => {
+        scrollViewRef.current.scrollTo({ y: y - verticalScale(20), animated: true });
+      },
+      () => {}
+    );
+  };
 
   useEffect(() => {
     const hasUpperCase = /[A-Z]/.test(password);
@@ -76,7 +142,7 @@ export default function SignUpScreen({ navigation }) {
   }, []);
 
   const handleSignUp = async () => {
-    console.log('handleSignUp called', { name, email, phone: phone?.length, agreeTerms });
+    logger.log('handleSignUp called', { name, email, phone: phone?.length, agreeTerms });
     if (!name || !email || !phone || !password || !confirmPassword) {
       setModalConfig({
         type: 'error',
@@ -126,16 +192,16 @@ export default function SignUpScreen({ navigation }) {
       setLoading(true);
 
       // 0. Proactively check if email already exists (since Supabase hides this during signUp)
-      console.log('Checking if email exists:', email);
+      logger.log('Checking if email exists:', email);
       const { data: userExists, error: checkError } = await supabase.rpc('check_if_user_exists', { 
         email_to_check: email 
       });
 
       if (checkError) {
-        console.error('Error checking user existence:', checkError);
+        logger.error('Error checking user existence:', checkError);
         // We don't throw here, we continue with signUp as usual if the check fails
       } else if (userExists) {
-        console.log('User already exists, showing "Account Exists" modal');
+        logger.log('User already exists, showing "Account Exists" modal');
         setModalConfig({
           type: 'error',
           title: 'Account Exists',
@@ -148,59 +214,35 @@ export default function SignUpScreen({ navigation }) {
       }
 
       // 1. Create the user in Supabase Auth
-      console.log('Attempting auth.signUp with:', { email, passwordLength: password.length });
+      // We pass metadata (name, phone) which the server-side trigger will use 
+      // to automatically create the profile and stats records.
+      const combinedPhone = `${selectedCountry.code}${phone.replace(/^0+/, '')}`;
+      logger.log('Attempting auth.signUp with:', { email, combinedPhone });
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: name,
-            phone: phone,
+            phone: combinedPhone,
           }
         }
       });
 
       if (authError) {
-        console.error('Auth signUp error details:', authError);
+        logger.error('Auth signUp error details:', authError);
         throw authError;
       }
 
-      console.log('Auth signUp success:', { userId: authData?.user?.id, hasSession: !!authData?.session });
+      logger.log('Auth signUp success:', { userId: authData?.user?.id, hasSession: !!authData?.session });
 
       if (authData.user) {
-        // 2. Create the profile in the public.profiles table
-        const combinedPhone = `${selectedCountry.code}${phone.replace(/^0+/, '')}`;
-        console.log('Attempting profile upsert with:', { 
-          id: authData.user.id, 
-          name, 
-          email, 
-          phone: combinedPhone 
-        });
-
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert([
-            {
-              id: authData.user.id,
-              full_name: name,
-              email: email,
-              phone: combinedPhone,
-              status: 'active',
-              subscription_type: 'limited',
-              updated_at: new Date().toISOString(),
-            }
-          ]);
-
-        if (profileError) {
-          console.error('Profile creation error details:', profileError);
-          // We don't throw here to avoid blocking registration if profile creation fails
-          // but we should know why it failed.
-        } else {
-          console.log('Profile upsert success');
-        }
+        // NOTE: Profile and stats creation is now handled by a PostgreSQL trigger 
+        // in the database (handle_new_user). This ensures data integrity.
 
         if (authData.session) {
-          console.log('Session exists, showing welcome modal');
+          logger.log('Session exists, showing welcome modal');
           setModalConfig({
             type: 'success',
             title: 'Welcome!',
@@ -219,7 +261,7 @@ export default function SignUpScreen({ navigation }) {
         }
       }
     } catch (error) {
-      console.error('Sign up error:', error);
+      logger.error('Sign up error:', error);
       
       let errorTitle = 'Registration Failed';
       let errorMessage = error.message || 'An error occurred during sign up. Please try again.';
@@ -242,105 +284,62 @@ export default function SignUpScreen({ navigation }) {
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <LinearGradient
-        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-        style={styles.background}
-      />
-
-      <SafeAreaView style={styles.topSection}>
-        <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                <ChevronLeft color={theme.colors.textPrimary} size={28} />
-                <Text style={[styles.backText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Back</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.themeToggle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]} 
-              onPress={toggleTheme}
-              activeOpacity={0.7}
-            >
-              {isDark ? <Sun size={20} color="#FCE72D" /> : <Moon size={20} color={theme.colors.textPrimary} />}
-            </TouchableOpacity>
-        </View>
-
-        <View style={styles.brandContainer}>
-          <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={[styles.welcomeText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola+</Text>
-        </View>
-        <Text style={[styles.sloganText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Join the future of learning</Text> 
-      </SafeAreaView>
-
-      <Animated.View style={[
-          styles.bottomSection,
-          {
-            backgroundColor: theme.colors.surface,
-            borderTopLeftRadius: theme.borderRadius.l,
-            borderTopRightRadius: theme.borderRadius.l,
-            transform: [{ translateY: slideAnim }],
-            opacity: fadeAnim
-          }
-      ]}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent} 
-            showsVerticalScrollIndicator={false} 
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
-            
-            <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Create Account</Text>
-
-            <View style={styles.form}>
+  const renderFormFields = () => (
+    <View style={styles.form}>
               
               <View style={styles.inputWrapper}>
-                <View style={[
+                <View
+                  {...(Platform.OS === 'web' ? { onMouseEnter: () => setIsNameHovered(true), onMouseLeave: () => setIsNameHovered(false) } : {})}
+                  style={[
                     styles.inputContainer, 
                     { 
                       backgroundColor: theme.colors.inputBg, 
                       borderColor: theme.colors.inputBorder,
                       borderRadius: theme.borderRadius.m,
                     },
+                    (isNameHovered && !isNameFocused) && { borderColor: theme.colors.secondary + '60', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' },
                     isNameFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <User 
                     color={isNameFocused ? theme.colors.secondary : theme.colors.textSecondary} 
-                    size={20} 
+                    size={scale(20)} 
                     style={styles.icon} 
                   />
                   <TextInput
+                    ref={nameRef}
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Full Name"
                     placeholderTextColor={theme.colors.textSecondary}
                     value={name}
                     onChangeText={setName}
-                    onFocus={() => setIsNameFocused(true)}
+                    onFocus={() => { setIsNameFocused(true); scrollToInput(nameRef); }}
                     onBlur={() => setIsNameFocused(false)}
+                    returnKeyType="next"
+                    onSubmitEditing={() => emailRef.current?.focus()}
                   />
                 </View>
               </View>
 
               <View style={styles.inputWrapper}>
-                <View style={[
+                <View
+                  {...(Platform.OS === 'web' ? { onMouseEnter: () => setIsEmailHovered(true), onMouseLeave: () => setIsEmailHovered(false) } : {})}
+                  style={[
                     styles.inputContainer, 
                     { 
                       backgroundColor: theme.colors.inputBg, 
                       borderColor: theme.colors.inputBorder,
                       borderRadius: theme.borderRadius.m,
                     },
+                    (isEmailHovered && !isEmailFocused) && { borderColor: theme.colors.secondary + '60', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' },
                     isEmailFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <Mail 
                     color={isEmailFocused ? theme.colors.secondary : theme.colors.textSecondary} 
-                    size={20} 
+                    size={scale(20)} 
                     style={styles.icon} 
                   />
                   <TextInput
+                    ref={emailRef}
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Email Address"
                     placeholderTextColor={theme.colors.textSecondary}
@@ -348,91 +347,102 @@ export default function SignUpScreen({ navigation }) {
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
-                    onFocus={() => setIsEmailFocused(true)}
+                    onFocus={() => { setIsEmailFocused(true); scrollToInput(emailRef); }}
                     onBlur={() => setIsEmailFocused(false)}
+                    returnKeyType="next"
+                    onSubmitEditing={() => phoneRef.current?.focus()}
                   />
                 </View>
               </View>
 
               <View style={styles.inputWrapper}>
-                <View style={[
+                <View
+                  {...(Platform.OS === 'web' ? { onMouseEnter: () => setIsPhoneHovered(true), onMouseLeave: () => setIsPhoneHovered(false) } : {})}
+                  style={[
                     styles.inputContainer, 
                     { 
                       backgroundColor: theme.colors.inputBg, 
                       borderColor: theme.colors.inputBorder,
                       borderRadius: theme.borderRadius.m,
                     },
+                    (isPhoneHovered && !isPhoneFocused) && { borderColor: theme.colors.secondary + '60', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' },
                     isPhoneFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <Phone 
                     color={isPhoneFocused ? theme.colors.secondary : theme.colors.textSecondary} 
-                    size={20} 
+                    size={scale(20)} 
                     style={styles.icon} 
                   />
                   
                   {/* Country Selector Trigger */}
                   <TouchableOpacity 
-                    style={{ flexDirection: 'row', alignItems: 'center', marginRight: 10, borderRightWidth: 1, borderRightColor: theme.colors.inputBorder, paddingRight: 10, height: '60%' }}
+                    style={{ flexDirection: 'row', alignItems: 'center', marginRight: scale(10), borderRightWidth: scale(1), borderRightColor: theme.colors.inputBorder, paddingRight: scale(10), height: '60%' }}
                     onPress={() => setShowCountryPicker(true)}
                   >
                     <Image 
                       source={{ uri: `https://flagcdn.com/w40/${selectedCountry.iso}.png` }}
-                      style={{ width: 24, height: 16, borderRadius: 2, marginRight: 8 }} 
+                      style={{ width: scale(24), height: scale(16), borderRadius: scale(2), marginRight: scale(8) }} 
                     />
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginRight: 4 }}>{selectedCountry.code}</Text>
-                    <ChevronDown size={14} color={theme.colors.textSecondary} />
+                    <Text style={{ fontSize: moderateScale(14), fontWeight: '600', color: theme.colors.textPrimary, marginRight: scale(4) }}>{selectedCountry.code}</Text>
+                    <ChevronDown size={scale(14)} color={theme.colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TextInput
+                    ref={phoneRef}
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Phone Number"
                     placeholderTextColor={theme.colors.textSecondary}
                     value={phone}
                     onChangeText={(text) => {
-                      // Only allow numbers and limit to 9 characters
                       const numericText = text.replace(/[^0-9]/g, '');
-                      if (numericText.length <= 9) {
-                        setPhone(numericText);
-                      }
+                      if (numericText.length <= 9) setPhone(numericText);
                     }}
                     maxLength={9}
                     keyboardType="phone-pad"
-                    onFocus={() => setIsPhoneFocused(true)}
+                    onFocus={() => { setIsPhoneFocused(true); scrollToInput(phoneRef); }}
                     onBlur={() => setIsPhoneFocused(false)}
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordRef.current?.focus()}
                   />
                 </View>
               </View>
 
               <View style={styles.inputWrapper}>
-                <View style={[
+                <View
+                  {...(Platform.OS === 'web' ? { onMouseEnter: () => setIsPasswordHovered(true), onMouseLeave: () => setIsPasswordHovered(false) } : {})}
+                  style={[
                     styles.inputContainer, 
                     { 
                       backgroundColor: theme.colors.inputBg, 
                       borderColor: theme.colors.inputBorder,
                       borderRadius: theme.borderRadius.m,
                     },
+                    (isPasswordHovered && !isPasswordFocused) && { borderColor: theme.colors.secondary + '60', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' },
                     isPasswordFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <Lock 
                     color={isPasswordFocused ? theme.colors.secondary : theme.colors.textSecondary} 
-                    size={20} 
+                    size={scale(20)} 
                     style={styles.icon} 
                   />
                   <TextInput
+                    ref={passwordRef}
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Password"
                     placeholderTextColor={theme.colors.textSecondary}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
-                    onFocus={() => setIsPasswordFocused(true)}
+                    onFocus={() => { setIsPasswordFocused(true); scrollToInput(passwordRef); }}
                     onBlur={() => setIsPasswordFocused(false)}
+                    returnKeyType="next"
+                    onSubmitEditing={() => confirmRef.current?.focus()}
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                     {showPassword ? (
-                      <EyeOff color={theme.colors.textSecondary} size={20} />
+                      <EyeOff color={theme.colors.textSecondary} size={scale(20)} />
                     ) : (
-                      <Eye color={theme.colors.textSecondary} size={20} />
+                      <Eye color={theme.colors.textSecondary} size={scale(20)} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -442,19 +452,19 @@ export default function SignUpScreen({ navigation }) {
                   <View style={styles.strengthContainer}>
                     <Text style={[styles.strengthTitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Password Requirements:</Text>
                     <View style={styles.requirementRow}>
-                      <CheckCircle size={14} color={passwordStrength.length ? '#10B981' : theme.colors.textSecondary} />
+                      <CheckCircle size={scale(14)} color={passwordStrength.length ? '#10B981' : theme.colors.textSecondary} />
                       <Text style={[styles.requirementText, { color: passwordStrength.length ? '#10B981' : theme.colors.textSecondary }]}>At least 8 characters</Text>
                     </View>
                     <View style={styles.requirementRow}>
-                      <CheckCircle size={14} color={passwordStrength.uppercase ? '#10B981' : theme.colors.textSecondary} />
+                      <CheckCircle size={scale(14)} color={passwordStrength.uppercase ? '#10B981' : theme.colors.textSecondary} />
                       <Text style={[styles.requirementText, { color: passwordStrength.uppercase ? '#10B981' : theme.colors.textSecondary }]}>At least one uppercase letter (A-Z)</Text>
                     </View>
                     <View style={styles.requirementRow}>
-                      <CheckCircle size={14} color={passwordStrength.number ? '#10B981' : theme.colors.textSecondary} />
+                      <CheckCircle size={scale(14)} color={passwordStrength.number ? '#10B981' : theme.colors.textSecondary} />
                       <Text style={[styles.requirementText, { color: passwordStrength.number ? '#10B981' : theme.colors.textSecondary }]}>At least one number (0-9)</Text>
                     </View>
                     <View style={styles.requirementRow}>
-                      <CheckCircle size={14} color={passwordStrength.special ? '#10B981' : theme.colors.textSecondary} />
+                      <CheckCircle size={scale(14)} color={passwordStrength.special ? '#10B981' : theme.colors.textSecondary} />
                       <Text style={[styles.requirementText, { color: passwordStrength.special ? '#10B981' : theme.colors.textSecondary }]}>At least one special character (@, #, $, etc.)</Text>
                     </View>
                   </View>
@@ -462,35 +472,44 @@ export default function SignUpScreen({ navigation }) {
               </View>
 
                <View style={styles.inputWrapper}>
-                <View style={[
+                <View
+                  {...(Platform.OS === 'web' ? { onMouseEnter: () => setIsConfirmHovered(true), onMouseLeave: () => setIsConfirmHovered(false) } : {})}
+                  style={[
                     styles.inputContainer, 
                     { 
                       backgroundColor: theme.colors.inputBg, 
                       borderColor: theme.colors.inputBorder,
                       borderRadius: theme.borderRadius.m,
                     },
+                    (isConfirmHovered && !isConfirmFocused) && { borderColor: theme.colors.secondary + '60', backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' },
                     isConfirmFocused && { borderColor: theme.colors.secondary, backgroundColor: isDark ? 'rgba(240, 236, 29, 0.03)' : 'rgba(37, 99, 235, 0.03)' }
                 ]}>
                   <CheckCircle 
                     color={confirmPassword.length > 0 ? (password === confirmPassword ? '#10B981' : '#EF4444') : (isConfirmFocused ? theme.colors.secondary : theme.colors.textSecondary)} 
-                    size={20} 
+                    size={scale(20)} 
                     style={styles.icon} 
                   />
                   <TextInput
+                    ref={confirmRef}
                     style={[styles.input, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}
                     placeholder="Confirm Password"
                     placeholderTextColor={theme.colors.textSecondary}
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     secureTextEntry={!showConfirmPassword}
-                    onFocus={() => setIsConfirmFocused(true)}
+                    onFocus={() => { 
+                      setIsConfirmFocused(true); 
+                      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+                    }}
                     onBlur={() => setIsConfirmFocused(false)}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSignUp}
                   />
                   <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                     {showConfirmPassword ? (
-                      <EyeOff color={theme.colors.textSecondary} size={20} />
+                      <EyeOff color={theme.colors.textSecondary} size={scale(20)} />
                     ) : (
-                      <Eye color={theme.colors.textSecondary} size={20} />
+                      <Eye color={theme.colors.textSecondary} size={scale(20)} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -502,17 +521,29 @@ export default function SignUpScreen({ navigation }) {
                 activeOpacity={0.8}
               >
                   {agreeTerms ? (
-                      <CheckSquare color={theme.colors.secondary} size={24} />
+                      <CheckSquare color={theme.colors.secondary} size={scale(24)} />
                   ) : (
-                      <Square color={theme.colors.textSecondary} size={24} />
+                      <Square color={theme.colors.textSecondary} size={scale(24)} />
                   )}
                   <Text style={[styles.termsText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                      I agree to the <Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>Terms & Privacy Policy</Text>
+                      I agree to the <Text 
+                        onPress={() => {
+                          setTermsModalType('terms');
+                          setShowTermsModal(true);
+                        }}
+                        style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}
+                      >Terms</Text> & <Text 
+                        onPress={() => {
+                          setTermsModalType('privacy');
+                          setShowTermsModal(true);
+                        }}
+                        style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}
+                      >Privacy Policy</Text>
                   </Text>
               </TouchableOpacity>
 
               <View style={styles.verificationNotice}>
-                <Mail color={theme.colors.secondary} size={14} />
+                <Mail color={theme.colors.secondary} size={scale(14)} />
                 <Text style={[styles.verificationNoticeText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
                   Verification email will be sent after registration
                 </Text>
@@ -535,7 +566,7 @@ export default function SignUpScreen({ navigation }) {
                   ) : (
                     <>
                       <Text style={[styles.signUpButtonText, { color: theme.colors.textContrast, fontFamily: theme.typography.fontFamily }]}>Create Account</Text>
-                      <ArrowRight color={theme.colors.textContrast} size={24} style={{ marginLeft: 10 }} />
+                      <ArrowRight color={theme.colors.textContrast} size={scale(24)} style={{ marginLeft: scale(10) }} />
                     </>
                   )}
                 </LinearGradient>
@@ -557,7 +588,159 @@ export default function SignUpScreen({ navigation }) {
               />
 
             </View>
-          </ScrollView>
+  );
+
+  const renderLogoSection = (desktopStyles = false) => (
+    <View style={[styles.brandContainer, desktopStyles && { marginBottom: 30 }]}>
+          <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+          <Text style={[styles.welcomeText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Sikola+</Text>
+          {!desktopStyles && <Text style={[styles.sloganText, { color: theme.colors.secondary, fontFamily: theme.typography.fontFamily }]}>Join the future of learning</Text>}
+        </View>
+  );
+
+  if (isDesktop) {
+    return (
+      <View style={[styles.container, styles.desktopContainer, { backgroundColor: theme.colors.primary }]}>
+        
+        {/* Left Side: Cycling Images */}
+        <View style={styles.desktopLeftPane}>
+          <Image 
+            key={activeSlide} 
+            source={onboardingData[activeSlide].image} 
+            style={styles.desktopHeroImage} 
+            resizeMode="cover" 
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            style={styles.desktopGradientOverlay}
+          />
+          <View style={styles.desktopHeroTextContainer}>
+             <Text style={[styles.desktopHeroTitle, { fontFamily: theme.typography.fontFamily }]}>{onboardingData[activeSlide].title}</Text>
+             <Text style={[styles.desktopHeroDesc, { fontFamily: theme.typography.fontFamily }]}>{onboardingData[activeSlide].description}</Text>
+             <View style={styles.pagination}>
+              {onboardingData.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dot,
+                    { backgroundColor: activeSlide === index ? theme.colors.secondary : 'rgba(255,255,255,0.4)' },
+                    activeSlide === index && styles.activeDot
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Right Side: Form Card */}
+        <View style={styles.desktopRightPane}>
+          <TouchableOpacity 
+            style={[
+              styles.themeToggleDesktop,
+              !isDark && { borderColor: 'rgba(0,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0.15)' }
+            ]}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+          >
+            {isDark ? <Sun size={20} color="#FCE72D" /> : <Moon size={20} color="#000" />}
+          </TouchableOpacity>
+
+          <View style={[styles.desktopFormCard, { backgroundColor: theme.colors.surface, shadowColor: isDark ? '#000' : 'rgba(0,0,0,0.1)' }]}>
+            {renderLogoSection(true)}
+            <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily, textAlign: 'center', marginBottom: 20 }]}>Create Account</Text>
+            {renderFormFields()}
+          </View>
+        </View>
+
+        <StatusModal
+          visible={showModal}
+          onClose={() => setShowModal(false)}
+          onAction={() => {
+            setShowModal(false);
+            if (modalConfig.type === 'success') {
+              if (modalConfig.title === 'OTP Sent') {
+                navigation.navigate('VerifyEmail', { email: email });
+              } else if (modalConfig.title === 'Welcome!') {
+                navigation.navigate('Subscription', { firstTime: true });
+              }
+            } else if (modalConfig.title === 'Account Exists') {
+              navigation.navigate('Login');
+            }
+          }}
+          type={modalConfig.type}
+          title={modalConfig.title}
+          message={modalConfig.message}
+          actionText={modalConfig.actionText}
+        />
+
+        <TermsModal 
+          visible={showTermsModal}
+          onClose={() => setShowTermsModal(false)}
+          onAccept={() => {
+            setAgreeTerms(true);
+            setShowTermsModal(false);
+          }}
+          type={termsModalType}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.background}
+      />
+
+      <SafeAreaView style={styles.topSection}>
+        <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.backButton}>
+                <ChevronLeft color={theme.colors.textPrimary} size={scale(28)} />
+                <Text style={[styles.backText, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Back</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.themeToggle,
+                !isDark && { borderColor: 'rgba(0,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0.15)' }
+              ]}
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+            >
+              {isDark ? <Sun size={scale(20)} color="#FCE72D" /> : <Moon size={scale(20)} color="#000" />}
+            </TouchableOpacity>
+        </View>
+
+        {renderLogoSection()}
+      </SafeAreaView>
+
+      <Animated.View style={[
+          styles.bottomSection,
+          {
+            backgroundColor: theme.colors.surface,
+            borderTopLeftRadius: theme.borderRadius.l,
+            borderTopRightRadius: theme.borderRadius.l,
+            transform: [{ translateY: slideAnim }],
+            opacity: fadeAnim
+          }
+      ]}>
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+        >
+          <ScrollView 
+            ref={scrollViewRef}
+            contentContainerStyle={styles.scrollContent} 
+            showsVerticalScrollIndicator={false} 
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
+            
+            <Text style={[styles.formTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Create Account</Text>
+
+            {renderFormFields()}</ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
 
@@ -568,7 +751,13 @@ export default function SignUpScreen({ navigation }) {
         onAction={() => {
           setShowModal(false);
           if (modalConfig.type === 'success') {
-            navigation.navigate('VerifyEmail', { email: email });
+            if (modalConfig.title === 'OTP Sent') {
+              // Email verification required — go to verify screen
+              navigation.navigate('VerifyEmail', { email: email });
+            } else if (modalConfig.title === 'Welcome!') {
+              // Auto-logged in — show plan selection as part of first-time onboarding
+              navigation.navigate('Subscription', { firstTime: true });
+            }
           } else if (modalConfig.title === 'Account Exists') {
             navigation.navigate('Login');
           }
@@ -577,6 +766,16 @@ export default function SignUpScreen({ navigation }) {
         title={modalConfig.title}
         message={modalConfig.message}
         actionText={modalConfig.actionText}
+      />
+
+      <TermsModal 
+        visible={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        onAccept={() => {
+          setAgreeTerms(true);
+          setShowTermsModal(false);
+        }}
+        type={termsModalType}
       />
     </View>
   );
@@ -592,158 +791,226 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    height: '35%',
+    height: verticalScale(280),
   },
   topSection: {
-    height: '25%',
-    paddingHorizontal: 20,
-    justifyContent: 'space-between', 
-    paddingBottom: 25, 
+    paddingHorizontal: scale(20),
+    justifyContent: 'flex-start',
+    paddingBottom: verticalScale(6), 
     alignItems: 'center', 
   },
   header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: 10,
+      marginTop: verticalScale(10),
       width: '100%', 
   },
   themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: scale(1),
+    borderColor: 'rgba(255, 255, 255, 0.35)',
   },
   backButton: {
       flexDirection: 'row',
       alignItems: 'center',
   },
   backText: {
-      fontSize: 16,
+      fontSize: moderateScale(16),
       fontWeight: '600',
-      marginLeft: 5,
+      marginLeft: scale(5),
   },
   brandContainer: {
     alignItems: 'center',
+    marginTop: verticalScale(12),
   },
   logo: {
-      width: 80, // Slightly smaller than login screen for compact header
-      height: 80,
-      marginBottom: 5,
-      borderRadius: 16,
+      width: scale(65),
+      height: scale(65),
+      marginBottom: verticalScale(4),
+      backgroundColor: '#FFF',
+      borderRadius: scale(32.5),
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: verticalScale(10) },
+      shadowOpacity: 0.2,
+      shadowRadius: scale(15),
+      elevation: 10,
   },
   welcomeText: {
-    fontSize: 28, 
+    fontSize: moderateScale(26), 
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: verticalScale(4),
   },
   sloganText: {
-    fontSize: 14,
+    fontSize: moderateScale(12),
     fontStyle: 'italic',
     fontWeight: '600',
+    marginTop: verticalScale(2),
   },
   bottomSection: {
     flex: 1,
-    paddingHorizontal: 30,
-    paddingTop: 30,
+    paddingHorizontal: scale(30),
+    paddingTop: verticalScale(20),
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: verticalScale(150),
   },
   formTitle: {
-    fontSize: 24,
+    fontSize: moderateScale(24),
     fontWeight: 'bold',
-    marginBottom: 20,
+    marginBottom: verticalScale(20),
   },
   form: {
     width: '100%',
   },
   inputWrapper: {
-    marginBottom: 15,
+    marginBottom: verticalScale(15),
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 15,
-    height: 55,
+    borderWidth: scale(1),
+    paddingHorizontal: scale(15),
+    height: verticalScale(50),
   },
   icon: {
-    marginRight: 10,
+    marginRight: scale(10),
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   termsContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
-      marginTop: 5,
+      marginBottom: verticalScale(20),
+      marginTop: verticalScale(5),
   },
   termsText: {
-      marginLeft: 10,
-      fontSize: 14,
+      marginLeft: scale(10),
+      fontSize: moderateScale(14),
   },
    buttonContainer: {
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: verticalScale(6) },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: scale(10),
     elevation: 8,
-    marginTop: 5,
-    marginBottom: 20,
+    marginTop: verticalScale(5),
+    marginBottom: verticalScale(20),
   },
   signUpButton: {
-    borderRadius: 32,
-    height: 60,
+    borderRadius: scale(32),
+    height: verticalScale(55),
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
   },
   signUpButtonText: {
-    fontSize: 18,
+    fontSize: moderateScale(18),
     fontWeight: 'bold',
   },
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: verticalScale(10),
   },
   loginText: {
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   loginLink: {
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: moderateScale(16),
   },
   verificationNotice: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-    gap: 6,
+    marginBottom: verticalScale(10),
+    gap: scale(6),
   },
   verificationNoticeText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     opacity: 0.8,
   },
   strengthContainer: {
-    marginTop: 10,
-    paddingHorizontal: 5,
+    marginTop: verticalScale(10),
+    paddingHorizontal: scale(5),
   },
   strengthTitle: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '600',
-    marginBottom: 6,
+    marginBottom: verticalScale(6),
   },
   requirementRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-    gap: 8,
+    marginBottom: verticalScale(4),
+    gap: scale(8),
   },
   requirementText: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
   },
+
+  // Desktop Split Screen Styles
+  desktopContainer: {
+    flexDirection: 'row',
+  },
+  desktopLeftPane: {
+    flex: 1.2,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 30,
+    margin: 20,
+    marginRight: 0,
+  },
+  desktopRightPane: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    position: 'relative',
+  },
+  desktopHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  desktopGradientOverlay: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%',
+  },
+  desktopHeroTextContainer: {
+    position: 'absolute', bottom: 60, left: 40, right: 40,
+  },
+  desktopHeroTitle: {
+    fontSize: 48, fontWeight: '900', color: '#FFF', marginBottom: 16,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8,
+  },
+  desktopHeroDesc: {
+    fontSize: 20, color: 'rgba(255,255,255,0.9)', lineHeight: 30, marginBottom: 24,
+  },
+  pagination: { flexDirection: 'row' },
+  dot: { width: 8, height: 8, borderRadius: 4, marginHorizontal: 4 },
+  activeDot: { width: 24 },
+  desktopFormCard: {
+    width: '100%',
+    maxWidth: 480,
+    padding: 40,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.1,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  themeToggleDesktop: {
+    position: 'absolute', top: 40, right: 40,
+    width: 44, height: 44, borderRadius: 22,
+    justifyContent: 'center', alignItems: 'center', zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.35)',
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
+  }
 });

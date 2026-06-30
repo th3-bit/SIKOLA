@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
+import { scale, verticalScale, moderateScale, width } from '../utils/Scaling';
 import { Zap, Flame } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 
-const { width } = Dimensions.get('window');
+// Replaced hardcoded Dimensions with scaling utility
 
 /**
  * StreakCard component updated to match PracticeScreen design
@@ -13,6 +14,8 @@ const { width } = Dimensions.get('window');
 export default function StreakCard({ mode = 'weekly', showHeader = true }) {
   const { theme, isDark } = useTheme();
   const { userStats, weeklyActivity } = useProgress();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth > 768;
   
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
@@ -31,7 +34,13 @@ export default function StreakCard({ mode = 'weekly', showHeader = true }) {
         styles.streakCard, 
         { 
           backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+          borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' 
+        },
+        isDesktop && {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.25)',
+          borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+          borderWidth: 1.5,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : {}),
         }
       ]}>
         <LinearGradient
@@ -43,7 +52,7 @@ export default function StreakCard({ mode = 'weekly', showHeader = true }) {
         <View style={styles.streakContent}>
           <View style={styles.streakInfo}>
             <View style={styles.streakIconCircle}>
-              <Flame color="#FF453A" size={32} fill="#FF453A" />
+              <Flame color="#FF453A" size={24} fill="#FF453A" />
             </View>
             <View style={styles.streakTextContainer}>
               <Text style={[styles.streakTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>
@@ -71,15 +80,15 @@ export default function StreakCard({ mode = 'weekly', showHeader = true }) {
                 style={[
                   styles.dayChip,
                   { 
-                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
-                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
+                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'),
+                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'),
                   }
                 ]}
               >
                 <Zap 
                   size={14} 
                   color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
-                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.1)' : 'transparent')} 
+                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.22)' : 'transparent')} 
                 />
                 <Text style={[
                   styles.dayChipText, 
@@ -102,13 +111,11 @@ export default function StreakCard({ mode = 'weekly', showHeader = true }) {
 const styles = StyleSheet.create({
   streakCardWrapper: {
     width: '100%',
-    borderRadius: 28,
+    borderRadius: moderateScale(28),
     overflow: 'hidden',
-    marginBottom: 20,
   },
   streakCard: {
-    flex: 1,
-    padding: 20,
+    padding: scale(12),
     borderWidth: 1,
   },
   streakContent: {
@@ -123,57 +130,57 @@ const styles = StyleSheet.create({
     flex: 1, // Ensure text doesn't push badge off if too long
   },
   streakIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     backgroundColor: 'rgba(255, 69, 58, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: scale(12),
   },
   streakTextContainer: {
     justifyContent: 'center',
     flex: 1, 
   },
   streakTitle: {
-    fontSize: 18,
+    fontSize: moderateScale(15),
     fontWeight: '800',
   },
   streakSub: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: moderateScale(11),
+    marginTop: verticalScale(1),
   },
   streakBadge: {
     backgroundColor: 'rgba(255, 69, 58, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    borderRadius: moderateScale(12),
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: scale(5),
   },
   streakValue: {
-    fontSize: 12,
+    fontSize: moderateScale(12),
     fontWeight: '700',
   },
   streakDaysContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 0,
     alignItems: 'center',
-    marginTop: 5,
+    marginTop: verticalScale(10),
+    gap: scale(5),
   },
   dayChip: {
-    width: (width - 80) / 7, // width - 40 (screen padding) - 40 (card padding) / 7 items
-    height: 55,
-    borderRadius: 12,
+    flex: 1,
+    height: verticalScale(44),
+    borderRadius: moderateScale(10),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    gap: 4,
+    gap: verticalScale(2),
   },
   dayChipText: {
-    fontSize: 14,
+    fontSize: moderateScale(12),
     fontWeight: '800',
   },
 });

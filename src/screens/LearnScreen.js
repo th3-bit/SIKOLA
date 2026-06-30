@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   View, 
   Text, 
@@ -7,7 +8,8 @@ import {
   TouchableOpacity, 
   Dimensions,
   ActivityIndicator,
-  Image
+  Image,
+  useWindowDimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -44,6 +46,9 @@ export default function LearnScreen({ navigation }) {
   const [allSubjects, setAllSubjects] = useState([]);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
   const [achievementModalVisible, setAchievementModalVisible] = useState(false);
+
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 1024;
 
   // Calculate Level (Every 1000 XP = 1 Level)
   const currentLevel = Math.floor((userStats?.total_xp || 0) / 1000) + 1;
@@ -134,11 +139,39 @@ export default function LearnScreen({ navigation }) {
   })) || [];
 
 
-  // Determine which subject path to show
+  // Track if user has manually chosen a subject this session
+  const manualSubjectOverride = useRef(null);
+
+  // Fetch subjects once on mount, then restore saved preference
   useEffect(() => {
     fetchSubjects();
-    loadActivePath();
-  }, [recentLessons, continueLearning]);
+  }, []);
+
+  // Determine which subject path to show when data is available
+  useEffect(() => {
+    if (allSubjects.length === 0) return;
+
+    // If user manually selected a subject this session, keep it
+    if (manualSubjectOverride.current) {
+      loadActivePath(manualSubjectOverride.current);
+      return;
+    }
+
+    // Otherwise, try to restore from AsyncStorage
+    AsyncStorage.getItem('learnscreen_selected_subject_id').then((savedId) => {
+      if (savedId) {
+        // Verify the saved subject still exists
+        const exists = allSubjects.find((s) => s.id === savedId);
+        if (exists) {
+          manualSubjectOverride.current = savedId;
+          loadActivePath(savedId);
+          return;
+        }
+      }
+      // Fall back to smart detection (recent lesson, first subject, etc.)
+      loadActivePath();
+    });
+  }, [recentLessons, continueLearning, allSubjects]);
 
   const fetchSubjects = async () => {
     try {
@@ -288,8 +321,11 @@ export default function LearnScreen({ navigation }) {
             disabled={isLocked}
             onPress={() => {
               if (activePathSubject) {
-                // Navigate to lesson detail or topic view
-                navigation.navigate('SubjectDetail', { subject: activePathSubject });
+                navigation.navigate('LessonDetail', { 
+                  lesson: step.originalTopic || step, 
+                  subject: activePathSubject,
+                  topicIndex: index
+                });
               }
             }}
             style={[
@@ -333,10 +369,14 @@ export default function LearnScreen({ navigation }) {
         
         <ScrollView 
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 }]}
         >
           {/* Hero Overall Stats */}
-          <View style={styles.statsOverview}>
+          <View style={[
+            styles.statsOverview, 
+            { paddingHorizontal: 20 },
+            isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }
+          ]}>
              <View style={[styles.statsBlur, { 
                 backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
                 borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
@@ -372,29 +412,42 @@ export default function LearnScreen({ navigation }) {
 
           {/* Continue Learning Section */}
           {continueLearning?.length > 0 && (
-            <>
-              <View style={styles.sectionHeader}>
+            <View style={[
+              {
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#E4E4E7', // Darker gray for better contrast
+                borderRadius: 24,
+                paddingVertical: 20,
+                marginBottom: 20,
+                borderWidth: 0, // No border for the solid container look
+                marginHorizontal: isDesktop ? 0 : 10,
+              },
+              isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }
+            ]}>
+              <View style={[styles.sectionHeader, { paddingHorizontal: 20 }]}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Keep Going</Text>
               </View>
 
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.continueList}
+                contentContainerStyle={[styles.continueList, { paddingHorizontal: 20 }]}
               >
                 {continueLearning.map((item) => (
                   <TouchableOpacity 
                     key={item.id}
                     activeOpacity={1} 
-                    style={[styles.continueCardWrapper, { shadowColor: item.color || theme.colors.secondary, marginRight: 20 }]}
+                    style={[styles.continueCardWrapper, { shadowColor: item.color || theme.colors.secondary, marginRight: 20 }, isDesktop && { width: 350 }]}
                      onPress={() => {
-                          navigation.navigate('SubjectDetail', { 
+                          navigation.navigate('LessonDetail', {
+                            lesson: item,
                             subject: { 
                               name: item.category, 
                               color: item.color, 
                               id: item.subject_id,
                               icon: item.icon 
-                            } 
+                            },
+                            subjectIndex: item.subjectIndex,
+                            topicIndex: item.topicIndex
                           });
                      }}
                   >
@@ -426,173 +479,190 @@ export default function LearnScreen({ navigation }) {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </>
+            </View>
           )}
 
-          {/* 🏆 Achievements Section */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Achievements</Text>
-            <TouchableOpacity><Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>View All</Text></TouchableOpacity>
-          </View>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.badgesList}>
-            {achievements.map((badge) => {
-              const progress = Math.min(badge.current / badge.total, 1);
-              return (
-                <TouchableOpacity 
-                  key={badge.id} 
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    setSelectedAchievement(badge);
-                    setAchievementModalVisible(true);
-                  }}
-                  style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.8 }]}
-                >
-                   <View style={[styles.badgeInner, { 
-                      borderColor: badge.unlocked ? `${badge.color}50` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'), 
-                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
-                   }]}>
-                      {badge.unlocked && (
-                        <LinearGradient
-                          colors={[`${badge.color}15`, 'transparent']}
-                          style={StyleSheet.absoluteFill}
-                        />
-                      )}
-                      
-                      <View style={[styles.badgeIconBg, { 
-                        backgroundColor: badge.unlocked ? `${badge.color}20` : 'rgba(255,255,255,0.05)',
-                        borderColor: badge.unlocked ? badge.color : 'transparent',
-                        borderWidth: badge.unlocked ? 1 : 0
-                      }]}>
-                        {React.createElement(badge.icon, { 
-                          size: 24, 
-                          color: badge.unlocked ? badge.color : theme.colors.textSecondary,
-                          strokeWidth: 2.5
-                        })}
-                      </View>
-                      
-                      <Text style={[styles.badgeTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>
-                        {badge.title}
-                      </Text>
+          {/* Wrapper for responsive layout */}
+          <View style={[isDesktop && styles.desktopLayout]}>
+            {/* Main Column */}
+            <View style={[isDesktop && styles.mainColumn]}>
+              {/* Learning Path / Subjects */}
+              <View style={[styles.sectionHeader, { marginTop: 30, paddingHorizontal: 20 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subjects</Text>
+              </View>
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.subjectSelectorList, { paddingHorizontal: 20 }]}>
+                {allSubjects.map((s) => (
+                  <TouchableOpacity 
+                    key={s.id} 
+                    onPress={() => {
+                      manualSubjectOverride.current = s.id;
+                      AsyncStorage.setItem('learnscreen_selected_subject_id', s.id);
+                      loadActivePath(s.id);
+                    }}
+                    style={[
+                      styles.subjectChip, 
+                      { 
+                        backgroundColor: activePathSubject?.id === s.id ? `${s.color || theme.colors.secondary}20` : 'transparent',
+                        borderColor: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
+                      }
+                    ]}
+                  >
+                    <Text style={[
+                      styles.subjectChipText, 
+                      { color: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : theme.colors.textSecondary }
+                    ]}>
+                      {s.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-                      {!badge.unlocked ? (
-                        <View style={styles.badgeProgressContainer}>
-                           <View style={styles.badgeProgressBarBg}>
-                              <View style={[styles.badgeProgressBarFill, { width: `${progress * 100}%`, backgroundColor: badge.color }]} />
-                           </View>
-                           <Text style={[styles.badgeProgressText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                              {badge.current}/{badge.total}
+              {activePathSubject && (
+                <>
+                  <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20 }}>
+                      <View style={[styles.activeSubjectIndicator, { backgroundColor: activePathSubject.color }]} />
+                      <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activePathSubject.name} Path</Text>
+                    </View>
+                    <View style={[styles.smallBadge, { backgroundColor: 'rgba(255,255,255,0.05)', marginRight: 20 }]}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>{learningPath.length} Steps</Text>
+                    </View>
+                  </View>
+
+                  {loadingPath ? (
+                     <ActivityIndicator color={theme.colors.secondary} style={{ marginTop: 20 }} />
+                  ) : (
+                    <View style={styles.pathGrid}>
+                      {learningPath.map((step, index) => (
+                        <PathStep 
+                          key={step.id} 
+                          step={step} 
+                          index={index} 
+                          isLast={index === learningPath.length - 1} 
+                        />
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+              
+              {/* Empty State if nothing */}
+              {!activePathSubject && continueLearning.length === 0 && (
+                 <View style={{ padding: 40, paddingHorizontal: 20, alignItems: 'center' }}>
+                    <Text style={{ color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }}>Start a lesson to see your path here!</Text>
+                    <TouchableOpacity 
+                       style={{ marginTop: 20, padding: 10, backgroundColor: theme.colors.secondary, borderRadius: 10 }}
+                       onPress={() => navigation.navigate('Topics')}
+                    >
+                       <Text style={{ fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>Explore Topics</Text>
+                    </TouchableOpacity>
+                 </View>
+              )}
+            </View>
+
+            {/* Side Column */}
+            <View style={[isDesktop && styles.sideColumn]}>
+              {/* 🏆 Achievements Section */}
+              <View style={[styles.sectionHeader, { paddingHorizontal: 20, marginTop: isDesktop ? 30 : 0 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Achievements</Text>
+                <TouchableOpacity><Text style={{ color: theme.colors.secondary, fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>View All</Text></TouchableOpacity>
+              </View>
+              
+              <ScrollView 
+                horizontal={!isDesktop} 
+                showsHorizontalScrollIndicator={false} 
+                contentContainerStyle={[styles.badgesList, { paddingHorizontal: 20 }, isDesktop && styles.desktopBadgesGrid]}
+              >
+                {achievements.map((badge) => {
+                  const progress = Math.min(badge.current / badge.total, 1);
+                  return (
+                    <TouchableOpacity 
+                      key={badge.id} 
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setSelectedAchievement(badge);
+                        setAchievementModalVisible(true);
+                      }}
+                      style={[styles.badgeCard, { opacity: badge.unlocked ? 1 : 0.8 }, isDesktop && { width: '48%', marginBottom: 15 }]}
+                    >
+                       <View style={[styles.badgeInner, { 
+                          borderColor: badge.unlocked ? `${badge.color}50` : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'), 
+                          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)' 
+                       }]}>
+                          {badge.unlocked && (
+                            <LinearGradient
+                              colors={[`${badge.color}15`, 'transparent']}
+                              style={StyleSheet.absoluteFill}
+                            />
+                          )}
+                          
+                          <View style={[styles.badgeIconBg, { 
+                            backgroundColor: badge.unlocked ? `${badge.color}20` : 'rgba(255,255,255,0.05)',
+                            borderColor: badge.unlocked ? badge.color : 'transparent',
+                            borderWidth: badge.unlocked ? 1 : 0
+                          }]}>
+                            {React.createElement(badge.icon, { 
+                              size: 24, 
+                              color: badge.unlocked ? badge.color : theme.colors.textSecondary,
+                              strokeWidth: 2.5
+                            })}
+                          </View>
+                          
+                          <Text style={[styles.badgeTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1}>
+                            {badge.title}
+                          </Text>
+
+                          {!badge.unlocked ? (
+                            <View style={styles.badgeProgressContainer}>
+                               <View style={styles.badgeProgressBarBg}>
+                                  <View style={[styles.badgeProgressBarFill, { width: `${progress * 100}%`, backgroundColor: badge.color }]} />
+                               </View>
+                               <Text style={[styles.badgeProgressText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                                  {badge.current}/{badge.total}
+                               </Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.unlockedTag, { backgroundColor: `${badge.color}20` }]}>
+                               <Text style={[styles.unlockedTagText, { color: badge.color, fontFamily: theme.typography.fontFamily }]}>UNLOCKED</Text>
+                            </View>
+                          )}
+                       </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* 📜 Recent Activity Section */}
+              <View style={[styles.sectionHeader, { marginTop: 30, paddingHorizontal: 20 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Recent History</Text>
+              </View>
+              
+              <View style={[styles.activityContainer, { paddingHorizontal: 20 }]}>
+                {recentActivity.map((activity, index) => (
+                  <View key={activity.id} style={styles.activityItemWrapper}>
+                     {index !== recentActivity.length - 1 && (
+                        <View style={[styles.activityLine, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+                     )}
+                     <View style={[styles.activityCard, { 
+                       backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                       borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+                     }]}>
+                        <View style={[styles.activityIconBox, { backgroundColor: `${activity.color}20` }]}>
+                           {activity.type === 'quiz' ? <Trophy size={18} color={activity.color} /> : <CheckCircle2 size={18} color={activity.color} />}
+                        </View>
+                        <View style={styles.activityInfo}>
+                           <Text style={[styles.activityTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activity.title}</Text>
+                           <Text style={[styles.activityTime, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
+                             {activity.time} • <Text style={{ color: activity.color }}>{activity.score}</Text>
                            </Text>
                         </View>
-                      ) : (
-                        <View style={[styles.unlockedTag, { backgroundColor: `${badge.color}20` }]}>
-                           <Text style={[styles.unlockedTagText, { color: badge.color, fontFamily: theme.typography.fontFamily }]}>UNLOCKED</Text>
-                        </View>
-                      )}
-                   </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Learning Path */}
-          <View style={[styles.sectionHeader, { marginTop: 30 }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subjects</Text>
-          </View>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subjectSelectorList}>
-            {allSubjects.map((s) => (
-              <TouchableOpacity 
-                key={s.id} 
-                onPress={() => loadActivePath(s.id)}
-                style={[
-                  styles.subjectChip, 
-                  { 
-                    backgroundColor: activePathSubject?.id === s.id ? `${s.color || theme.colors.secondary}20` : 'transparent',
-                    borderColor: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
-                  }
-                ]}
-              >
-                <Text style={[
-                  styles.subjectChipText, 
-                  { color: activePathSubject?.id === s.id ? (s.color || theme.colors.secondary) : theme.colors.textSecondary }
-                ]}>
-                  {s.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {activePathSubject && (
-            <>
-              <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={[styles.activeSubjectIndicator, { backgroundColor: activePathSubject.color }]} />
-                  <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activePathSubject.name} Path</Text>
-                </View>
-                <View style={[styles.smallBadge, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>{learningPath.length} Steps</Text>
-                </View>
+                     </View>
+                  </View>
+                ))}
               </View>
-
-              {loadingPath ? (
-                 <ActivityIndicator color={theme.colors.secondary} style={{ marginTop: 20 }} />
-              ) : (
-                <View style={styles.pathGrid}>
-                  {learningPath.map((step, index) => (
-                    <PathStep 
-                      key={step.id} 
-                      step={step} 
-                      index={index} 
-                      isLast={index === learningPath.length - 1} 
-                    />
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-
-          {/* 📜 Recent Activity Section */}
-          <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Recent History</Text>
+            </View>
           </View>
-          
-          <View style={styles.activityContainer}>
-            {recentActivity.map((activity, index) => (
-              <View key={activity.id} style={styles.activityItemWrapper}>
-                 {index !== recentActivity.length - 1 && (
-                    <View style={[styles.activityLine, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
-                 )}
-                 <View style={[styles.activityCard, { 
-                   backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-                   borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
-                 }]}>
-                    <View style={[styles.activityIconBox, { backgroundColor: `${activity.color}20` }]}>
-                       {activity.type === 'quiz' ? <Trophy size={18} color={activity.color} /> : <CheckCircle2 size={18} color={activity.color} />}
-                    </View>
-                    <View style={styles.activityInfo}>
-                       <Text style={[styles.activityTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{activity.title}</Text>
-                       <Text style={[styles.activityTime, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>
-                         {activity.time} • <Text style={{ color: activity.color }}>{activity.score}</Text>
-                       </Text>
-                    </View>
-                 </View>
-              </View>
-            ))}
-          </View>
-
-          {/* Empty State if nothing */}
-          {!activePathSubject && continueLearning.length === 0 && (
-             <View style={{ padding: 40, alignItems: 'center' }}>
-                <Text style={{ color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }}>Start a lesson to see your path here!</Text>
-                <TouchableOpacity 
-                   style={{ marginTop: 20, padding: 10, backgroundColor: theme.colors.secondary, borderRadius: 10 }}
-                   onPress={() => navigation.navigate('Topics')}
-                >
-                   <Text style={{ fontWeight: 'bold', fontFamily: theme.typography.fontFamily }}>Explore Topics</Text>
-                </TouchableOpacity>
-             </View>
-          )}
 
           <View style={{ height: 120 }} />
 
@@ -618,7 +688,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
     paddingTop: 10,
   },
   statsOverview: {
@@ -953,5 +1022,29 @@ const styles = StyleSheet.create({
   activityTime: {
     fontSize: 12,
     opacity: 0.7,
+  },
+  desktopLayout: {
+    flexDirection: 'row',
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+    gap: 40,
+    alignItems: 'flex-start',
+  },
+  mainColumn: {
+    flex: 2,
+  },
+  sideColumn: {
+    flex: 1,
+    marginTop: -30, // to align with Main Column's first element visually
+  },
+  desktopBadgesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 0,
+    paddingRight: 0,
+    gap: 0,
   }
 });

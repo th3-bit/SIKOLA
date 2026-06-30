@@ -118,7 +118,7 @@ const VerticalTabBar = ({ state, descriptors, navigation, theme, isDark }) => {
 
 // ─── HORIZONTAL MOBILE PILL ───────────────────────────────────────────────────
 const HorizontalTabBar = ({ state, descriptors, navigation, theme, isDark }) => {
-  const { visible } = useCopilot();
+  const { visible, stop } = useCopilot();
 
   const mainRoutes   = state.routes.slice(0, 4);
   const profileRoute = state.routes[4];

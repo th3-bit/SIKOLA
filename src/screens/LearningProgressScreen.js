@@ -18,7 +18,8 @@ import {
   TrendingUp, 
   BookOpen,
   Trophy,
-  Medal
+  Medal,
+  Zap
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
@@ -205,10 +206,16 @@ export default function LearningProgressScreen({ navigation }) {
   const circumference = 2 * Math.PI * radius;
 
   const StatCard = ({ icon: Icon, label, value, color }) => (
-    <View style={styles.statCardWrapper}>
+    <View style={[styles.statCardWrapper, {
+      shadowColor: color,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 12,
+      elevation: 4
+    }]}>
       <View style={[styles.statCard, { 
         backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'
       }]}>
         <LinearGradient
           colors={isDark ? [`${color}15`, 'transparent'] : [`${color}08`, 'transparent']}
@@ -217,7 +224,7 @@ export default function LearningProgressScreen({ navigation }) {
           style={StyleSheet.absoluteFill}
         />
         <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
-          <Icon size={20} color={color} />
+          <Icon size={24} color={color} fill={`${color}20`} />
         </View>
         <View>
           <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
@@ -345,7 +352,7 @@ export default function LearningProgressScreen({ navigation }) {
               )}
               
               <View style={styles.statsGrid}>
-                <StatCard icon={CheckCircle} label="XP" value={userStats?.total_xp || 0} color="#10B981" />
+                <StatCard icon={Zap} label="XP" value={userStats?.total_xp || 0} color="#FF9500" />
               </View>
 
               {/* Subject Breakdown */}

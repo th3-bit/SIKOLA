@@ -74,33 +74,48 @@ export default function StreakCard({ mode = 'weekly', showHeader = true }) {
         {/* Progress Days Chips - only in weekly mode */}
         {mode === 'weekly' && (
           <View style={styles.streakDaysContainer}>
-            {dayData.map((day, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.dayChip,
-                  { 
-                    backgroundColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'),
-                    borderColor: day.active ? "#FF453A" : (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'),
-                  }
-                ]}
-              >
-                <Zap 
-                  size={14} 
-                  color={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)')} 
-                  fill={day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.22)' : 'transparent')} 
-                />
-                <Text style={[
-                  styles.dayChipText, 
-                  { 
-                    color: day.active ? "#FFFFFF" : (isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)'),
-                    fontFamily: theme.typography.fontFamily 
-                  }
-                ]}>
-                  {day.label[0]}
-                </Text>
-              </View>
-            ))}
+            {dayData.map((day, index) => {
+              const activeBg = isDark ? '#FF453A' : '#FF3B30';
+              const inactiveBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
+              const inactiveBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+              const inactiveColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.3)';
+
+              return (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.dayChip,
+                    { 
+                      backgroundColor: day.active ? activeBg : inactiveBg,
+                      borderColor: day.active ? activeBg : inactiveBorder,
+                      borderWidth: 1,
+                    },
+                    day.active && {
+                      shadowColor: activeBg,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.3,
+                      shadowRadius: 6,
+                      elevation: 4
+                    }
+                  ]}
+                >
+                  <Zap 
+                    size={14} 
+                    color={day.active ? "#FFFFFF" : inactiveColor} 
+                    fill={day.active ? "#FFFFFF" : 'transparent'} 
+                  />
+                  <Text style={[
+                    styles.dayChipText, 
+                    { 
+                      color: day.active ? "#FFFFFF" : inactiveColor,
+                      fontFamily: theme.typography.fontFamily 
+                    }
+                  ]}>
+                    {day.label[0]}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
       </View>
@@ -173,7 +188,7 @@ const styles = StyleSheet.create({
   dayChip: {
     flex: 1,
     height: verticalScale(44),
-    borderRadius: moderateScale(10),
+    borderRadius: moderateScale(14),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,

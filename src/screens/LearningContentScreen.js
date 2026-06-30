@@ -88,14 +88,19 @@ const parseExampleContent = (content) => {
   
   return { problem, solution, takeaway, why };
 };
-
 export default function LearningContentScreen({ route, navigation }) {
   const { width: windowWidth } = useWindowDimensions();
   const isLargeScreen = windowWidth >= 768;
   const { lesson, topic, subject, isExam = false, isFree = false, subjectIndex, topicIndex } = route.params;
   const { theme, isDark } = useTheme();
-  const { completeTopic, subscriptions, checkLessonAccess } = useProgress();
+  const { completeTopic, subscriptions, checkLessonAccess, markTopicAsAccessed } = useProgress();
   const primaryColor = subject?.color || theme.colors.secondary;
+
+  React.useEffect(() => {
+    if (topic?.id) {
+       markTopicAsAccessed(topic.id);
+    }
+  }, [topic?.id]);
 
   const renderBoldText = (text) => {
     if (!text) return null;

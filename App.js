@@ -55,10 +55,12 @@ export const navigationRef = createNavigationContainerRef();
 
 function AppNavigator() {
   const { isDark } = useTheme();
-  const { session, loading: authLoading, isRecovering, showOnboarding, postOnboardingDestination } = useAuth();
+  const { session, loading: authLoading, isRecovering, showOnboarding, postOnboardingDestination, sessionRestoring } = useAuth();
   const { isLoading: dataLoading } = useProgress();
 
-  const isActuallyLoading = authLoading || (session && dataLoading) || showOnboarding === null;
+  // sessionRestoring: true while we know a session exists (from cache) but haven't
+  // confirmed it with supabase yet. Prevents the Login screen from flashing on reload.
+  const isActuallyLoading = authLoading || (session && dataLoading) || showOnboarding === null || sessionRestoring;
 
   // After onboarding completes for a new user, route them to SignUp (not Login)
   useEffect(() => {

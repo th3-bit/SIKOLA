@@ -410,6 +410,12 @@ export const ProgressProvider = ({ children }) => {
       setSubjects(subjectsData);
 
       // 4.5. Process Recent Topics (Phase 3)
+      let accessedTopics = {};
+      try {
+        const stored = await AsyncStorage.getItem('accessedTopics');
+        if (stored) accessedTopics = JSON.parse(stored);
+      } catch (e) {}
+
       const topicProgressMap = new Map();
       const progressKeys = new Set((progressData || []).map(p => p.topic_id));
 
@@ -420,6 +426,9 @@ export const ProgressProvider = ({ children }) => {
         const topic = entry.topic;
         const subject = entry.subject;
         
+        const accessedAt = accessedTopics[topic.id] || p.completed_at;
+        const lastActiveAt = new Date(Math.max(new Date(p.completed_at).getTime(), new Date(accessedAt).getTime())).toISOString();
+
         if (!topicProgressMap.has(topic.id)) {
           // Calculate progress for this topic
           const totalLessons = topic.lessons?.length || 0;
@@ -440,12 +449,36 @@ export const ProgressProvider = ({ children }) => {
             duration: totalLessons * 15, 
             color: subject?.color || style.color,
             icon: style.icon,
-            completed_at: p.completed_at,
+            completed_at: lastActiveAt,
             subject_id: subject?.id,
             subjectIndex: entry.subjectIndex,
             topicIndex: entry.topicIndex
           });
         }
+      });
+
+      // Now add any topics that were accessed but NEVER completed a lesson
+      Object.entries(accessedTopics).forEach(([tId, timestamp]) => {
+         if (!topicProgressMap.has(tId)) {
+            const entry = topicMap.get(tId);
+            if (!entry) return;
+            const topic = entry.topic;
+            const subject = entry.subject;
+            const style = getSubjectStyle(subject?.name);
+            topicProgressMap.set(topic.id, {
+              id: topic.id,
+              title: topic.title, // Course Name
+              category: subject?.name || 'Education', // Course
+              progress: 0,
+              duration: (topic.lessons?.length || 0) * 15,
+              color: subject?.color || style.color,
+              icon: style.icon,
+              completed_at: timestamp,
+              subject_id: subject?.id,
+              subjectIndex: entry.subjectIndex,
+              topicIndex: entry.topicIndex
+            });
+         }
       });
 
       const processedRecentTopics = Array.from(topicProgressMap.values())
@@ -644,6 +677,33 @@ export const ProgressProvider = ({ children }) => {
     }
   };
 
+  const markTopicAsAccessed = async (topicId) => {
+    try {
+      const now = new Date().toISOString();
+      const stored = await AsyncStorage.getItem('accessedTopics');
+      const data = stored ? JSON.parse(stored) : {};
+      data[topicId] = now;
+      await AsyncStorage.setItem('accessedTopics', JSON.stringify(data));
+
+      // Instantly move this topic to the front of continueLearning
+      setContinueLearning(prev => {
+        const existing = [...prev];
+        const idx = existing.findIndex(t => t.id === topicId);
+        if (idx !== -1) {
+          const item = existing.splice(idx, 1)[0];
+          item.completed_at = now;
+          return [item, ...existing];
+        } else {
+          // If it wasn't in continueLearning (e.g. brand new course), trigger loadProgress
+          setTimeout(() => loadProgress(true), 100);
+          return prev;
+        }
+      });
+    } catch (e) {
+      logger.warn('Failed to mark topic as accessed', e);
+    }
+  };
+
   const isTopicCompleted = (courseId, topicId) => courseProgress[topicId]?.completed === true;
   const getTopicScore = (courseId, topicId) => courseProgress[topicId]?.score || 0;
 
@@ -669,6 +729,7 @@ export const ProgressProvider = ({ children }) => {
       userProfile,
       levelInfo,
       completeTopic, 
+      markTopicAsAccessed,
       isTopicCompleted,
       getTopicScore,
       checkAccess,

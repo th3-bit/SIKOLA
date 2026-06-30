@@ -43,13 +43,20 @@ export const AuthProvider = ({ children }) => {
   // shown when they return to the tab or reload the page.
   const cachedHasSession = readWebCache(SESSION_CACHE_KEY) === '1';
   const cachedOnboarding = readWebCache(ONBOARDING_CACHE_KEY);
-  // cachedOnboarding: '0' = done, '1' = show, null = unknown
-  const initialShowOnboarding = cachedOnboarding === '1' ? true : cachedOnboarding === '0' ? false : null;
+  // If user has a cached session, they are a returning user — never show onboarding,
+  // and never go null (null triggers the loading screen via `showOnboarding === null`).
+  const initialShowOnboarding = cachedOnboarding === '1' ? true
+    : cachedOnboarding === '0' ? false
+    : cachedHasSession ? false   // returning user → skip onboarding immediately
+    : null;                       // truly unknown — first ever visit
 
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   // Start with loading=false if we have a cached session (instant restore)
   const [loading, setLoading] = useState(cachedHasSession ? false : true);
+  // When we know a session exists (from cache) but it hasn't been restored yet,
+  // block the Login screen from flashing by marking session as "restoring".
+  const [sessionRestoring, setSessionRestoring] = useState(cachedHasSession);
   const [isRecovering, setIsRecovering] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(initialShowOnboarding);
   // Where to send new users after onboarding: 'SignUp' (new user) or 'Login' (default)
@@ -84,27 +91,29 @@ export const AuthProvider = ({ children }) => {
         writeWebCache(ONBOARDING_CACHE_KEY, '0');
       } finally {
         setLoading(false);
+        setSessionRestoring(false); // session is now known
       }
     };
 
-    checkSession();
+      checkSession();
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      logger.log(`[AuthContext] Auth event: ${_event} | session: ${session ? session.user?.email : 'NULL'}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Separate effect for auth state listener — also clears sessionRestoring
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      logger.log(`[AuthContext] Auth event: ${_event} | session: ${s ? s.user?.email : 'NULL'}`);
       if (_event === 'PASSWORD_RECOVERY') {
         setIsRecovering(true);
       }
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession(s);
+      setUser(s?.user ?? null);
       setLoading(false);
-      // Keep cache in sync
-      writeWebCache(SESSION_CACHE_KEY, session ? '1' : null);
+      setSessionRestoring(false); // session is now known — stop blocking Login screen
+      writeWebCache(SESSION_CACHE_KEY, s ? '1' : null);
     });
-
-    return () => {
-      subscription?.unsubscribe();
-    };
+    return () => subscription?.unsubscribe();
   }, []);
 
   const signOut = async () => {
@@ -126,7 +135,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isRecovering, setIsRecovering, signOut, showOnboarding, completeOnboarding, postOnboardingDestination }}>
+    <AuthContext.Provider value={{
+      user, session, loading, isRecovering, setIsRecovering,
+      signOut, showOnboarding, completeOnboarding, postOnboardingDestination,
+      cachedHasSession,     // true when localStorage says user has an active session
+      sessionRestoring,     // true while we wait for supabase.auth.getSession() to resolve
+    }}>
       {children}
     </AuthContext.Provider>
   );

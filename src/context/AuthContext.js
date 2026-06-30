@@ -6,15 +6,16 @@ import { version as appVersion } from '../../package.json';
 import logger from '../utils/logger';
 
 // ── INSTANT CACHE HELPERS ─────────────────────────────────────────────────────
-// On web, we use sessionStorage to cache auth state synchronously so the app
-// can skip the loading screen on tab-return / page-reload.
+// On web, we use localStorage to cache auth state synchronously so the app
+// can skip the loading screen on page reload (F5) and tab-return.
+// sessionStorage is cleared on reload — localStorage persists.
 const SESSION_CACHE_KEY = '@sikola_session_cache';
 const ONBOARDING_CACHE_KEY = '@sikola_onboarding_cache';
 
 function readWebCache(key) {
   try {
-    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
-      return sessionStorage.getItem(key);
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
     }
   } catch (_) {}
   return null;
@@ -22,11 +23,11 @@ function readWebCache(key) {
 
 function writeWebCache(key, value) {
   try {
-    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
       if (value === null) {
-        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
       } else {
-        sessionStorage.setItem(key, value);
+        localStorage.setItem(key, value);
       }
     }
   } catch (_) {}

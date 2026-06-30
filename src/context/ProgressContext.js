@@ -6,23 +6,47 @@ import { getSubjectStyle } from '../constants/SubjectConfig';
 import NotificationService from '../NotificationService';
 import logger from '../utils/logger';
 
-// On web, we flag that progress was successfully loaded this browser session.
-// On the next reload (tab-return), we start with isLoading=false so the app
-// renders immediately and refreshes data silently in the background.
+// On web, we flag that progress was successfully loaded.
+// Using localStorage (not sessionStorage) so the flag survives full page reloads (F5).
+// The data itself is also cached so the UI can hydrate instantly before Supabase responds.
 const PROGRESS_LOADED_KEY = '@sikola_progress_loaded';
-function isProgressCached() {
+const PROGRESS_DATA_CACHE_KEY = '@sikola_progress_data_cache';
+
+function readLocalCache(key) {
   try {
-    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
-      return sessionStorage.getItem(PROGRESS_LOADED_KEY) === '1';
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
     }
   } catch (_) {}
-  return false;
+  return null;
+}
+function writeLocalCache(key, value) {
+  try {
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+  } catch (_) {}
+}
+
+function isProgressCached() {
+  return readLocalCache(PROGRESS_LOADED_KEY) === '1';
 }
 function markProgressCached() {
+  writeLocalCache(PROGRESS_LOADED_KEY, '1');
+}
+
+// Read/write the cached snapshot of user data
+function readCachedProgressData() {
   try {
-    if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(PROGRESS_LOADED_KEY, '1');
-    }
+    const raw = readLocalCache(PROGRESS_DATA_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {}
+  return null;
+}
+function writeCachedProgressData(snapshot) {
+  try {
+    writeLocalCache(PROGRESS_DATA_CACHE_KEY, JSON.stringify(snapshot));
   } catch (_) {}
 }
 
@@ -44,28 +68,34 @@ export function useProgress() {
 // Modals extracted to GlobalModals (Phase 4)
 
 export const ProgressProvider = ({ children }) => {
-  const [courseProgress, setCourseProgress] = useState({});
-  const [userStats, setUserStats] = useState({
+  // ── INSTANT HYDRATION FROM CACHE ──────────────────────────────────────────
+  // On web reloads, read the last-known data snapshot from localStorage.
+  // This seeds state immediately (synchronously) so React renders real data
+  // on the very first frame — no blank screen / spinner at all.
+  const _cached = readCachedProgressData();
+
+  const [courseProgress, setCourseProgress] = useState(_cached?.courseProgress || {});
+  const [userStats, setUserStats] = useState(_cached?.userStats || {
     current_streak: 0,
     max_streak: 0,
     total_xp: 0,
     total_lessons_completed: 0
   });
-  const [recentLessons, setRecentLessons] = useState([]);
-  const [continueLearning, setContinueLearning] = useState([]);
+  const [recentLessons, setRecentLessons] = useState(_cached?.recentLessons || []);
+  const [continueLearning, setContinueLearning] = useState(_cached?.continueLearning || []);
   const [sessions, setSessions] = useState([]);
   const [userActivities, setUserActivities] = useState([]);
-  const [userProfile, setUserProfile] = useState({ name: 'Sikola Student', email: '' });
-  const [weeklyActivity, setWeeklyActivity] = useState(new Array(7).fill(false));
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [isTrialExpired, setIsTrialExpired] = useState(false);
-  const [trialDaysRemaining, setTrialDaysRemaining] = useState(0);
-  const [levelInfo, setLevelInfo] = useState(AchievementEngine.getLevelInfo(0));
-  const [subscriptionInfo, setSubscriptionInfo] = useState({ type: 'trial', label: 'Loading...', subLabel: '' });
+  const [userProfile, setUserProfile] = useState(_cached?.userProfile || { name: 'Sikola Student', email: '' });
+  const [weeklyActivity, setWeeklyActivity] = useState(_cached?.weeklyActivity || new Array(7).fill(false));
+  const [subscriptions, setSubscriptions] = useState(_cached?.subscriptions || []);
+  const [isTrialExpired, setIsTrialExpired] = useState(_cached?.isTrialExpired || false);
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState(_cached?.trialDaysRemaining || 0);
+  const [levelInfo, setLevelInfo] = useState(_cached?.levelInfo || AchievementEngine.getLevelInfo(0));
+  const [subscriptionInfo, setSubscriptionInfo] = useState(_cached?.subscriptionInfo || { type: 'trial', label: 'Loading...', subLabel: '' });
   const [isLoading, setIsLoading] = useState(!isProgressCached()); // skip loading screen on cached reload
   const [achievements, setAchievements] = useState([]);
-  const [subjects, setSubjects] = useState([]); 
-  const [subjectBreakdown, setSubjectBreakdown] = useState([]); 
+  const [subjects, setSubjects] = useState(_cached?.subjects || []); 
+  const [subjectBreakdown, setSubjectBreakdown] = useState(_cached?.subjectBreakdown || []); 
   
   // Modals state
   const [showRewardModal, setShowRewardModal] = useState(false);
@@ -500,6 +530,30 @@ export const ProgressProvider = ({ children }) => {
           logger.warn('Full notification sync failure', e);
         }
       }, 1000);
+
+      // 8. Persist a lightweight snapshot to localStorage so the next page reload
+      //    can hydrate the UI instantly (no blank screen / spinner).
+      //    We skip icon functions and heavy session arrays to keep the payload small.
+      try {
+        const snapshot = {
+          courseProgress: formattedProgress,
+          userStats: statsRes.data || userStats,
+          recentLessons: recentTopics,
+          continueLearning: continueTopics,
+          userProfile: profileData ? { name: profileData.full_name || 'Sikola Student', email: profileData.email || user.email } : userProfile,
+          weeklyActivity: AchievementEngine.calculateWeeklyActivity(sessionData, progressData),
+          subscriptions: subData,
+          isTrialExpired: expired,
+          trialDaysRemaining: daysLeft,
+          levelInfo: AchievementEngine.getLevelInfo(statsRes.data?.total_xp || 0),
+          subscriptionInfo: AccessControl.getSubscriptionInfo(subData, expired, daysLeft),
+          subjectBreakdown: breakdown.map(b => ({ ...b, icon: undefined })), // strip non-serializable icon
+          subjects: subjectsData.map(s => ({ id: s.id, name: s.name, color: s.color })),
+        };
+        writeCachedProgressData(snapshot);
+      } catch (cacheErr) {
+        logger.warn('ProgressContext: Failed to write data cache', cacheErr);
+      }
 
     } catch (error) {
       // AbortError is expected when React Strict Mode causes a lock-steal between

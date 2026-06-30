@@ -95,12 +95,12 @@ export default function PracticeScreen({ navigation }) {
           ...(Platform.OS === 'web' ? { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : {}),
         }
       ]}>
-        <View style={isDesktop ? styles.desktopStatCardInner : { alignItems: 'center' }}>
-          <View style={[styles.statIconContainer, isDesktop && { marginBottom: 0, marginRight: 15 }]}>
-            <Icon color={color} size={scale(24)} />
+        <View style={isDesktop ? styles.desktopStatCardInner : { alignItems: 'center', width: '100%' }}>
+          <View style={[{ width: 36, height: 36, justifyContent: 'center', alignItems: 'center', marginBottom: 4 }, isDesktop && { marginBottom: 0, marginRight: 15 }]}>
+            <Icon color={color} size={24} />
           </View>
-          <View style={isDesktop && { justifyContent: 'center' }}>
-            <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
+          <View style={isDesktop ? { justifyContent: 'center' } : { alignItems: 'center', width: '100%' }}>
+            <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
             <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
           </View>
         </View>
@@ -688,6 +688,9 @@ const styles = StyleSheet.create({
   },
   mobileWrapper: {
     width: '100%',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    zIndex: 1,
   },
   streakCardSection: {
     marginBottom: verticalScale(15),

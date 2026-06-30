@@ -6,7 +6,9 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Dimensions,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform,
+  useWindowDimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +21,8 @@ import {
   BookOpen,
   Trophy,
   Medal,
-  Zap
+  Zap,
+  Award
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
@@ -56,6 +59,8 @@ export default function LearningProgressScreen({ navigation }) {
   const [rangeSessions, setRangeSessions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && windowWidth > 768;
 
   useEffect(() => {
     fetchAnalytics();
@@ -205,31 +210,32 @@ export default function LearningProgressScreen({ navigation }) {
   const strokeWidth = 20;
   const circumference = 2 * Math.PI * radius;
 
-  const StatCard = ({ icon: Icon, label, value, color }) => (
-    <View style={[styles.statCardWrapper, {
-      shadowColor: color,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.2 : 0.08,
-      shadowRadius: 12,
-      elevation: 4
-    }]}>
-      <View style={[styles.statCard, { 
-        backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'
-      }]}>
-        <LinearGradient
-          colors={isDark ? [`${color}15`, 'transparent'] : [`${color}08`, 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.iconBox, { backgroundColor: `${color}20` }]}>
-          <Icon size={24} color={color} fill={`${color}20`} />
+  const StatCard = ({ icon: Icon, label, value, color = theme.colors.secondary, shadowColor = color }) => (
+    <View style={[styles.statCardWrapper, isDesktop && styles.desktopStatCardWrapper, { shadowColor: shadowColor }]}>
+      <View style={[
+        styles.statCard, 
+        isDesktop && styles.desktopStatCard,
+        { 
+          backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+          borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.15)' 
+        },
+        isDesktop && {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.25)',
+          borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+          borderWidth: 1.5,
+          ...(Platform.OS === 'web' ? { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : {}),
+        }
+      ]}>
+        <View style={isDesktop ? styles.desktopStatCardInner : { alignItems: 'center' }}>
+          <View style={[styles.statIconContainer, isDesktop && { marginBottom: 0, marginRight: 15 }]}>
+            <Icon color={color} size={24} />
+          </View>
+          <View style={isDesktop && { justifyContent: 'center' }}>
+            <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
+          </View>
         </View>
-        <View>
-          <Text style={[styles.statValue, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>{value}</Text>
-          <Text style={[styles.statLabel, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{label}</Text>
-        </View>
+        <View style={[styles.liquidGlow, { backgroundColor: color, opacity: isDark ? 0.08 : 0.1 }]} />
       </View>
     </View>
   );
@@ -344,15 +350,38 @@ export default function LearningProgressScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* Stats Grid */}
-              {timeRange === 'monthly' ? (
-                <MonthlyStreakCalendar />
-              ) : (
-                <StreakCard mode={timeRange} />
-              )}
-              
-              <View style={styles.statsGrid}>
-                <StatCard icon={Zap} label="XP" value={userStats?.total_xp || 0} color="#FF9500" />
+              {/* Desktop/Mobile Wrapper exactly like PracticeScreen */}
+              <View style={isDesktop ? { 
+                flexDirection: 'row', 
+                gap: 20, 
+                alignItems: 'stretch', 
+                marginBottom: 30,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.25)',
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+                borderWidth: 1.5,
+                borderRadius: 28,
+                padding: 24,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.04,
+                shadowRadius: 24,
+                ...(Platform.OS === 'web' ? { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : {}),
+              } : { marginBottom: 20 }}>
+                {/* Streak Section */}
+                <View style={[styles.streakCardSection, isDesktop && { flex: 0.45, marginBottom: 0 }]}>
+                  {timeRange === 'monthly' ? (
+                    <MonthlyStreakCalendar />
+                  ) : (
+                    <StreakCard mode={timeRange} />
+                  )}
+                </View>
+
+                {/* Stats Row */}
+                <View style={[styles.statsRow, isDesktop && styles.desktopStatsRow]}>
+                  <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
+                  <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
+                  <StatCard icon={Clock} label="Hours" value={Math.floor((allSessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
+                </View>
               </View>
 
               {/* Subject Breakdown */}
@@ -525,25 +554,61 @@ const styles = StyleSheet.create({
   statsGrid: { flexDirection: 'row', gap: 12, marginBottom: 30 },
   statCardWrapper: {
     flex: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
+    height: 110,
+    borderRadius: 24,
+    overflow: 'visible',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  desktopStatCardWrapper: {
+    height: 'auto',
   },
   statCard: {
-    padding: 16,
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
     borderWidth: 1,
+    paddingHorizontal: 10,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  desktopStatCard: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  desktopStatCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+  statIconContainer: {
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  statValue: { fontSize: 18, fontWeight: '800' },
-  statLabel: { fontSize: 12 },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  statLabel: {
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: '600',
+    opacity: 0.8,
+  },
+  liquidGlow: {
+    position: 'absolute',
+    bottom: -20,
+    right: -20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+  },
   section: { marginBottom: 30 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16 },
   timelineContainer: { borderRadius: 20, padding: 20, borderWidth: 1 },
@@ -621,5 +686,15 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  desktopStatsRow: {
+    flex: 0.55,
+  },
+  streakCardSection: {
+    marginBottom: 15,
   },
 });

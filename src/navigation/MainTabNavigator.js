@@ -125,6 +125,7 @@ const HorizontalTabBar = ({ state, descriptors, navigation, theme, isDark }) => 
   const profileFocused = state.index === 4;
 
   const handlePress = (route, isFocused) => {
+    if (visible && stop) stop();
     const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
     if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
   };

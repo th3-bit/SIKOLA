@@ -59,149 +59,143 @@ export default function LearningProgressScreen({ navigation }) {
   const [rangeSessions, setRangeSessions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
+  
+  // New raw data states for decoupled filtering
+  const [rawSubjects, setRawSubjects] = useState([]);
+  const [rawUserProgress, setRawUserProgress] = useState([]);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+
   const { width: windowWidth } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && windowWidth > 768;
 
+  // 1. Initial Data Fetch (Runs ONCE)
   useEffect(() => {
-    fetchAnalytics();
-  }, [timeRange, allSessions]);
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-  const fetchAnalytics = async () => {
-    try {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+        // Fetch everything in parallel
+        const [
+          { data: subjects },
+          { data: userProgress },
+          { data: activity },
+          { data: recentSessions }
+        ] = await Promise.all([
+          supabase.from('subjects').select('*, topics (id)'),
+          supabase.from('user_progress').select('topic_id').eq('user_id', user.id),
+          supabase.from('user_progress').select('topic_id, completed_at, score').eq('user_id', user.id).order('completed_at', { ascending: false }).limit(5),
+          supabase.from('learning_sessions').select('*, subjects(name, color)').eq('user_id', user.id).order('started_at', { ascending: false }).limit(3)
+        ]);
 
-      // 1. Filter sessions for the time range
-      let dateFilter = new Date();
-      if (timeRange === 'daily') dateFilter.setHours(0, 0, 0, 0);
-      else if (timeRange === 'weekly') dateFilter.setDate(dateFilter.getDate() - 7);
-      else if (timeRange === 'monthly') dateFilter.setMonth(dateFilter.getMonth() - 1);
+        if (subjects) setRawSubjects(subjects);
+        if (userProgress) setRawUserProgress(userProgress);
 
-      const filteredSessions = allSessions.filter(s => new Date(s.started_at) >= dateFilter);
-      setRangeSessions(filteredSessions);
+        // Process Recent Activity Once
+        if (activity) {
+          const topicIds = activity.map(a => a.topic_id);
+          const { data: topics } = await supabase.from('topics').select('id, title').in('id', topicIds);
 
-      // 2. Fetch Subjects and Progress for Donut Chart & Detailed List
-      const { data: subjects } = await supabase
-        .from('subjects')
-        .select(`
-          *,
-          topics (id)
-        `);
-      
-      if (subjects) {
-        // Fetch all completed topics for this user to calculate completion %
-        const { data: userProgress } = await supabase
-          .from('user_progress')
-          .select('topic_id')
-          .eq('user_id', user.id);
-        
-        const completedTopicIds = new Set(userProgress?.map(p => p.topic_id) || []);
-        const totalMinutesActive = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
-        
-        const breakdown = subjects.map(s => {
-          const style = getSubjectStyle(s.name);
-          const subjectTime = filteredSessions
-            .filter(ses => ses.subject_id === s.id)
-            .reduce((acc, curr) => acc + curr.duration_minutes, 0);
-          
-          const subjectTopics = s.topics || [];
-          const completedInSubject = subjectTopics.filter(t => completedTopicIds.has(t.id)).length;
+          const mappedActivity = activity.map(a => {
+            const topic = topics?.find(t => t.id === a.topic_id);
+            const hasScore = a.score > 0;
+            
+            let title = `Completed "${topic?.title || 'Lesson'}"`;
+            let icon = CheckCircle;
+            let iconColor = '#10B981';
 
-          return {
-            id: s.id,
-            name: s.name,
-            color: s.color || style.color,
-            minutes: subjectTime,
-            percentage: totalMinutesActive > 0 ? Math.round((subjectTime / totalMinutesActive) * 100) : 0,
-            totalTopics: subjectTopics.length,
-            completedTopics: completedInSubject,
-            icon: style.icon
-          };
-        })
-        .sort((a, b) => b.completedTopics - a.completedTopics || a.name.localeCompare(b.name));
+            if (hasScore) {
+              title = `Scored ${a.score}% in ${topic?.title || 'Quiz'}`;
+              icon = Trophy;
+              iconColor = '#F59E0B';
+            }
 
-        setCategories(breakdown);
-      }
-
-      // 3. Recent Activity (Global, not just range)
-      const { data: activity } = await supabase
-        .from('user_progress')
-        .select('topic_id, completed_at, score')
-        .eq('user_id', user.id)
-        .order('completed_at', { ascending: false })
-        .limit(5);
-
-      if (activity) {
-        const topicIds = activity.map(a => a.topic_id);
-        const { data: topics } = await supabase
-          .from('topics')
-          .select('id, title')
-          .in('id', topicIds);
-
-        const mappedActivity = activity.map(a => {
-          const topic = topics?.find(t => t.id === a.topic_id);
-          const hasScore = a.score > 0;
-          
-          let title = `Completed "${topic?.title || 'Lesson'}"`;
-          let icon = CheckCircle;
-          let iconColor = '#10B981';
-
-          if (hasScore) {
-            title = `Scored ${a.score}% in ${topic?.title || 'Quiz'}`;
-            icon = Trophy;
-            iconColor = '#F59E0B';
-          }
-
-          return {
-            id: a.topic_id,
-            title,
-            time: formatRelativeTime(a.completed_at),
-            score: a.score,
-            icon,
-            iconColor
-          };
-        });
-        
-        // Let's also fetch sessions to see if there are "Started" activities
-        // In a real app, we'd have a dedicated activity log. 
-        // For now, we mix these in.
-        const { data: recentSessions } = await supabase
-          .from('learning_sessions')
-          .select('*, subjects(name, color)')
-          .eq('user_id', user.id)
-          .order('started_at', { ascending: false })
-          .limit(3);
-        
-        if (recentSessions) {
-          const sessionsAsActivity = recentSessions.map(s => {
-            const isJustStarted = s.duration_minutes === 0;
             return {
-              id: s.id,
-              title: isJustStarted ? `Started "${s.subjects?.name || 'New Topic'}"` : `Studied "${s.subjects?.name || 'Topic'}"`,
-              time: formatRelativeTime(s.started_at),
-              icon: isJustStarted ? BookOpen : Clock,
-              iconColor: s.subjects?.color || theme.colors.secondary,
-              isSession: true,
-              rawTime: s.started_at
+              id: a.topic_id,
+              title,
+              time: formatRelativeTime(a.completed_at),
+              score: a.score,
+              icon,
+              iconColor,
+              rawTime: a.completed_at
             };
           });
           
+          let sessionsAsActivity = [];
+          if (recentSessions) {
+            sessionsAsActivity = recentSessions.map(s => {
+              const isJustStarted = s.duration_minutes === 0;
+              return {
+                id: s.id,
+                title: isJustStarted ? `Started "${s.subjects?.name || 'New Topic'}"` : `Studied "${s.subjects?.name || 'Topic'}"`,
+                time: formatRelativeTime(s.started_at),
+                icon: isJustStarted ? BookOpen : Clock,
+                iconColor: s.subjects?.color || theme.colors.secondary,
+                isSession: true,
+                rawTime: s.started_at
+              };
+            });
+          }
+            
           setRecentActivity([...mappedActivity, ...sessionsAsActivity]
-            .sort((a, b) => new Date(b.rawTime || b.completed_at) - new Date(a.rawTime || a.completed_at))
+            .sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime))
             .slice(0, 5)
           );
-        } else {
-          setRecentActivity(mappedActivity);
         }
-      }
 
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-    } finally {
-      setLoading(false);
+        setInitialDataLoaded(true);
+      } catch (error) {
+        console.error('Error fetching initial analytics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialData();
+  }, []);
+
+  // 2. Client-Side Filtering (Runs on tab switch, INSTANT)
+  useEffect(() => {
+    if (!initialDataLoaded) return;
+
+    let dateFilter = new Date();
+    if (timeRange === 'daily') dateFilter.setHours(0, 0, 0, 0);
+    else if (timeRange === 'weekly') dateFilter.setDate(dateFilter.getDate() - 7);
+    else if (timeRange === 'monthly') dateFilter.setMonth(dateFilter.getMonth() - 1);
+
+    const filteredSessions = (allSessions || []).filter(s => new Date(s.started_at) >= dateFilter);
+    setRangeSessions(filteredSessions);
+
+    if (rawSubjects.length > 0) {
+      const completedTopicIds = new Set(rawUserProgress?.map(p => p.topic_id) || []);
+      const totalMinutesActive = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+      
+      const breakdown = rawSubjects.map(s => {
+        const style = getSubjectStyle(s.name);
+        const subjectTime = filteredSessions
+          .filter(ses => ses.subject_id === s.id)
+          .reduce((acc, curr) => acc + curr.duration_minutes, 0);
+        
+        const subjectTopics = s.topics || [];
+        const completedInSubject = subjectTopics.filter(t => completedTopicIds.has(t.id)).length;
+
+        return {
+          id: s.id,
+          name: s.name,
+          color: s.color || style.color,
+          minutes: subjectTime,
+          percentage: totalMinutesActive > 0 ? Math.round((subjectTime / totalMinutesActive) * 100) : 0,
+          totalTopics: subjectTopics.length,
+          completedTopics: completedInSubject,
+          icon: style.icon
+        };
+      })
+      .sort((a, b) => b.completedTopics - a.completedTopics || a.name.localeCompare(b.name));
+
+      setCategories(breakdown);
     }
-  };
+  }, [timeRange, allSessions, initialDataLoaded, rawSubjects, rawUserProgress]);
 
   const totalMinutes = rangeSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
   

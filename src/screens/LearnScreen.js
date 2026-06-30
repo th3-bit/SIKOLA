@@ -467,8 +467,11 @@ export default function LearnScreen({ navigation }) {
                       </View>
                       
                       <View style={styles.continueCardRight}>
-                        <View style={styles.playIconContainer}>
-                          <Play size={24} color="#FFF" fill="#FFF" />
+                        <View style={[styles.playIconContainer, {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : `${item.color || '#8B5CF6'}15`,
+                          borderColor: isDark ? 'rgba(255,255,255,0.2)' : `${item.color || '#8B5CF6'}30`
+                        }]}>
+                          <Play size={24} color={isDark ? '#FFF' : (item.color || '#8B5CF6')} fill={isDark ? '#FFF' : (item.color || '#8B5CF6')} />
                         </View>
                       </View>
 

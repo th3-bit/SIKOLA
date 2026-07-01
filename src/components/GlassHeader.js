@@ -43,20 +43,21 @@ export default function GlassHeader({
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const [query, setQuery] = useState('');
   
+  const { width: windowWidth } = Dimensions.get('window');
+  const isDesktop = windowWidth >= 768;
+
   // Get time-based greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
     const firstName = (userProfile?.name || 'Sikola').split(' ')[0];
     
-    if (hour >= 5 && hour < 9) return `Ready for your morning boost, ${firstName}? ☕`;
-    if (hour >= 9 && hour < 12) return `Good Morning, ${firstName}! ☀️`;
-    if (hour >= 12 && hour < 17) return `Good Afternoon, ${firstName}! ✨`;
-    if (hour >= 17 && hour < 21) return `Good Evening, ${firstName}! 🌙`;
-    return `Night study, ${firstName}? 🦉`;
+    if (hour >= 5 && hour < 9) return isDesktop ? `Ready for your morning boost, ${firstName}? ☕` : `Morning, ${firstName}! ☕`;
+    if (hour >= 9 && hour < 12) return isDesktop ? `Good Morning, ${firstName}! ☀️` : `Morning, ${firstName}! ☀️`;
+    if (hour >= 12 && hour < 17) return isDesktop ? `Good Afternoon, ${firstName}! ✨` : `Afternoon, ${firstName}! ✨`;
+    if (hour >= 17 && hour < 21) return isDesktop ? `Good Evening, ${firstName}! 🌙` : `Evening, ${firstName}! 🌙`;
+    return isDesktop ? `Night study, ${firstName}? 🦉` : `Night, ${firstName}? 🦉`;
   };
   
-  const { width: windowWidth } = Dimensions.get('window');
-  const isDesktop = windowWidth >= 768;
   const desktopWidthOpen = scale(500);
   const desktopWidthClosed = scale(250);
   
@@ -472,9 +473,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(12),
+    flexShrink: 1,
   },
   greetingContainer: {
     marginRight: scale(4),
+    flexShrink: 1,
   },
   greetingText: {
     fontSize: moderateScale(13),

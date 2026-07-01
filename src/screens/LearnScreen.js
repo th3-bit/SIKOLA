@@ -9,7 +9,8 @@ import {
   Dimensions,
   ActivityIndicator,
   Image,
-  useWindowDimensions
+  useWindowDimensions,
+  TextInput
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,13 +26,15 @@ import {
   Trophy,
   Target,
   CheckCircle2,
-  Calendar
+  Calendar,
+  Search
 } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useProgress } from '../context/ProgressContext';
 import { supabase } from '../lib/supabase';
 import GlassHeader from '../components/GlassHeader';
 import AchievementDetailModal from '../components/AchievementDetailModal';
+import LessonCard from '../components/LessonCard';
 import { Alert } from 'react-native';
 
 const { width } = Dimensions.get('window');
@@ -365,7 +368,7 @@ export default function LearnScreen({ navigation }) {
       />
       
       <SafeAreaView style={styles.safeArea}>
-        <GlassHeader />
+        <GlassHeader showSearch={false} />
         
         <ScrollView 
           showsVerticalScrollIndicator={false}
@@ -413,73 +416,41 @@ export default function LearnScreen({ navigation }) {
           {/* Continue Learning Section */}
           {continueLearning?.length > 0 && (
             <View style={[
-              {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#E4E4E7', // Darker gray for better contrast
-                borderRadius: 24,
-                paddingVertical: 20,
-                marginBottom: 20,
-                borderWidth: 0, // No border for the solid container look
-                marginHorizontal: isDesktop ? 0 : 10,
-              },
-              isDesktop && { maxWidth: 1000, width: '100%', alignSelf: 'center' }
+              { marginBottom: 30 },
+              isDesktop && { 
+                backgroundColor: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0,0,0,0.12)',
+                paddingVertical: 24,
+                borderRadius: 28,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
+                maxWidth: 1000, 
+                width: '100%', 
+                alignSelf: 'center',
+                marginHorizontal: 0
+              }
             ]}>
-              <View style={[styles.sectionHeader, { paddingHorizontal: 20 }]}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Keep Going</Text>
+              <View style={[styles.sectionHeader, { paddingHorizontal: isDesktop ? 24 : 20, marginBottom: 16 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Continue Learning</Text>
               </View>
 
               <ScrollView 
                 horizontal 
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.continueList, { paddingHorizontal: 20 }]}
+                contentContainerStyle={{ paddingHorizontal: isDesktop ? 24 : 20 }}
               >
-                {continueLearning.map((item) => (
-                  <TouchableOpacity 
-                    key={item.id}
-                    activeOpacity={1} 
-                    style={[styles.continueCardWrapper, { shadowColor: item.color || theme.colors.secondary, marginRight: 20 }, isDesktop && { width: 350 }]}
-                     onPress={() => {
-                          navigation.navigate('LessonDetail', {
-                            lesson: item,
-                            subject: { 
-                              name: item.category, 
-                              color: item.color, 
-                              id: item.subject_id,
-                              icon: item.icon 
-                            },
-                            subjectIndex: item.subjectIndex,
-                            topicIndex: item.topicIndex
-                          });
-                     }}
-                  >
-                    <View style={[styles.continueCard, { 
-                      backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
-                    }]}>
-                      <View style={styles.continueCardLeft}>
-                        <View style={[styles.subBadge, { backgroundColor: `${item.color || '#8B5CF6'}20` }]}>
-                          <Text style={[styles.subBadgeText, { color: item.color || '#8B5CF6', fontFamily: theme.typography.fontFamily }]}>{item.category}</Text>
-                        </View>
-                        <Text style={[styles.continueTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]} numberOfLines={2}>{item.title}</Text>
-                        <View style={styles.timeLeftRow}>
-                          <Clock size={14} color={theme.colors.textSecondary} />
-                          <Text style={[styles.timeLeftText, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>{item.duration}m total</Text>
-                        </View>
-                      </View>
-                      
-                      <View style={styles.continueCardRight}>
-                        <View style={[styles.playIconContainer, {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : `${item.color || '#8B5CF6'}15`,
-                          borderColor: isDark ? 'rgba(255,255,255,0.2)' : `${item.color || '#8B5CF6'}30`
-                        }]}>
-                          <Play size={24} color={isDark ? '#FFF' : (item.color || '#8B5CF6')} fill={isDark ? '#FFF' : (item.color || '#8B5CF6')} />
-                        </View>
-                      </View>
-
-                      <View style={styles.cardProgressLine}>
-                        <View style={[styles.cardProgressFill, { width: `${item.progress}%`, backgroundColor: item.color || '#8B5CF6' }]} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
+                {continueLearning.map((topic) => (
+                  <LessonCard 
+                    key={topic.id} 
+                    lesson={topic} 
+                    shadowColor={topic.color}
+                    onPress={() => navigation.navigate('LessonDetail', { 
+                       lesson: topic,
+                       subject: { id: topic.subject_id, name: topic.category, color: topic.color },
+                       subjectIndex: topic.subjectIndex,
+                       topicIndex: topic.topicIndex,
+                       fromContinueLearning: true
+                    })}
+                  />
                 ))}
               </ScrollView>
             </View>
@@ -489,8 +460,20 @@ export default function LearnScreen({ navigation }) {
           <View style={[isDesktop && styles.desktopLayout]}>
             {/* Main Column */}
             <View style={[isDesktop && styles.mainColumn]}>
+              {/* Search Bar (Navigates to Global Search) */}
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Search')}
+                style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', borderColor: 'transparent' }]}
+              >
+                  <Search size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+                  <Text style={[styles.searchInput, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily, paddingTop: 14 }]}>
+                    Search courses, subjects, and topics...
+                  </Text>
+              </TouchableOpacity>
+
               {/* Learning Path / Subjects */}
-              <View style={[styles.sectionHeader, { marginTop: 30, paddingHorizontal: 20 }]}>
+              <View style={[styles.sectionHeader, { marginTop: 10, paddingHorizontal: 20 }]}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Change Subjects</Text>
               </View>
               
@@ -1049,5 +1032,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingRight: 0,
     gap: 0,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+    marginHorizontal: 20,
+    marginTop: 30,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    height: '100%',
+    padding: 0,
+    margin: 0,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    outlineStyle: 'none',
+  },
+  searchCancelButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });

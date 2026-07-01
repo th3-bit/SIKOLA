@@ -80,12 +80,10 @@ export default function LearningProgressScreen({ navigation }) {
         const [
           { data: subjects },
           { data: userProgress },
-          { data: activity },
           { data: recentSessions }
         ] = await Promise.all([
           supabase.from('subjects').select('*, topics (id)'),
-          supabase.from('user_progress').select('topic_id').eq('user_id', user.id),
-          supabase.from('user_progress').select('topic_id, completed_at, score').eq('user_id', user.id).order('completed_at', { ascending: false }).limit(5),
+          supabase.from('user_progress').select('topic_id, completed_at, score, topics(id, title)').eq('user_id', user.id),
           supabase.from('learning_sessions').select('*, subjects(name, color)').eq('user_id', user.id).order('started_at', { ascending: false }).limit(3)
         ]);
 
@@ -93,20 +91,22 @@ export default function LearningProgressScreen({ navigation }) {
         if (userProgress) setRawUserProgress(userProgress);
 
         // Process Recent Activity Once
-        if (activity) {
-          const topicIds = activity.map(a => a.topic_id);
-          const { data: topics } = await supabase.from('topics').select('id, title').in('id', topicIds);
+        if (userProgress) {
+          const activity = [...userProgress]
+            .filter(p => p.completed_at)
+            .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+            .slice(0, 5);
 
           const mappedActivity = activity.map(a => {
-            const topic = topics?.find(t => t.id === a.topic_id);
+            const topicTitle = a.topics?.title || 'Lesson';
             const hasScore = a.score > 0;
             
-            let title = `Completed "${topic?.title || 'Lesson'}"`;
+            let title = `Completed "${topicTitle}"`;
             let icon = CheckCircle;
             let iconColor = '#10B981';
 
             if (hasScore) {
-              title = `Scored ${a.score}% in ${topic?.title || 'Quiz'}`;
+              title = `Scored ${a.score}% in "${topicTitle}"`;
               icon = Trophy;
               iconColor = '#F59E0B';
             }
@@ -169,13 +169,18 @@ export default function LearningProgressScreen({ navigation }) {
 
     if (rawSubjects.length > 0) {
       const completedTopicIds = new Set(rawUserProgress?.map(p => p.topic_id) || []);
-      const totalMinutesActive = filteredSessions.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+      let totalMinutesActive = 0;
+      
+      const sessionTimeBySubject = {};
+      filteredSessions.forEach(ses => {
+        const mins = ses.duration_minutes || 0;
+        totalMinutesActive += mins;
+        sessionTimeBySubject[ses.subject_id] = (sessionTimeBySubject[ses.subject_id] || 0) + mins;
+      });
       
       const breakdown = rawSubjects.map(s => {
         const style = getSubjectStyle(s.name);
-        const subjectTime = filteredSessions
-          .filter(ses => ses.subject_id === s.id)
-          .reduce((acc, curr) => acc + curr.duration_minutes, 0);
+        const subjectTime = sessionTimeBySubject[s.id] || 0;
         
         const subjectTopics = s.topics || [];
         const completedInSubject = subjectTopics.filter(t => completedTopicIds.has(t.id)).length;
@@ -281,19 +286,21 @@ export default function LearningProgressScreen({ navigation }) {
             <ActivityIndicator size="large" color={theme.colors.secondary} style={{ marginTop: 50 }} />
           ) : (
             <>
-              {/* Donut Chart Card */}
-              <View style={[styles.donutCard, { 
-                backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
-                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
-              }]}>
+              {/* Top Row: Donut + Stats (Desktop) */}
+              <View style={isDesktop ? { flexDirection: 'row', gap: 20, alignItems: 'stretch', marginBottom: 24, justifyContent: 'center' } : {}}>
+                {/* Donut Chart Card */}
+                <View style={[styles.donutCard, isDesktop && { width: '30%', marginBottom: 0 }, {
+                  backgroundColor: isDark ? 'rgba(25, 25, 25, 0.95)' : 'rgba(255, 255, 255, 0.9)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' 
+                }]}>
                 <LinearGradient
                    colors={isDark ? ['rgba(255, 255, 255, 0.03)', 'transparent'] : ['rgba(0, 0, 0, 0.01)', 'transparent']}
                    start={{ x: 0, y: 0 }}
                    end={{ x: 1, y: 1 }}
                    style={StyleSheet.absoluteFill}
                 />
-                <View style={styles.donutRow}>
-                  <View style={styles.chartSection}>
+                <View style={[styles.donutRow, isDesktop && styles.desktopDonutRow]}>
+                  <View style={[styles.chartSection, isDesktop && styles.desktopChartSection]}>
                     <Svg width={160} height={160}>
                       {totalMinutes === 0 ? (
                         <Circle cx="80" cy="80" r={radius} stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth={strokeWidth} fill="none" />
@@ -324,7 +331,7 @@ export default function LearningProgressScreen({ navigation }) {
                     </View>
                   </View>
 
-                  <View style={styles.legendGrid}>
+                  <View style={[styles.legendGrid, isDesktop && styles.desktopLegendGrid]}>
                     {categories.filter(c => c.minutes > 0).slice(0, 4).map(cat => (
                       <View key={cat.id} style={styles.legendItem}>
                         <View style={[styles.legendBar, { backgroundColor: cat.color }]} />
@@ -344,42 +351,37 @@ export default function LearningProgressScreen({ navigation }) {
                 </View>
               </View>
 
-              {/* Desktop/Mobile Wrapper exactly like PracticeScreen */}
-              <View style={isDesktop ? { 
-                flexDirection: 'row', 
-                gap: 20, 
-                alignItems: 'stretch', 
-                marginBottom: 30,
-                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.25)',
-                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-                borderWidth: 1.5,
-                borderRadius: 28,
-                padding: 24,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.04,
-                shadowRadius: 24,
-                ...(Platform.OS === 'web' ? { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : {}),
-              } : { marginBottom: 20 }}>
-                {/* Streak Section */}
-                <View style={[styles.streakCardSection, isDesktop && { flex: 0.45, marginBottom: 0 }]}>
-                  {timeRange === 'monthly' ? (
-                    <MonthlyStreakCalendar />
-                  ) : (
-                    <StreakCard mode={timeRange} />
-                  )}
-                </View>
-
-                {/* Stats Row */}
-                <View style={[styles.statsRow, isDesktop && styles.desktopStatsRow]}>
+              {/* Stats Row (Mobile logic: just placed below donut. Desktop: inside Top Row) */}
+              {!isDesktop && (
+                <View style={[styles.statsRow, { marginBottom: 24 }]}>
                   <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
                   <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
                   <StatCard icon={Clock} label="Hours" value={Math.floor((allSessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
                 </View>
+              )}
+              {isDesktop && (
+                <View style={[styles.statsRow, { width: '50%' }]}>
+                  <StatCard icon={BookOpen} label="Lessons" value={userStats?.total_lessons_completed?.toString() || "0"} color="#22C55E" />
+                  <StatCard icon={Award} label="Points" value={userStats?.total_xp?.toString() || "0"} color="#FACC15" />
+                  <StatCard icon={Clock} label="Hours" value={Math.floor((allSessions?.reduce((acc, s) => acc + (s.duration_minutes || 0), 0) || 0) / 60).toString()} color="#3B82F6" />
+                </View>
+              )}
+
+              {/* Close Top Row Container for Desktop (if we are in desktop mode, we close the wrapper we started above) */}
+              {isDesktop ? null : null}
+            </View>
+
+            {/* 80% Width Streak Section */}
+            <View style={[styles.streakCardSection, isDesktop && { width: '80%', alignSelf: 'center', marginBottom: 30 }]}>
+                {timeRange === 'monthly' ? (
+                  <MonthlyStreakCalendar />
+                ) : (
+                  <StreakCard mode={timeRange} />
+                )}
               </View>
 
               {/* Subject Breakdown */}
-              <View style={styles.section}>
+              <View style={[styles.section, isDesktop && { width: '90%', alignSelf: 'center' }]}>
                 <View style={styles.sectionHeader}>
                   <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Topic Progress</Text>
                   <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary, fontFamily: theme.typography.fontFamily }]}>Overall Topic Completion</Text>
@@ -437,7 +439,7 @@ export default function LearningProgressScreen({ navigation }) {
               </View>
 
               {/* Activity Timeline */}
-              <View style={styles.section}>
+              <View style={[styles.section, isDesktop && { width: '40%', alignSelf: 'center' }]}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary, fontFamily: theme.typography.fontFamily }]}>Recent Activity</Text>
                 <View style={[styles.timelineContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.5)', borderColor: theme.colors.glassBorder }]}>
                   {recentActivity.map((activity, index) => (
@@ -532,6 +534,20 @@ const styles = StyleSheet.create({
   legendGrid: {
     flex: 1,
     gap: 12,
+  },
+  desktopDonutRow: {
+    justifyContent: 'center',
+    gap: 30,
+    paddingVertical: 10,
+  },
+  desktopChartSection: {
+    transform: [{ scale: 1.0 }],
+  },
+  desktopLegendGrid: {
+    position: 'absolute',
+    top: -10,
+    right: 0,
+    width: 130, // provide enough space for text
   },
   legendItem: {
     flexDirection: 'row',

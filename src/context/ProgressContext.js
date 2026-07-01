@@ -92,7 +92,7 @@ export const ProgressProvider = ({ children }) => {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState(_cached?.trialDaysRemaining || 0);
   const [levelInfo, setLevelInfo] = useState(_cached?.levelInfo || AchievementEngine.getLevelInfo(0));
   const [subscriptionInfo, setSubscriptionInfo] = useState(_cached?.subscriptionInfo || { type: 'trial', label: 'Loading...', subLabel: '' });
-  const [isLoading, setIsLoading] = useState(!isProgressCached()); // skip loading screen on cached reload
+  const [isLoading, setIsLoading] = useState(true); // force loading screen until fresh data is fetched
   const [achievements, setAchievements] = useState([]);
   const [subjects, setSubjects] = useState(_cached?.subjects || []); 
   const [subjectBreakdown, setSubjectBreakdown] = useState(_cached?.subjectBreakdown || []); 

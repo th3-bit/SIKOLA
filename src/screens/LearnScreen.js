@@ -41,12 +41,10 @@ const { width } = Dimensions.get('window');
 
 export default function LearnScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { userStats, continueLearning, recentLessons, courseProgress, sessions } = useProgress();
+  const { userStats, continueLearning, recentLessons, courseProgress, sessions, subjects } = useProgress();
 
   const [activePathSubject, setActivePathSubject] = useState(null);
   const [learningPath, setLearningPath] = useState([]);
-  const [loadingPath, setLoadingPath] = useState(false);
-  const [allSubjects, setAllSubjects] = useState([]);
   const [selectedAchievement, setSelectedAchievement] = useState(null);
   const [achievementModalVisible, setAchievementModalVisible] = useState(false);
 
@@ -145,14 +143,9 @@ export default function LearnScreen({ navigation }) {
   // Track if user has manually chosen a subject this session
   const manualSubjectOverride = useRef(null);
 
-  // Fetch subjects once on mount, then restore saved preference
-  useEffect(() => {
-    fetchSubjects();
-  }, []);
-
   // Determine which subject path to show when data is available
   useEffect(() => {
-    if (allSubjects.length === 0) return;
+    if (!subjects || subjects.length === 0) return;
 
     // If user manually selected a subject this session, keep it
     if (manualSubjectOverride.current) {
@@ -164,7 +157,7 @@ export default function LearnScreen({ navigation }) {
     AsyncStorage.getItem('learnscreen_selected_subject_id').then((savedId) => {
       if (savedId) {
         // Verify the saved subject still exists
-        const exists = allSubjects.find((s) => s.id === savedId);
+        const exists = subjects.find((s) => s.id === savedId);
         if (exists) {
           manualSubjectOverride.current = savedId;
           loadActivePath(savedId);
@@ -174,23 +167,11 @@ export default function LearnScreen({ navigation }) {
       // Fall back to smart detection (recent lesson, first subject, etc.)
       loadActivePath();
     });
-  }, [recentLessons, continueLearning, allSubjects]);
+  }, [recentLessons, continueLearning, subjects]);
 
-  const fetchSubjects = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (!error && data) {
-        setAllSubjects(data);
-      }
-    } catch (e) {
-      console.error('Error fetching subjects:', e);
-    }
-  };
+  const loadActivePath = (manualSubjectId = null) => {
+    if (!subjects || subjects.length === 0) return;
 
-  const loadActivePath = async (manualSubjectId = null) => {
     // 1. Find a target topic ID to trace back to a subject
     let targetTopicId = null;
     let targetSubjectId = manualSubjectId;
@@ -203,85 +184,47 @@ export default function LearnScreen({ navigation }) {
       }
     }
 
-    if (!targetTopicId && !targetSubjectId) {
-      if (allSubjects.length > 0 && !activePathSubject) {
-        targetSubjectId = allSubjects[0].id;
-      } else {
-        return;
-      }
+    let subject = null;
+
+    if (targetSubjectId) {
+      subject = subjects.find(s => s.id === targetSubjectId);
+    } else {
+      // Find subject by topic ID
+      subject = subjects.find(s => s.topics && s.topics.some(t => t.id === targetTopicId));
     }
 
-    try {
-      setLoadingPath(true);
+    if (!subject && subjects.length > 0) {
+      subject = subjects[0];
+    }
+
+    if (!subject) return;
+    setActivePathSubject(subject);
+
+    // 3. Build the path using topics from the global subject data
+    const allTopics = subject.topics || [];
+    const path = allTopics.map((topic, index) => {
+      const subLessons = topic.lessons || [];
+      const completedCount = subLessons.filter(l => courseProgress[l.id]?.completed).length;
+      const progressPercent = subLessons.length > 0 ? Math.round((completedCount / subLessons.length) * 100) : 0;
+      const isCompleted = progressPercent === 100;
       
-      let subject = null;
+      // Determine status
+      let status = isCompleted ? 'completed' : 'in-progress';
 
-      if (targetSubjectId) {
-        const { data: sData } = await supabase.from('subjects').select('*').eq('id', targetSubjectId).single();
-        subject = sData;
-      } else {
-        // 2. Fetch Subject details using the topic
-        const { data: topicData, error } = await supabase
-          .from('topics')
-          .select(`
-            subject_id,
-            subjects (
-              id,
-              name,
-              color,
-              icon
-            )
-          `)
-          .eq('id', targetTopicId)
-          .single();
-          
-        if (error || !topicData?.subjects) return;
-        subject = Array.isArray(topicData.subjects) ? topicData.subjects[0] : topicData.subjects;
-      }
+      // Calculate duration
+      const durationMins = subLessons.reduce((sum, l) => sum + (l.duration || 15), 0) || 15;
 
-      if (!subject) return;
-      setActivePathSubject(subject);
+      return {
+        id: topic.id,
+        title: topic.title,
+        status,
+        progress: progressPercent,
+        duration: `${durationMins}m`,
+        originalTopic: topic
+      };
+    });
 
-      // 3. Fetch all topics for this subject to build the path
-      const { data: allTopics } = await supabase
-        .from('topics')
-        .select(`
-          *,
-          lessons (duration)
-        `)
-        .eq('subject_id', subject.id)
-        .order('created_at', { ascending: true });
-
-      if (allTopics) {
-        const path = allTopics.map((topic, index) => {
-          const subLessons = topic.lessons || [];
-          const completedCount = subLessons.filter(l => courseProgress[l.id]?.completed).length;
-          const progressPercent = subLessons.length > 0 ? Math.round((completedCount / subLessons.length) * 100) : 0;
-          const isCompleted = progressPercent === 100;
-          
-          // Determine status
-          let status = isCompleted ? 'completed' : 'in-progress';
-
-          // Calculate duration
-          const durationMins = subLessons.reduce((sum, l) => sum + (l.duration || 15), 0) || 15;
-
-          return {
-            id: topic.id,
-            title: topic.title,
-            status,
-            progress: progressPercent,
-            duration: `${durationMins}m`,
-            originalTopic: topic
-          };
-        });
-
-        setLearningPath(path);
-      }
-    } catch (err) {
-      console.error('Failed to load learning path:', err);
-    } finally {
-      setLoadingPath(false);
-    }
+    setLearningPath(path);
   };
 
   const PathStep = ({ step, index, isLast }) => {
@@ -478,7 +421,7 @@ export default function LearnScreen({ navigation }) {
               </View>
               
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.subjectSelectorList, { paddingHorizontal: 20 }]}>
-                {allSubjects.map((s) => (
+                {subjects.map((s) => (
                   <TouchableOpacity 
                     key={s.id} 
                     onPress={() => {
@@ -515,21 +458,16 @@ export default function LearnScreen({ navigation }) {
                       <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontFamily: theme.typography.fontFamily }}>{learningPath.length} Steps</Text>
                     </View>
                   </View>
-
-                  {loadingPath ? (
-                     <ActivityIndicator color={theme.colors.secondary} style={{ marginTop: 20 }} />
-                  ) : (
-                    <View style={styles.pathGrid}>
-                      {learningPath.map((step, index) => (
-                        <PathStep 
-                          key={step.id} 
-                          step={step} 
-                          index={index} 
-                          isLast={index === learningPath.length - 1} 
-                        />
-                      ))}
-                    </View>
-                  )}
+                  <View style={styles.pathGrid}>
+                    {learningPath.map((step, index) => (
+                      <PathStep 
+                        key={step.id} 
+                        step={step} 
+                        index={index} 
+                        isLast={index === learningPath.length - 1} 
+                      />
+                    ))}
+                  </View>
                 </>
               )}
               
